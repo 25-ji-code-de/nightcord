@@ -176,15 +176,6 @@ const app = new Nightcord();
 app.init();
 ```
 
-#### `startNameChooser()`
-
-启动用户名选择阶段。
-
-**示例：**
-```javascript
-app.startNameChooser();
-```
-
 #### `joinRoom(roomname)`
 
 加入聊天室。
@@ -569,15 +560,6 @@ const app = new ChatApplication();
 app.init();
 ```
 
-#### `startNameChooser()`
-
-启动用户名选择阶段。
-
-**示例：**
-```javascript
-app.startNameChooser();
-```
-
 #### `startRoomChooser()`
 
 启动房间选择阶段。
@@ -852,8 +834,7 @@ interface NightcordConfig {
 
 export class Nightcord {
   constructor(config?: NightcordConfig);
-  init(): void;
-  startNameChooser(): void;
+  init(roomname: string): void;
   joinRoom(roomname: string): void;
   getState(): {
     phase: 'name-choosing' | 'chatting';

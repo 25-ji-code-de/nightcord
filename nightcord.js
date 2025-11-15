@@ -21,28 +21,16 @@ class Nightcord {
   /**
    * 初始化应用
    */
-  init() {
-    this.startNameChooser();
-  }
-
-  /**
-   * 启动用户名选择阶段
-   */
-  startNameChooser() {
+  init(roomname) {
     this.state.phase = 'name-choosing';
     
-    // this.ui.setupNameChooser((username) => {
-    //   this.chatRoom.setUser(username);
-    //   this.ui.hideNameChooser();
-    //   this.joinRoom('nightcord-default');
-    // });
     let storedName = localStorage.getItem('nightcord-username');
     if (!storedName) {
       storedName = window.prompt("请输入用户名：");
       localStorage.setItem('nightcord-username', storedName);
     }
     this.chatRoom.setUser(storedName);
-    this.joinRoom('nightcord-default');
+    this.joinRoom(roomname || 'nightcord-default');
   }
 
   /**

@@ -79,7 +79,7 @@ class UIManager {
         this.addChatMessage(data.name, data.message, data.timestamp);
       }
     });
-    this.eventBus.on('message:error', (data) => this.addChatMessage(null, "* Error: " + data.error));
+    this.eventBus.on('message:error', (data) => this.showError(data.error));
     this.eventBus.on('message:sent', () => this.clearChatInput());
     this.eventBus.on('user:joined', (data) => this.addUserToRoster(data.username));
     this.eventBus.on('user:quit', (data) => this.removeUserFromRoster(data.username));

@@ -43,21 +43,23 @@ class UIManager {
 
     this.onSetUser = null;
 
-    // 只存储最后一条消息的时间戳和消息内容（不含avatar/color/time），不存系统消息
-    let localMsgs = [];
-    let lastMsgTimestamp = 0;
-    try {
-      localMsgs = JSON.parse(localStorage.getItem('nightcord-messages') || '[]');
-      lastMsgTimestamp = Number(localStorage.getItem('nightcord-lastmsg') || 0);
-    } catch (e) {
-      localMsgs = [];
-      lastMsgTimestamp = 0;
-    }
-    this.messages = Array.isArray(localMsgs) ? localMsgs : [];
-    this.lastMsgTimestamp = lastMsgTimestamp;
+    // 当前房间（由外部调用 setCurrentRoom / room:ready 设置）
+    this.currentRoom = null;
+    // 每条消息对象只保留 user/text/timestamp 存入 localStorage；渲染层会补充 avatar/color/time
+    this.messages = [];
+    this.lastMsgTimestamp = 0;
     this.roster = [];
 
     this.systemIcon = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M13,10.69v2.72H10.23V10.69Zm3,0v2.69h2.69V10.72ZM23.29,12A11.31,11.31,0,1,1,12,.67,11.31,11.31,0,0,1,23.29,12Zm-.18.07a8.87,8.87,0,1,0-8.87,8.86A8.87,8.87,0,0,0,23.11,12.05Z" fill="white"></path></svg>`;
+
+    // Storage manager (handles per-room keys and legacy migration)
+    try {
+      this.storage = new StorageManager();
+    } catch (e) {
+      // If StorageManager is not available for some reason, provide a fallback object
+      console.warn('StorageManager not available, falling back to inline storage helpers');
+      this.storage = null;
+    }
 
     this.setupEventListeners();
   }
@@ -87,14 +89,13 @@ class UIManager {
     this.eventBus.on('roster:clear', () => this.clearRoster());
     this.eventBus.on('room:ready', (data) => {
       // data.messages 为服务器返回的最新100条消息，格式应为 [{user, text, timestamp}, ...]
+      const room = data.roomname || this.currentRoom || 'nightcord-default';
+      this.currentRoom = room;
       let serverMsgs = Array.isArray(data.messages) ? data.messages : [];
       // 只保留非系统消息
       serverMsgs = serverMsgs.filter(m => m.user !== '系统');
       // 取本地消息中比服务器最早一条还早的部分
-      let localMsgs = [];
-      try {
-        localMsgs = JSON.parse(localStorage.getItem('nightcord-messages') || '[]');
-      } catch (e) { localMsgs = []; }
+  let localMsgs = (this.storage ? this.storage.loadMessages(room) : this.loadLocalMessages(room)) || [];
       if (serverMsgs.length > 0 && localMsgs.length > 0) {
         const minServerTs = Math.min(...serverMsgs.map(m => m.timestamp));
         // 只取比服务器最早一条还早的本地消息
@@ -116,10 +117,10 @@ class UIManager {
       });
       // 渲染
       this.renderMessages();
-      // 记录最新消息时间戳
+      // 记录最新消息时间戳 到 per-room lastmsg
       if (this.messages.length > 0) {
         const lastTs = this.messages[this.messages.length-1].timestamp;
-        localStorage.setItem('nightcord-lastmsg', String(lastTs));
+        if (this.storage) this.storage.setLastMsgTimestamp(room, lastTs); else this.setLastMsgTimestamp(room, lastTs);
       }
       // 欢迎消息
       this.showWelcomeMessages(data);
@@ -136,7 +137,45 @@ class UIManager {
   }
 
   setCurrentRoom(roomname) {
+    this.currentRoom = roomname;
     this.elements.roomName.textContent = roomname;
+    // 切换到新房间时，尝试从本地存储加载消息并渲染（若随后有 room:ready 会被覆盖为合并后的消息）
+    try {
+  const local = (this.storage ? this.storage.loadMessages(this.currentRoom || 'nightcord-default') : this.loadLocalMessages(this.currentRoom || 'nightcord-default'));
+      // transform similar to room:ready: ensure fields for rendering
+      this.messages = (Array.isArray(local) ? local : []).map(m => {
+        const {user, text, timestamp} = m;
+        const {name, avatar, color} = this.generateAvatar(user);
+        return {
+          user: name,
+          avatar,
+          color,
+          time: timestamp ? this.formatDate(timestamp) : '',
+          text,
+          timestamp
+        };
+      });
+  this.lastMsgTimestamp = this.storage ? this.storage.getLastMsgTimestamp(this.currentRoom || 'nightcord-default') : this.getLastMsgTimestamp(this.currentRoom || 'nightcord-default');
+      this.renderMessages();
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // 如果 StorageManager 不可用，保留一组兼容的本地 helper（非常规情况）
+  storageKeyMessages(room) { return `nightcord-messages:${room}`; }
+  storageKeyLastMsg(room) { return `nightcord-lastmsg:${room}`; }
+  loadLocalMessages(room) {
+    try { return JSON.parse(localStorage.getItem(this.storageKeyMessages(room)) || '[]'); } catch (e) { return []; }
+  }
+  saveLocalMessages(room, msgs) {
+    try { localStorage.setItem(this.storageKeyMessages(room), JSON.stringify(msgs)); } catch (e) {}
+  }
+  getLastMsgTimestamp(room) {
+    try { return Number(localStorage.getItem(this.storageKeyLastMsg(room)) || 0); } catch (e) { return 0; }
+  }
+  setLastMsgTimestamp(room, ts) {
+    try { localStorage.setItem(this.storageKeyLastMsg(room), String(ts)); } catch (e) {}
   }
 
   fnv1a(s) {
@@ -299,13 +338,14 @@ class UIManager {
       text: message,
       timestamp: msgObj.timestamp
     });
-    // 保存到localStorage（只存user、text、timestamp）
+    // 保存到 localStorage（按房间存储，只存 user/text/timestamp）
     try {
-      let localMsgs = JSON.parse(localStorage.getItem('nightcord-messages') || '[]');
+      const room = this.currentRoom || 'nightcord-default';
+      let localMsgs = this.storage ? this.storage.loadMessages(room) : (this.loadLocalMessages(room) || []);
       localMsgs.push(msgObj);
       if (localMsgs.length > 2000) localMsgs = localMsgs.slice(localMsgs.length - 2000);
-      localStorage.setItem('nightcord-messages', JSON.stringify(localMsgs));
-      localStorage.setItem('nightcord-lastmsg', String(msgObj.timestamp));
+      if (this.storage) this.storage.saveMessages(room, localMsgs); else this.saveLocalMessages(room, localMsgs);
+      if (this.storage) this.storage.setLastMsgTimestamp(room, msgObj.timestamp); else this.setLastMsgTimestamp(room, msgObj.timestamp);
     } catch (e) {}
     this.lastMsgTimestamp = msgObj.timestamp;
     this.renderMessages();

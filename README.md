@@ -68,6 +68,7 @@ app.init();
 - **[API.md](./docs/API.md)** - 详细的 API 文档，包含所有类和方法的说明
 - **[ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - 架构设计文档，解释设计原则和数据流
 - **[EXAMPLES.md](./docs/EXAMPLES.md)** - 扩展示例，展示如何添加新功能
+- **[LOCAL_STORAGE.md](./docs/LOCAL_STORAGE.md)** - 本地存储（localStorage）键名、迁移与调试说明
 
 ## 🏗️ 架构概览
 
@@ -189,6 +190,15 @@ eventBus.on('message:received', (data) => {
 ```
 
 更多示例请查看 [EXAMPLES.md](./EXAMPLES.md)
+
+## 💾 本地存储（localStorage）说明
+
+Nightcord 在浏览器端会把若干最近的聊天消息缓存在 `localStorage` 中，目的是在断网或刷新后为用户展示本地历史记录。
+
+- 按房间存储：每个房间的消息存到 `nightcord-messages:<roomname>`，最新时间戳为 `nightcord-lastmsg:<roomname>`。
+- 迁移：如果你在早期版本中有全局键 `nightcord-messages`/`nightcord-lastmsg`，程序会在加载时自动把这些旧数据迁移到 `nightcord-messages:nightcord-default` 并删除旧键（迁移合并时会去重并保留最近 2000 条）。
+
+更多详情请参见 `docs/LOCAL_STORAGE.md`。
 
 ## 🎨 事件列表
 

@@ -85,6 +85,7 @@ class UIManager {
     }
 
     this.setupEventListeners();
+    this.setupMentionFeature();
   }
 
   /**
@@ -373,42 +374,7 @@ class UIManager {
   renderMessages() {
     this.elements.chatlog.innerHTML = '';
     this.messages.forEach(msg => {
-      const msgDiv = document.createElement('div');
-      msgDiv.className = 'message';
-
-      // Avatar
-      const avatarSpan = document.createElement('span');
-      avatarSpan.className = `avatar ${msg.color}`;
-      avatarSpan.innerHTML = msg.avatar;
-
-      // Content
-      const contentDiv = document.createElement('div');
-      contentDiv.className = 'message-content';
-
-      // Header
-      const headerDiv = document.createElement('div');
-      headerDiv.className = 'message-header';
-      const userSpan = document.createElement('span');
-      userSpan.className = 'message-user';
-      userSpan.textContent = msg.user;
-      const timeSpan = document.createElement('span');
-      timeSpan.className = 'message-time';
-      timeSpan.textContent = msg.time;
-      headerDiv.appendChild(userSpan);
-      headerDiv.appendChild(timeSpan);
-      contentDiv.appendChild(headerDiv);
-
-      // Message text (may contain stickers) — renderTextWithStickers 返回 DocumentFragment
-      if (msg.text) {
-        const p = document.createElement('p');
-        p.className = 'message-text';
-        const frag = this.renderTextWithStickers(msg.text);
-        p.appendChild(frag);
-        contentDiv.appendChild(p);
-      }
-
-      msgDiv.appendChild(avatarSpan);
-      msgDiv.appendChild(contentDiv);
+      const msgDiv = this.createMessageElement(msg);
       this.elements.chatlog.appendChild(msgDiv);
     });
 
@@ -465,6 +431,10 @@ class UIManager {
 
     // Submit message
     chatInput.addEventListener("keydown", (event) => {
+      // 如果提及列表正在显示，按 Enter 时不发送消息（交给 handleMentionNav 处理补全）
+      if (event.key === "Enter" && this.mentionList && !this.mentionList.classList.contains('hidden')) {
+        return; // 让 handleMentionNav 处理
+      }
       if (event.key === "Enter" && !event.shiftKey && chatInput.value.trim() !== "") {
         let message = chatInput.value.trim();
         if (message && onSendMessage) {
@@ -577,7 +547,11 @@ class UIManager {
     });
 
     // Focus chat input on click
-    this.elements.main.addEventListener("click", () => {
+    this.elements.main.addEventListener("click", (e) => {
+      // 如果点击的是提及列表项，不要聚焦输入框（因为点击事件会先触发，然后才是列表项的点击处理）
+      // 或者更简单地，让列表项的点击处理完后再聚焦
+      if (e.target.closest('.mention-list') || e.target.closest('.mention-item')) return;
+
       if (window.getSelection().toString() == "") {
         chatInput.focus();
       }
@@ -604,6 +578,213 @@ class UIManager {
         console.warn('绑定表情按钮失败: 事件监听器绑定异常', e, e && e.stack);
       }
     }
+  }
+
+  /**
+   * 设置提及功能
+   * @private
+   */
+  setupMentionFeature() {
+    const input = this.elements.chatInput;
+    const list = document.querySelector('#mention-list');
+    this.mentionList = list;
+    this.mentionIndex = 0;
+    this.mentionQuery = '';
+
+    input.addEventListener('keyup', (e) => this.handleMentionInput(e));
+    input.addEventListener('keydown', (e) => this.handleMentionNav(e));
+    
+    // 点击其他地方关闭列表
+    document.addEventListener('click', (e) => {
+      if (!this.mentionList.contains(e.target) && e.target !== input) {
+        this.hideMentionList();
+      }
+    });
+
+    // @ 按钮点击事件
+    try {
+      const atBtn = document.querySelector('.input-btns button[title="@"]');
+      this.atBtn = atBtn; // 保存引用，用于点击外部关闭时排除
+      if (atBtn) {
+        atBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation(); // 阻止冒泡，避免 document.click 立即关闭列表
+          this.insertAtSymbol();
+        });
+      }
+    } catch (e) {
+      console.warn('绑定@按钮失败:', e);
+    }
+  }
+
+  /**
+   * 插入 @ 符号并触发提及列表
+   */
+  insertAtSymbol() {
+    const input = this.elements.chatInput;
+    if (!input) return;
+
+    const val = input.value || '';
+    const start = input.selectionStart ?? val.length;
+    const end = input.selectionEnd ?? start;
+
+    // 在光标位置插入 @
+    const before = val.slice(0, start);
+    const after = val.slice(end);
+    input.value = before + '@' + after;
+
+    // 移动光标到 @ 之后
+    const newCursorPos = start + 1;
+    input.setSelectionRange(newCursorPos, newCursorPos);
+    input.focus();
+
+    // 触发提及列表显示（空查询，显示所有用户）
+    this.showMentionList('');
+  }
+
+  /**
+   * 获取所有已知用户（在线 + 历史消息中的用户）
+   * @returns {Array<{name: string, status: 'online'|'offline'}>}
+   */
+  getAllUsers() {
+    const onlineUsers = new Set(this.roster.map(u => u.name));
+    const allUsers = new Map();
+
+    // 1. 添加在线用户
+    this.roster.forEach(u => {
+      allUsers.set(u.name, { name: u.name, status: 'online', avatar: u.avatar, color: u.color });
+    });
+
+    // 2. 添加历史消息中的用户（作为离线用户，除非已在线）
+    this.messages.forEach(msg => {
+      if (msg.user && msg.user !== '系统' && !allUsers.has(msg.user)) {
+        const { avatar, color } = this.generateAvatar(msg.user);
+        allUsers.set(msg.user, { name: msg.user, status: 'offline', avatar, color });
+      }
+    });
+
+    return Array.from(allUsers.values());
+  }
+
+  handleMentionInput(e) {
+    // 忽略导航键
+    if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)) return;
+
+    const text = e.target.value;
+    const cursor = e.target.selectionStart;
+    
+    // 查找光标前的最后一个 @
+    const lastAt = text.lastIndexOf('@', cursor - 1);
+    
+    if (lastAt !== -1) {
+      const query = text.substring(lastAt + 1, cursor);
+      // 如果包含空格，且不是为了匹配带空格的用户名（这里简化为遇到空格就停止匹配，除非是紧跟在@后的连续输入）
+      // 实际上通常遇到空格就认为结束了，除非我们支持 "First Last" 这种名字的智能匹配
+      // 这里简单处理：如果包含空格，就不显示列表了
+      if (!query.includes(' ')) {
+        this.showMentionList(query);
+        return;
+      }
+    }
+    this.hideMentionList();
+  }
+
+  handleMentionNav(e) {
+    if (this.mentionList.classList.contains('hidden')) return;
+
+    const items = this.mentionList.querySelectorAll('.mention-item');
+    if (items.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      this.mentionIndex = (this.mentionIndex + 1) % items.length;
+      this.updateMentionHighlight(items);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      this.mentionIndex = (this.mentionIndex - 1 + items.length) % items.length;
+      this.updateMentionHighlight(items);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      e.stopImmediatePropagation(); // 阻止同一元素上的其他监听器执行，避免触发消息发送
+      const selected = items[this.mentionIndex];
+      if (selected) {
+        this.completeMention(selected.dataset.name);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      this.hideMentionList();
+    }
+  }
+
+  updateMentionHighlight(items) {
+    items.forEach((item, idx) => {
+      if (idx === this.mentionIndex) {
+        item.classList.add('active');
+        item.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.classList.remove('active');
+      }
+    });
+  }
+
+  showMentionList(query) {
+    const allUsers = this.getAllUsers();
+    const lowerQuery = query.toLowerCase();
+    
+    // 过滤并排序：在线优先，然后按名字匹配度或字母顺序
+    const matches = allUsers
+      .filter(u => u.name.toLowerCase().startsWith(lowerQuery))
+      .sort((a, b) => {
+        if (a.status !== b.status) {
+          return a.status === 'online' ? -1 : 1; // 在线优先
+        }
+        return a.name.localeCompare(b.name);
+      });
+
+    if (matches.length === 0) {
+      this.hideMentionList();
+      return;
+    }
+
+    this.mentionList.innerHTML = matches.map((u, index) => `
+      <div class="mention-item ${index === 0 ? 'active' : ''} ${u.status}" data-name="${u.name}" data-index="${index}">
+        <span class="avatar ${u.color}" style="width:24px;height:24px;font-size:12px;line-height:24px;">${u.avatar}</span>
+        <span>${u.name}</span>
+        <div class="status-indicator" title="${u.status === 'online' ? '在线' : '离线'}"></div>
+      </div>
+    `).join('');
+    
+    // 绑定点击事件
+    this.mentionList.querySelectorAll('.mention-item').forEach(item => {
+      item.addEventListener('click', () => {
+        this.completeMention(item.dataset.name);
+      });
+    });
+    
+    this.mentionList.classList.remove('hidden');
+    this.mentionIndex = 0;
+  }
+
+  hideMentionList() {
+    this.mentionList.classList.add('hidden');
+    this.mentionIndex = 0;
+  }
+
+  completeMention(username) {
+    const input = this.elements.chatInput;
+    const cursor = input.selectionStart;
+    const text = input.value;
+    const lastAt = text.lastIndexOf('@', cursor - 1);
+    
+    const before = text.substring(0, lastAt);
+    const after = text.substring(cursor);
+    
+    input.value = `${before}@${username} ${after}`;
+    this.hideMentionList();
+    input.focus();
+    // 移动光标到补全后的位置
+    const newCursorPos = lastAt + username.length + 2; // @ + name + space
+    input.setSelectionRange(newCursorPos, newCursorPos);
   }
 
   /**
@@ -661,6 +842,70 @@ class UIManager {
     this.lastMsgTimestamp = msgObj.timestamp;
     this.renderMessages();
   }
+
+  /**
+   * 检查消息是否提及了当前用户
+   * @param {string} text - 消息内容
+   * @returns {boolean}
+   */
+  isMentioned(text) {
+    // 假设当前用户名存储在某个地方，或者通过某种方式获取
+    // 这里暂时简单实现：如果消息包含 "@我的名字"
+    // 由于没有明确的当前用户状态，我们可能需要从 localStorage 或其他地方获取
+    // 暂时假设用户名为 localStorage 中的 'nightcord-username'
+    const myName = localStorage.getItem('nightcord-username');
+    if (!myName) return false;
+    return text.includes(`@${myName}`);
+  }
+
+  /**
+   * 渲染单条消息
+   * @param {Object} msg - 消息对象
+   * @returns {HTMLElement}
+   */
+  createMessageElement(msg) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message';
+    
+    // 检查是否被提及
+    if (this.isMentioned(msg.text)) {
+      msgDiv.classList.add('mentioned');
+    }
+
+    msgDiv.innerHTML = `
+      <div class="avatar ${msg.color}">${msg.avatar}</div>
+      <div class="message-content">
+        <div class="message-header">
+          <span class="username">${msg.user}</span>
+          <span class="time">${msg.time}</span>
+        </div>
+        <div class="text">${this.formatMessageText(msg.text)}</div>
+      </div>
+    `;
+    return msgDiv;
+  }
+
+  /**
+   * 格式化消息文本（例如处理链接、提及高亮等）
+   * @param {string} text 
+   * @returns {string}
+   */
+  formatMessageText(text) {
+    // 简单的 HTML 转义防止 XSS
+    let formatted = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+      
+    // 高亮提及
+    // 匹配 @后跟非空白字符
+    formatted = formatted.replace(/(@[^\s]+)/g, '<span style="color: #7289da; background: rgba(114, 137, 218, 0.1); border-radius: 3px; padding: 0 2px;">$1</span>');
+    
+    return formatted;
+  }
+
   /**
    * 清空聊天输入框
    */
@@ -747,7 +992,95 @@ class UIManager {
   }
 
   /**
+   * 检查消息是否提及了当前用户
+   * @param {string} text - 消息内容
+   * @returns {boolean}
+   */
+  isMentioned(text) {
+    // 假设当前用户名存储在某个地方，或者通过某种方式获取
+    // 这里暂时简单实现：如果消息包含 "@我的名字"
+    // 由于没有明确的当前用户状态，我们可能需要从 localStorage 或其他地方获取
+    // 暂时假设用户名为 localStorage 中的 'nightcord-username'
+    const myName = localStorage.getItem('nightcord-username');
+    if (!myName) return false;
+    return text.includes(`@${myName}`);
+  }
+
+  /**
+   * 渲染单条消息
+   * @param {Object} msg - 消息对象
+   * @returns {HTMLElement}
+   */
+  createMessageElement(msg) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message';
+    
+    // 检查是否被提及
+    if (this.isMentioned(msg.text)) {
+      msgDiv.classList.add('mentioned');
+    }
+
+    // Avatar
+    const avatarSpan = document.createElement('span');
+    avatarSpan.className = `avatar ${msg.color}`;
+    avatarSpan.innerHTML = msg.avatar;
+
+    // Content
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+
+    // Header
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'message-header';
+    const userSpan = document.createElement('span');
+    userSpan.className = 'message-user';
+    userSpan.textContent = msg.user;
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'message-time';
+    timeSpan.textContent = msg.time;
+    headerDiv.appendChild(userSpan);
+    headerDiv.appendChild(timeSpan);
+    contentDiv.appendChild(headerDiv);
+
+    // Message text (may contain stickers) — renderTextWithStickers 返回 DocumentFragment
+    if (msg.text) {
+      const p = document.createElement('p');
+      p.className = 'message-text';
+      const frag = this.renderTextWithStickers(msg.text);
+      p.appendChild(frag);
+      contentDiv.appendChild(p);
+    }
+
+    msgDiv.appendChild(avatarSpan);
+    msgDiv.appendChild(contentDiv);
+    
+    return msgDiv;
+  }
+
+  /**
+   * 格式化消息文本（例如处理链接、提及高亮等）
+   * @param {string} text 
+   * @returns {string}
+   */
+  formatMessageText(text) {
+    // 简单的 HTML 转义防止 XSS
+    let formatted = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+      
+    // 高亮提及
+    // 匹配 @后跟非空白字符
+    formatted = formatted.replace(/(@[^\s]+)/g, '<span style="color: #7289da; background: rgba(114, 137, 218, 0.1); border-radius: 3px; padding: 0 2px;">$1</span>');
+    
+    return formatted;
+  }
+
+  /**
    * Format a timestamp into a human-readable string with special handling for a "30-hour" night-shift display.
+
    *
    * Behavior summary:
    * - If `timestamp` is falsy, returns an empty string.

@@ -11,10 +11,18 @@ class Nightcord {
       eventBus: this.eventBus
     });
     this.ui = new UIManager(this.eventBus);
-    
+
+    // Initialize voice chat managers
+    this.voiceRoom = new VoiceRoomManager({
+      eventBus: this.eventBus,
+      webSocketManager: this.chatRoom.webSocketManager
+    });
+    this.voiceUI = new VoiceUIManager(this.eventBus);
+
     // Application state
     this.state = {
-      phase: 'name-choosing' // name-choosing, chatting
+      phase: 'name-choosing', // name-choosing, chatting
+      voiceEnabled: config.voiceEnabled !== false // Voice chat enabled by default
     };
   }
 
@@ -109,9 +117,58 @@ class Nightcord {
   }
 
   /**
+   * 获取语音聊天管理器实例（用于外部扩展）
+   * @returns {VoiceRoomManager} 语音聊天管理器
+   */
+  getVoiceRoomManager() {
+    return this.voiceRoom;
+  }
+
+  /**
+   * 获取语音 UI 管理器实例（用于外部扩展）
+   * @returns {VoiceUIManager} 语音 UI 管理器
+   */
+  getVoiceUIManager() {
+    return this.voiceUI;
+  }
+
+  /**
+   * 加入语音聊天
+   */
+  async joinVoice() {
+    if (!this.state.voiceEnabled) {
+      console.warn('Voice chat is disabled');
+      return false;
+    }
+
+    try {
+      await this.voiceRoom.joinVoice();
+      return true;
+    } catch (error) {
+      console.error('Failed to join voice chat:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 离开语音聊天
+   */
+  leaveVoice() {
+    this.voiceRoom.leaveVoice();
+  }
+
+  /**
+   * 切换麦克风静音状态
+   */
+  toggleMute() {
+    return this.voiceRoom.toggleMute();
+  }
+
+  /**
    * 销毁应用实例
    */
   destroy() {
+    this.voiceRoom.destroy();
     this.chatRoom.leave();
     this.eventBus.clear();
   }

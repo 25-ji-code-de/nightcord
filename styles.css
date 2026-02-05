@@ -806,6 +806,7 @@ body {
     min-height: 32px; /* 覆盖全局触摸优化 */
     font-size: 16px;
     padding: 0; /* 移除可能的内边距 */
+    position: relative;
   }
   
   /* 增加实际点击热区但不增加视觉尺寸 */
@@ -813,9 +814,6 @@ body {
     content: '';
     position: absolute;
     top: -6px; right: -6px; bottom: -6px; left: -6px;
-  }
-  .input-btn {
-    position: relative;
   }
 
   /* 提及列表优化 */

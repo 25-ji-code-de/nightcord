@@ -85,7 +85,37 @@ class UIManager {
     }
 
     this.setupEventListeners();
-    this.setupMentionFeature();
+    this.setupAutocompleteFeature();
+    this.loadStickerData();
+  }
+
+  /**
+   * Load sticker data for autocomplete
+   * @private
+   */
+  loadStickerData() {
+    this.stickers = [];
+    fetch('https://sticker.nightcord.de5.net/autocomplete.json')
+      .then(res => res.json())
+      .then(data => {
+        const stickers = [];
+        for (const [category, items] of Object.entries(data)) {
+          for (const [label, pinyin] of Object.entries(items)) {
+            const filename = String(label);
+            stickers.push({
+              label: label,
+              pinyin: pinyin,
+              category: category,
+              // Search in both label and filename (pinyin)
+              searchKey: (label + pinyin).toLowerCase(),
+              code: `${category}_${filename}`,
+              url: `${this.stickerDir}/${category}/${encodeURIComponent(filename)}.png`
+            });
+          }
+        }
+        this.stickers = stickers;
+      })
+      .catch(e => console.error('Failed to load sticker autocomplete data', e));
   }
 
   /**
@@ -278,9 +308,20 @@ class UIManager {
         appendTextWithLineBreaks(text.slice(lastIndex, idx));
       }
 
-      const key = String(name).toLowerCase();
-      const fileName = key.includes('_') ? key.replace('_', '/') : key;
-      const src = `${this.stickerDir}/${encodeURIComponent(fileName)}.png`;
+      // 解析Sticker路径：兼容 [category_filename] 格式
+      // 注意：filename 可能包含中文，需正确编码且保留路径分隔符
+      const key = String(name);
+      let src;
+      
+      const underscoreIndex = key.indexOf('_');
+      if (underscoreIndex !== -1) {
+        // has category
+        const category = key.substring(0, underscoreIndex).toLowerCase();
+        const filenameFragment = key.substring(underscoreIndex + 1);
+        src = `${this.stickerDir}/${category}/${encodeURIComponent(filenameFragment)}.png`;
+      } else {
+        src = `${this.stickerDir}/${encodeURIComponent(key.toLowerCase())}.png`;
+      }
 
       const img = document.createElement('img');
       img.classList.add('sticker', 'sticker-loading');
@@ -439,7 +480,18 @@ class UIManager {
         let message = chatInput.value.trim();
         if (message && onSendMessage) {
           if (pangu) {
+            // 保护表情符号不被 pangu 处理（提取表情符号，处理后再恢复）
+            const stickerPlaceholders = [];
+            message = message.replace(/\[[^\]]+\]/g, (match) => {
+              const index = stickerPlaceholders.length;
+              stickerPlaceholders.push(match);
+              return `__STICKER_${index}__`;
+            });
             message = pangu.spacingText(message);
+            // 恢复表情符号
+            stickerPlaceholders.forEach((sticker, index) => {
+              message = message.replace(`__STICKER_${index}__`, sticker);
+            });
           }
           // Normalize stamp emoji format: replace [stamp_0806] with [stamp0806] to unify sticker rendering
           // 规范化 stamp 表情格式：将 [stamp_0806] 替换为 [stamp0806]，以统一处理 sticker 渲染
@@ -581,23 +633,23 @@ class UIManager {
   }
 
   /**
-   * 设置提及功能
+   * 设置自动补全功能 (Mentions & Stickers)
    * @private
    */
-  setupMentionFeature() {
+  setupAutocompleteFeature() {
     const input = this.elements.chatInput;
     const list = document.querySelector('#mention-list');
-    this.mentionList = list;
-    this.mentionIndex = 0;
-    this.mentionQuery = '';
+    this.autocompleteList = list;
+    this.autocompleteIndex = 0;
+    this.autocompleteType = null; // 'mention' | 'sticker'
 
-    input.addEventListener('keyup', (e) => this.handleMentionInput(e));
-    input.addEventListener('keydown', (e) => this.handleMentionNav(e));
+    input.addEventListener('keyup', (e) => this.handleAutocompleteInput(e));
+    input.addEventListener('keydown', (e) => this.handleAutocompleteNav(e));
     
     // 点击其他地方关闭列表
     document.addEventListener('click', (e) => {
-      if (!this.mentionList.contains(e.target) && e.target !== input) {
-        this.hideMentionList();
+      if (!this.autocompleteList.contains(e.target) && e.target !== input) {
+        this.hideAutocompleteList();
       }
     });
 
@@ -639,7 +691,7 @@ class UIManager {
     input.focus();
 
     // 触发提及列表显示（空查询，显示所有用户）
-    this.showMentionList('');
+    this.handleAutocompleteInput({ target: input, key: null });
   }
 
   /**
@@ -666,65 +718,93 @@ class UIManager {
     return Array.from(allUsers.values());
   }
 
-  handleMentionInput(e) {
+  handleAutocompleteInput(e) {
     // 忽略导航键
-    if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)) return;
+    if (e.key && ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)) return;
 
-    const text = e.target.value;
-    const cursor = e.target.selectionStart;
+    const input = e.target;
+    // const text = input.value; 
+    // e.target might not be available if called manually, fallback to this.elements.chatInput
+    const targetInput = input || this.elements.chatInput;
+    const text = targetInput.value;
+    const cursor = targetInput.selectionStart;
     
-    // 查找光标前的最后一个 @
+    // 1. Check for Mentions (@)
     const lastAt = text.lastIndexOf('@', cursor - 1);
-    
     if (lastAt !== -1) {
       const query = text.substring(lastAt + 1, cursor);
-      // 如果包含空格，且不是为了匹配带空格的用户名（这里简化为遇到空格就停止匹配，除非是紧跟在@后的连续输入）
-      // 实际上通常遇到空格就认为结束了，除非我们支持 "First Last" 这种名字的智能匹配
-      // 这里简单处理：如果包含空格，就不显示列表了
       if (!query.includes(' ')) {
-        this.showMentionList(query);
+        this.autocompleteType = 'mention';
+        this.autocompleteStart = lastAt;
+        this.showAutocompleteList(query);
         return;
       }
     }
-    this.hideMentionList();
+
+    // 2. Check for Stickers ([)
+    const lastBracket = text.lastIndexOf('[', cursor - 1);
+    if (lastBracket !== -1) {
+      const query = text.substring(lastBracket + 1, cursor);
+      // Ensure no closing bracket between [ and cursor, and no newline
+      if (!query.includes(']') && !query.includes('\n')) {
+         this.autocompleteType = 'sticker';
+         this.autocompleteStart = lastBracket;
+         this.showAutocompleteList(query);
+         return;
+      }
+    }
+
+    this.hideAutocompleteList();
   }
 
-  handleMentionNav(e) {
-    if (this.mentionList.classList.contains('hidden')) return;
+  handleAutocompleteNav(e) {
+    if (this.autocompleteList.classList.contains('hidden')) return;
 
-    const items = this.mentionList.querySelectorAll('.mention-item');
+    const items = this.autocompleteList.querySelectorAll('.mention-item');
     if (items.length === 0) return;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      this.mentionIndex = (this.mentionIndex + 1) % items.length;
-      this.updateMentionHighlight(items);
+      this.autocompleteIndex = (this.autocompleteIndex + 1) % items.length;
+      this.updateAutocompleteHighlight(items);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      this.mentionIndex = (this.mentionIndex - 1 + items.length) % items.length;
-      this.updateMentionHighlight(items);
+      this.autocompleteIndex = (this.autocompleteIndex - 1 + items.length) % items.length;
+      this.updateAutocompleteHighlight(items);
     } else if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault();
       e.stopImmediatePropagation(); // 阻止同一元素上的其他监听器执行，避免触发消息发送
-      const selected = items[this.mentionIndex];
+      const selected = items[this.autocompleteIndex];
       if (selected) {
-        this.completeMention(selected.dataset.name);
+        if (this.autocompleteType === 'mention') {
+          this.completeMention(selected.dataset.name);
+        } else if (this.autocompleteType === 'sticker') {
+          this.completeSticker(selected.dataset.code);
+        }
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      this.hideMentionList();
+      this.hideAutocompleteList();
     }
   }
 
-  updateMentionHighlight(items) {
+  updateAutocompleteHighlight(items) {
     items.forEach((item, idx) => {
-      if (idx === this.mentionIndex) {
+      if (idx === this.autocompleteIndex) {
         item.classList.add('active');
         item.scrollIntoView({ block: 'nearest' });
       } else {
         item.classList.remove('active');
       }
     });
+  }
+
+  showAutocompleteList(query) {
+    if (this.autocompleteType === 'mention') {
+      this.showMentionList(query);
+    } else if (this.autocompleteType === 'sticker') {
+      this.showStickerList(query);
+    }
   }
 
   showMentionList(query) {
@@ -741,33 +821,84 @@ class UIManager {
         return a.name.localeCompare(b.name);
       });
 
-    if (matches.length === 0) {
-      this.hideMentionList();
-      return;
-    }
-
-    this.mentionList.innerHTML = matches.map((u, index) => `
-      <div class="mention-item ${index === 0 ? 'active' : ''} ${u.status}" data-name="${u.name}" data-index="${index}">
+    this.renderAutocompleteItems(matches, (u) => `
+      <div class="mention-item" data-name="${u.name}">
         <span class="avatar ${u.color}" style="width:24px;height:24px;font-size:12px;line-height:24px;">${u.avatar}</span>
         <span>${u.name}</span>
         <div class="status-indicator" title="${u.status === 'online' ? '在线' : '离线'}"></div>
       </div>
-    `).join('');
-    
-    // 绑定点击事件
-    this.mentionList.querySelectorAll('.mention-item').forEach(item => {
-      item.addEventListener('click', () => {
-        this.completeMention(item.dataset.name);
-      });
-    });
-    
-    this.mentionList.classList.remove('hidden');
-    this.mentionIndex = 0;
+    `, (item) => this.completeMention(item.dataset.name));
   }
 
-  hideMentionList() {
-    this.mentionList.classList.add('hidden');
-    this.mentionIndex = 0;
+  showStickerList(query) {
+    if (!this.stickers) return;
+    const lowerQuery = query.toLowerCase();
+
+    let matches = [];
+    const underscoreIndex = lowerQuery.indexOf('_');
+
+    if (underscoreIndex !== -1) {
+      // Method 1: Category specific search (e.g. "airi_search")
+      const categoryQuery = lowerQuery.substring(0, underscoreIndex);
+      const termQuery = lowerQuery.substring(underscoreIndex + 1);
+
+      matches = this.stickers.filter(s => {
+        // Check if category matches (exact match)
+        if (s.category.toLowerCase() !== categoryQuery) return false;
+        
+        // If just "category_", show all in that category
+        if (!termQuery) return true;
+
+        return s.searchKey.includes(termQuery) || s.label.includes(termQuery);
+      });
+    } else {
+      // Method 2: Global search across all stickers
+      matches = this.stickers.filter(s => {
+        if (!lowerQuery) return true;
+        // Search in label or pinyin/filename (searchKey)
+        return s.searchKey.includes(lowerQuery) || s.label.includes(lowerQuery);
+      });
+    }
+
+    // Limit results to prevent performance issues, but allow more for category-specific searches
+    const maxResults = underscoreIndex !== -1 ? 500 : 100;
+    matches = matches.slice(0, maxResults);
+
+    this.renderAutocompleteItems(matches, (s) => `
+      <div class="mention-item sticker-autocomplete-item" data-code="${s.code}">
+        <img src="${s.url}" class="sticker-preview" loading="lazy" />
+        <div class="sticker-info">
+           <div class="sticker-label">${s.label}</div>
+           <div class="sticker-desc">${s.category}</div>
+        </div>
+      </div>
+    `, (item) => this.completeSticker(item.dataset.code));
+  }
+
+  renderAutocompleteItems(items, templateFn, clickHandler) {
+    if (items.length === 0) {
+      this.hideAutocompleteList();
+      return;
+    }
+
+    this.autocompleteList.innerHTML = items.map((item, index) => {
+      let html = templateFn(item);
+      if (index === 0) html = html.replace('class="', 'class="active ');
+      return html;
+    }).join('');
+    
+    // 绑定点击事件
+    this.autocompleteList.querySelectorAll('.mention-item').forEach(item => {
+      item.addEventListener('click', () => clickHandler(item));
+    });
+    
+    this.autocompleteList.classList.remove('hidden');
+    this.autocompleteIndex = 0;
+  }
+
+  hideAutocompleteList() {
+    this.autocompleteList.classList.add('hidden');
+    this.autocompleteIndex = 0;
   }
 
   completeMention(username) {
@@ -780,11 +911,36 @@ class UIManager {
     const after = text.substring(cursor);
     
     input.value = `${before}@${username} ${after}`;
-    this.hideMentionList();
+    this.hideAutocompleteList();
     input.focus();
     // 移动光标到补全后的位置
     const newCursorPos = lastAt + username.length + 2; // @ + name + space
     input.setSelectionRange(newCursorPos, newCursorPos);
+  }
+
+  completeSticker(code) {
+    const input = this.elements.chatInput;
+    const text = input.value;
+    const cursor = input.selectionStart;
+    const lastBracket = text.lastIndexOf('[', cursor - 1);
+    
+    let endReplace = cursor;
+    let suffix = text.substring(cursor);
+    
+    // If next char is ']', consume it (from auto-pairing)
+    if (suffix.startsWith(']')) {
+      suffix = suffix.substring(1);
+    }
+    
+    const before = text.substring(0, lastBracket);
+    
+    // Insert [code]
+    input.value = `${before}[${code}]${suffix}`;
+    this.hideAutocompleteList();
+    input.focus();
+    
+    const newPos = lastBracket + code.length + 2; 
+    input.setSelectionRange(newPos, newPos);
   }
 
   /**

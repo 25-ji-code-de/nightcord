@@ -402,6 +402,37 @@ body {
   background-color: #747f8d;
 }
 
+/* Sticker Autocomplete Item */
+.mention-item.sticker-autocomplete-item {
+  height: auto;
+  min-height: 48px;
+}
+.sticker-preview {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  margin-right: 12px;
+  background: rgba(0,0,0,0.1);
+  border-radius: 4px;
+}
+.sticker-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sticker-label {
+  font-weight: 600;
+  color: #fff;
+  font-size: 14px;
+}
+.sticker-desc {
+  font-size: 12px;
+  color: #b9bbbe;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .message.mentioned {
   background: rgba(250, 166, 26, 0.1);
   border-left: 2px solid #faa61a;

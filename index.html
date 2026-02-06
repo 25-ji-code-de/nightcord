@@ -181,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <script src="ui-sticker-service.js"></script>
   <script src="ui-autocomplete.js"></script>
   <script src="ui-manager.js"></script>
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
   <script src="voice-room-manager-peerjs.js"></script>
   <script src="voice-ui-manager.js"></script>
   <script src="nightcord.js"></script>
@@ -200,88 +200,101 @@ document.addEventListener('DOMContentLoaded', () => {
   <div id="video-container" class="video-container"></div>
 
   <script>
-    // Video display helper
-    window.showVideo = function(stream, username, isLocal = false) {
-      const container = document.getElementById('video-container');
-      const videoId = `video-${username.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    // Audio playback helper - create audio elements for remote users
+    window.audioElements = new Map();
 
-      let videoBox = document.getElementById(videoId);
-      if (!videoBox) {
-        videoBox = document.createElement('div');
-        videoBox.id = videoId;
-        videoBox.className = `video-box ${isLocal ? 'local' : ''}`;
-        videoBox.innerHTML = `
-          <video autoplay playsinline ${isLocal ? 'muted' : ''}></video>
-          <div class="video-label">${username}${isLocal ? ' (You)' : ''}</div>
-        `;
-        container.appendChild(videoBox);
+    window.playAudio = function(stream, username) {
+      console.log(`[Audio] Setting up audio for ${username}`);
+
+      // Remove old audio element if exists
+      if (window.audioElements.has(username)) {
+        const oldAudio = window.audioElements.get(username);
+        oldAudio.srcObject = null;
+        oldAudio.remove();
+        window.audioElements.delete(username);
       }
 
-      const video = videoBox.querySelector('video');
+      // Create new audio element
+      const audio = document.createElement('audio');
+      audio.autoplay = true;
+      audio.controls = true; // Add controls for debugging
+      audio.volume = 1.0;
+      audio.muted = false;
+      audio.id = `audio-${username}`;
 
-      // Set srcObject
-      video.srcObject = stream;
+      // Add to video container so it's visible
+      const container = document.getElementById('video-container');
+      const audioBox = document.createElement('div');
+      audioBox.className = 'video-box';
+      audioBox.style.height = 'auto';
+      audioBox.style.padding = '10px';
+      audioBox.innerHTML = `<div class="video-label">${username} (Audio)</div>`;
+      audioBox.appendChild(audio);
+      container.appendChild(audioBox);
 
-      // Monitor track unmute events
-      stream.getTracks().forEach(track => {
-        console.log(`Track ${track.kind} for ${username}: muted=${track.muted}, enabled=${track.enabled}`);
+      // Set stream
+      audio.srcObject = stream;
+      window.audioElements.set(username, audio);
 
-        track.onunmute = () => {
-          console.log(`Track ${track.kind} unmuted for ${username}`);
-          if (track.kind === 'video') {
-            // Try to play again when video unmutes
-            video.play().catch(err => console.error('Play error:', err));
-          }
-        };
-
-        track.onmute = () => {
-          console.log(`Track ${track.kind} muted for ${username}`);
-        };
-
-        track.onended = () => {
-          console.log(`Track ${track.kind} ended for ${username}`);
-        };
+      console.log(`[Audio] Audio element created for ${username}`, {
+        srcObject: audio.srcObject,
+        tracks: stream.getTracks().map(t => ({
+          kind: t.kind,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState
+        }))
       });
 
-      // Wait for video to be ready
-      video.onloadedmetadata = () => {
-        console.log(`Video metadata loaded for ${username}`);
-        video.play().then(() => {
-          console.log(`Video playing for ${username}`, {
-            readyState: video.readyState,
-            paused: video.paused,
-            videoWidth: video.videoWidth,
-            videoHeight: video.videoHeight
-          });
-        }).catch(err => {
-          console.error(`Error playing video for ${username}:`, err);
+      // Monitor events
+      audio.onloadedmetadata = () => {
+        console.log(`[Audio] Metadata loaded for ${username}`);
+        audio.play().catch(err => {
+          console.error(`[Audio] Play failed for ${username}:`, err);
         });
       };
 
-      // Also try to play immediately
-      video.play().catch(err => {
-        console.log(`Initial play failed for ${username}, waiting for metadata:`, err.message);
-      });
+      audio.onplay = () => {
+        console.log(`[Audio] Play event for ${username}`);
+      };
 
-      console.log(`Video element setup for ${username}:`, {
-        srcObject: video.srcObject,
-        readyState: video.readyState,
-        paused: video.paused,
-        muted: video.muted,
-        tracks: stream.getTracks().map(t => `${t.kind}: ${t.readyState}`)
-      });
+      audio.onplaying = () => {
+        console.log(`[Audio] Playing event for ${username}`, {
+          readyState: audio.readyState,
+          paused: audio.paused,
+          volume: audio.volume,
+          currentTime: audio.currentTime
+        });
+      };
+
+      audio.onerror = (e) => {
+        console.error(`[Audio] Error for ${username}:`, e);
+      };
+
+      audio.onvolumechange = () => {
+        console.log(`[Audio] Volume changed for ${username}:`, audio.volume, 'muted:', audio.muted);
+      };
+
+      // Force play immediately
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          console.log(`[Audio] Initial play successful for ${username}`);
+        }).catch(err => {
+          console.error(`[Audio] Initial play failed for ${username}:`, err);
+        });
+      }
+
+      return audio;
     };
 
-    window.removeVideo = function(username) {
-      const videoId = `video-${username.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      const videoBox = document.getElementById(videoId);
-      if (videoBox) {
-        const video = videoBox.querySelector('video');
-        if (video && video.srcObject) {
-          video.srcObject.getTracks().forEach(track => track.stop());
-          video.srcObject = null;
-        }
-        videoBox.remove();
+    window.removeAudio = function(username) {
+      if (window.audioElements.has(username)) {
+        const audio = window.audioElements.get(username);
+        audio.srcObject = null;
+        audio.parentElement?.remove();
+        window.audioElements.delete(username);
+        console.log(`[Audio] Removed audio for ${username}`);
       }
     };
   </script>

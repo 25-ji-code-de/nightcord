@@ -99,9 +99,19 @@ class VoiceRoomManagerPeerJS {
         config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
+            { urls: 'stun:stun1.l.google.com:19302' },
+            {
+              urls: 'turn:openrelay.metered.ca:80',
+              username: 'openrelayproject',
+              credential: 'openrelayproject'
+            },
+            {
+              urls: 'turn:openrelay.metered.ca:443',
+              username: 'openrelayproject',
+              credential: 'openrelayproject'
+            }
           ],
-          sdpSemantics: 'unified-plan' // Use unified-plan to avoid track muting issues
+          sdpSemantics: 'unified-plan'
         }
       });
 
@@ -143,6 +153,35 @@ class VoiceRoomManagerPeerJS {
   handleIncomingCall(call, remoteStream) {
     console.log('Handling incoming call from:', call.peer);
 
+    // Monitor peer connection state
+    if (call.peerConnection) {
+      const pc = call.peerConnection;
+
+      pc.oniceconnectionstatechange = () => {
+        console.log(`[Incoming] ICE connection state:`, pc.iceConnectionState);
+      };
+
+      pc.onconnectionstatechange = () => {
+        console.log(`[Incoming] Connection state:`, pc.connectionState);
+      };
+
+      pc.onicegatheringstatechange = () => {
+        console.log(`[Incoming] ICE gathering state:`, pc.iceGatheringState);
+      };
+
+      pc.onsignalingstatechange = () => {
+        console.log(`[Incoming] Signaling state:`, pc.signalingState);
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log(`[Incoming] ICE candidate:`, event.candidate.candidate);
+        } else {
+          console.log(`[Incoming] ICE gathering complete`);
+        }
+      };
+    }
+
     // Get username from peer ID
     const username = this.getPeerIdUsername(call.peer);
     console.log(`Received stream from peer ${call.peer}, username: ${username}`);
@@ -172,18 +211,33 @@ class VoiceRoomManagerPeerJS {
       stream: remoteStream
     });
 
-    // Show video immediately
+    // Check if video track exists
     const videoTrack = remoteStream.getVideoTracks()[0];
-    if (videoTrack && window.showVideo) {
-      console.log(`Showing video for ${username} (muted: ${videoTrack.muted})`);
-      window.showVideo(remoteStream, username, false);
+    const audioTrack = remoteStream.getAudioTracks()[0];
 
-      // Also listen for unmute
+    if (videoTrack) {
       if (videoTrack.muted) {
+        console.log(`Video track is muted for ${username}, waiting for unmute...`);
         videoTrack.onunmute = () => {
-          console.log(`Video track unmuted for ${username}`);
+          console.log(`Video track unmuted for ${username}, showing video now`);
+          if (window.showVideo) {
+            window.showVideo(remoteStream, username, false);
+          }
         };
+      } else {
+        if (window.showVideo) {
+          console.log(`Showing video for ${username}`);
+          window.showVideo(remoteStream, username, false);
+        }
       }
+    } else if (audioTrack) {
+      // No video, but has audio - play audio only
+      console.log(`No video tracks for ${username}, playing audio only`);
+      if (window.playAudio) {
+        window.playAudio(remoteStream, username);
+      }
+    } else {
+      console.log(`No video or audio tracks for ${username}`);
     }
 
     call.on('close', () => {
@@ -347,6 +401,35 @@ class VoiceRoomManagerPeerJS {
     const call = this.peer.call(peerId, this.localStream);
     this.calls.set(username, call);
 
+    // Monitor peer connection state
+    if (call.peerConnection) {
+      const pc = call.peerConnection;
+
+      pc.oniceconnectionstatechange = () => {
+        console.log(`[${username}] ICE connection state:`, pc.iceConnectionState);
+      };
+
+      pc.onconnectionstatechange = () => {
+        console.log(`[${username}] Connection state:`, pc.connectionState);
+      };
+
+      pc.onicegatheringstatechange = () => {
+        console.log(`[${username}] ICE gathering state:`, pc.iceGatheringState);
+      };
+
+      pc.onsignalingstatechange = () => {
+        console.log(`[${username}] Signaling state:`, pc.signalingState);
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log(`[${username}] ICE candidate:`, event.candidate.candidate);
+        } else {
+          console.log(`[${username}] ICE gathering complete`);
+        }
+      };
+    }
+
     let streamHandled = false; // Prevent duplicate stream handling
 
     call.on('stream', (remoteStream) => {
@@ -376,8 +459,10 @@ class VoiceRoomManagerPeerJS {
         stream: remoteStream
       });
 
-      // Check if video track is muted and wait for it to unmute
+      // Check if video track exists
       const videoTrack = remoteStream.getVideoTracks()[0];
+      const audioTrack = remoteStream.getAudioTracks()[0];
+
       if (videoTrack) {
         if (videoTrack.muted) {
           console.log(`Video track is muted for ${username}, waiting for unmute...`);
@@ -401,8 +486,14 @@ class VoiceRoomManagerPeerJS {
             window.showVideo(remoteStream, username, false);
           }
         }
+      } else if (audioTrack) {
+        // No video, but has audio - play audio only
+        console.log(`No video tracks for ${username}, playing audio only`);
+        if (window.playAudio) {
+          window.playAudio(remoteStream, username);
+        }
       } else {
-        console.log(`No video tracks for ${username}`);
+        console.log(`No video or audio tracks for ${username}`);
       }
     });
 

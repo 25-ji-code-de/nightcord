@@ -95,7 +95,7 @@ class VoiceRoomManagerPeerJS {
       const peerId = `${this.roomname}-${this.username}-${Date.now()}`.replace(/[^a-zA-Z0-9-]/g, '_');
 
       this.peer = new Peer(peerId, {
-        debug: 0,
+        debug: 2, // Enable verbose logging
         config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
@@ -111,7 +111,8 @@ class VoiceRoomManagerPeerJS {
               credential: 'openrelayproject'
             }
           ],
-          sdpSemantics: 'unified-plan'
+          sdpSemantics: 'unified-plan',
+          iceCandidatePoolSize: 10
         }
       });
 
@@ -401,34 +402,46 @@ class VoiceRoomManagerPeerJS {
     const call = this.peer.call(peerId, this.localStream);
     this.calls.set(username, call);
 
-    // Monitor peer connection state
-    if (call.peerConnection) {
-      const pc = call.peerConnection;
+    // Wait a bit for peerConnection to be created
+    setTimeout(() => {
+      if (call.peerConnection) {
+        const pc = call.peerConnection;
+        console.log(`[${username}] PeerConnection created, monitoring states...`);
 
-      pc.oniceconnectionstatechange = () => {
-        console.log(`[${username}] ICE connection state:`, pc.iceConnectionState);
-      };
+        pc.oniceconnectionstatechange = () => {
+          console.log(`[${username}] ICE connection state:`, pc.iceConnectionState);
+        };
 
-      pc.onconnectionstatechange = () => {
-        console.log(`[${username}] Connection state:`, pc.connectionState);
-      };
+        pc.onconnectionstatechange = () => {
+          console.log(`[${username}] Connection state:`, pc.connectionState);
+        };
 
-      pc.onicegatheringstatechange = () => {
-        console.log(`[${username}] ICE gathering state:`, pc.iceGatheringState);
-      };
+        pc.onicegatheringstatechange = () => {
+          console.log(`[${username}] ICE gathering state:`, pc.iceGatheringState);
+        };
 
-      pc.onsignalingstatechange = () => {
-        console.log(`[${username}] Signaling state:`, pc.signalingState);
-      };
+        pc.onsignalingstatechange = () => {
+          console.log(`[${username}] Signaling state:`, pc.signalingState);
+        };
 
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          console.log(`[${username}] ICE candidate:`, event.candidate.candidate);
-        } else {
-          console.log(`[${username}] ICE gathering complete`);
-        }
-      };
-    }
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            console.log(`[${username}] ICE candidate:`, event.candidate.candidate);
+          } else {
+            console.log(`[${username}] ICE gathering complete`);
+          }
+        };
+
+        // Log initial state
+        console.log(`[${username}] Initial states:`, {
+          ice: pc.iceConnectionState,
+          connection: pc.connectionState,
+          signaling: pc.signalingState
+        });
+      } else {
+        console.warn(`[${username}] PeerConnection not created yet`);
+      }
+    }, 100);
 
     let streamHandled = false; // Prevent duplicate stream handling
 

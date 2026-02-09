@@ -199,6 +199,19 @@ body {
   font-size: 15px;
   margin: 0;
 }
+
+/* Nako 流式消息动画 */
+.message.streaming .message-text::after {
+  content: '▋';
+  animation: blink 1s infinite;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
 .message-file {
   margin-top: 6px;
   background: #2b2633;

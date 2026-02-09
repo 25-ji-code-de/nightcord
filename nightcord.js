@@ -11,7 +11,30 @@ class Nightcord {
       eventBus: this.eventBus
     });
     this.ui = new UIManager(this.eventBus);
-    
+
+    // 初始化 Nako AI 服务
+    this.nakoService = new NakoAIService({
+      eventBus: this.eventBus,
+      apiUrl: config.nakoApiUrl || 'https://nako.nightcord.de5.net/api/chat',
+      nakoName: config.nakoName || 'Nako',
+      stream: config.nakoStream !== false // 默认启用流式
+    });
+
+    // 监听 Nako 调用请求
+    this.eventBus.on('nako:ask', (data) => {
+      // 获取当前用户名
+      const userId = this.chatRoom.username || 'Anonymous';
+
+      // 获取对话历史（最近 15 条消息）
+      const history = this.getRecentHistory(15);
+
+      // 调用 Nako
+      this.nakoService.ask(data.prompt, {
+        userId: userId,
+        history: history
+      });
+    });
+
     // Application state
     this.state = {
       phase: 'name-choosing' // name-choosing, chatting
@@ -109,9 +132,39 @@ class Nightcord {
   }
 
   /**
+   * 获取最近的对话历史
+   * @param {number} limit - 最多返回多少条
+   * @returns {Array} 历史消息数组
+   */
+  getRecentHistory(limit = 10) {
+    const messages = this.ui.messages || [];
+
+    // 获取最近的消息，排除系统消息
+    const recentMessages = messages
+      .filter(msg => msg.user !== '系统')
+      .slice(-limit)
+      .map(msg => ({
+        userId: msg.user,
+        message: msg.text,
+        isBot: msg.user === 'Nako'
+      }));
+
+    return recentMessages;
+  }
+
+  /**
+   * 获取 Nako AI 服务实例（用于外部扩展）
+   * @returns {NakoAIService} Nako AI 服务
+   */
+  getNakoService() {
+    return this.nakoService;
+  }
+
+  /**
    * 销毁应用实例
    */
   destroy() {
+    this.nakoService.cancelAll();
     this.chatRoom.leave();
     this.eventBus.clear();
   }

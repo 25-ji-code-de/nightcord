@@ -50,6 +50,9 @@ class UIManager {
     this.scrollThreshold = 150; // 距离底部超过此像素数认为在阅读历史消息
     this.interactionTimeWindow = 5000; // 5秒内有用户交互活动则不自动滚动
 
+    // Nako AI 相关：跟踪本地显示的消息，用于去重
+    this.localNakoMessages = new Map(); // fullContent -> { timestamp, messageId }
+
     // DOM elements
     this.elements = {
       main: document.querySelector(".main"),
@@ -128,9 +131,31 @@ class UIManager {
     this.eventBus.on('message:received', (data) => {
       // 只存储非系统消息
       if (data.name === '系统') return;
+
+      // 如果是 Nako 消息，检查是否是本地刚发送的
+      if (data.isNako) {
+        const local = this.localNakoMessages.get(data.message);
+        if (local) {
+          // 这是本地刚显示过的 Nako 消息，忽略广播
+          this.localNakoMessages.delete(data.message);
+          return;
+        }
+
+        // 检查是否已经有本地流式消息元素（通过内容匹配）
+        const existingLocalMsg = Array.from(this.elements.chatlog.querySelectorAll('[data-local-nako-message="true"]'))
+          .find(el => {
+            const textEl = el.querySelector('.message-text');
+            return textEl && textEl.textContent.trim() === data.message.trim();
+          });
+
+        if (existingLocalMsg) {
+          return;
+        }
+      }
+
       // 检查本地是否已存在该消息（通过时间戳和内容简单去重）
       const exists = this.messages.some(
-        m => m.text === data.message && m.user === data.name && m.timestamp === data.timestamp
+        m => m.text === data.message && m.user === data.name && Math.abs(m.timestamp - data.timestamp) < 1000
       );
       if (!exists) {
         this.addChatMessage(data.name, data.message, data.timestamp);
@@ -181,6 +206,70 @@ class UIManager {
       this.showWelcomeMessages(data);
     });
     this.eventBus.on('error', (data) => this.showError(data.message));
+
+    // Nako AI 事件监听
+    this.setupNakoEventListeners();
+  }
+
+  /**
+   * 设置 Nako AI 事件监听器
+   * @private
+   */
+  setupNakoEventListeners() {
+    // Nako 开始回复
+    this.eventBus.on('nako:stream:start', (data) => {
+      this.startStreamingMessage(data.messageId, data.user);
+    });
+
+    // Nako 流式片段
+    this.eventBus.on('nako:stream:chunk', (data) => {
+      this.appendStreamingContent(data.messageId, data.chunk);
+    });
+
+    // Nako 完成回复
+    this.eventBus.on('nako:stream:end', (data) => {
+      // 去掉开头和结尾的换行符
+      const cleanContent = data.fullContent.trim();
+
+      // 标记为本地已显示，用于去重
+      this.localNakoMessages.set(cleanContent, {
+        timestamp: Date.now(),
+        messageId: data.messageId
+      });
+
+      // 完成流式显示
+      this.finishStreamingMessage(data.messageId, data.user, cleanContent);
+
+      // 通过 WebSocket 发送给所有人（带 [Nako] 标记）
+      if (this.onSendMessage) {
+        this.onSendMessage(`[Nako]${cleanContent}`);
+      }
+
+      // 5秒后清理去重标记（防止内存泄漏）
+      setTimeout(() => {
+        this.localNakoMessages.delete(cleanContent);
+      }, 5000);
+    });
+
+    // Nako 错误
+    this.eventBus.on('nako:error', (data) => {
+      this.showError(`Nako: ${data.error}`);
+
+      // 移除流式消息
+      if (data.messageId) {
+        const msgDiv = this.elements.chatlog.querySelector(`[data-message-id="${data.messageId}"]`);
+        if (msgDiv) msgDiv.remove();
+      }
+    });
+
+    // Nako 取消
+    this.eventBus.on('nako:cancelled', (data) => {
+      // 移除流式消息
+      if (data.messageId) {
+        const msgDiv = this.elements.chatlog.querySelector(`[data-message-id="${data.messageId}"]`);
+        if (msgDiv) msgDiv.remove();
+      }
+    });
   }
 
   /**
@@ -511,6 +600,116 @@ class UIManager {
   }
 
   /**
+   * 开始流式消息
+   * @param {string} messageId - 消息 ID
+   * @param {string} user - 用户名
+   */
+  startStreamingMessage(messageId, user) {
+    const messageData = this.createMessageData(user, '', Date.now());
+    messageData.id = messageId;
+    messageData.isStreaming = true;
+
+    // 创建消息元素
+    const msgDiv = this.createMessageElement(messageData);
+    msgDiv.dataset.messageId = messageId;
+    msgDiv.classList.add('streaming');
+
+    // 添加到 DOM
+    this.elements.chatlog.appendChild(msgDiv);
+
+    // 智能滚动
+    if (this.shouldAutoScrollToBottom()) {
+      this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+    }
+
+    return msgDiv;
+  }
+
+  /**
+   * 追加流式内容
+   * @param {string} messageId - 消息 ID
+   * @param {string} chunk - 文本片段
+   */
+  appendStreamingContent(messageId, chunk) {
+    const msgDiv = this.elements.chatlog.querySelector(`[data-message-id="${messageId}"]`);
+    if (!msgDiv) return;
+
+    let textElement = msgDiv.querySelector('.message-text');
+
+    // 如果还没有文本元素，创建一个
+    if (!textElement) {
+      textElement = document.createElement('p');
+      textElement.className = 'message-text';
+      const contentDiv = msgDiv.querySelector('.message-content');
+      if (contentDiv) {
+        contentDiv.appendChild(textElement);
+      }
+    }
+
+    // 获取当前文本并追加
+    const currentText = textElement.textContent + chunk;
+
+    // 重新渲染（支持贴纸）
+    if (this.stickerService) {
+      textElement.innerHTML = '';
+      textElement.appendChild(
+        this.stickerService.renderTextWithStickers(currentText)
+      );
+    } else {
+      textElement.textContent = currentText;
+    }
+
+    // 智能滚动
+    if (this.shouldAutoScrollToBottom()) {
+      this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+    }
+  }
+
+  /**
+   * 完成流式消息
+   * @param {string} messageId - 消息 ID
+   * @param {string} user - 用户名
+   * @param {string} fullContent - 完整内容
+   */
+  finishStreamingMessage(messageId, user, fullContent) {
+    // 移除流式标记，但保留消息元素
+    const msgDiv = this.elements.chatlog.querySelector(`[data-message-id="${messageId}"]`);
+    if (msgDiv) {
+      delete msgDiv.dataset.messageId;
+      msgDiv.classList.remove('streaming');
+
+      // 标记这个消息元素，避免被 message:received 重复添加
+      msgDiv.dataset.localNakoMessage = 'true';
+
+      // 更新消息内容（去掉开头和结尾的空白）
+      const textElement = msgDiv.querySelector('.message-text');
+      if (textElement) {
+        const cleanContent = fullContent.trim();
+        if (this.stickerService) {
+          textElement.innerHTML = '';
+          textElement.appendChild(
+            this.stickerService.renderTextWithStickers(cleanContent)
+          );
+        } else {
+          textElement.textContent = cleanContent;
+        }
+      }
+    }
+
+    // 保存到 messages 数组和 localStorage（使用清理后的内容）
+    const cleanContent = fullContent.trim();
+    const messageData = this.createMessageData(user, cleanContent, Date.now());
+    this.messages.push(messageData);
+
+    const msgObj = {
+      user: user,
+      text: cleanContent,
+      timestamp: messageData.timestamp
+    };
+    this.saveMessageToStorage(msgObj);
+  }
+
+  /**
    * 设置聊天室界面
    * @param {Function} onSendMessage - 发送消息时的回调函数 (message) => void
    * @param {Function} onSetUser - 设置用户名时的回调函数 (username) => void
@@ -518,6 +717,10 @@ class UIManager {
   setupChatRoom(onSendMessage, onSetUser) {
     const { chatInput, chatlog } = this.elements;
 
+    // 保存回调函数
+    if (onSendMessage) {
+      this.onSendMessage = onSendMessage;
+    }
     if (onSetUser) {
       this.onSetUser = onSetUser;
     }
@@ -541,13 +744,55 @@ class UIManager {
     }, 100).bind(this));
 
     // Submit message
-    chatInput.addEventListener("keydown", (event) => {
+    chatInput.addEventListener("keydown", async (event) => {
       // 如果提及/贴纸列表正在显示，按 Enter 时不发送消息（交给自动补全处理）
       if (event.key === "Enter" && this.autocomplete && this.autocomplete.isOpen()) {
         return;
       }
       if (event.key === "Enter" && !event.shiftKey && chatInput.value.trim() !== "") {
         let message = chatInput.value.trim();
+
+        // 检测 Nako AI 触发
+        // 支持：@Nako 问题、/nako 问题、句中包含 @Nako
+        const nakoMention = message.match(/@Nako/i);
+        const nakoCommand = message.match(/^\/nako\s+(.+)/i);
+
+        if (nakoMention || nakoCommand) {
+          event.preventDefault();
+
+          let prompt = '';
+
+          if (nakoCommand) {
+            // /nako 命令：提取命令后的内容
+            prompt = nakoCommand[1];
+          } else if (message.startsWith('@Nako ')) {
+            // @Nako 开头：提取 @Nako 后的内容
+            prompt = message.replace(/^@Nako\s+/i, '');
+          } else {
+            // 句中提及：使用整句话作为 prompt
+            prompt = message;
+          }
+
+          if (!prompt.trim()) {
+            this.showError('请输入要问 Nako 的问题');
+            return;
+          }
+
+          // 清空输入框
+          chatInput.value = '';
+
+          // 先广播用户的问题（让所有人看到）
+          if (onSendMessage) {
+            onSendMessage(message);
+          }
+
+          // 触发 Nako 调用事件（由 NakoAIService 处理）
+          this.eventBus.emit('nako:ask', { prompt: prompt.trim() });
+
+          return;
+        }
+
+        // 普通消息处理
         if (message && onSendMessage) {
           if (pangu) {
             // 保护表情符号不被 pangu 处理（提取表情符号，处理后再恢复）
@@ -735,7 +980,22 @@ class UIManager {
   addSystemMessage(message, timestamp, avatar, color) {
     const messageData = this.createMessageData('系统', message, timestamp, avatar, color);
     this.messages.push(messageData);
-    this.renderMessages();
+
+    // 直接创建并添加消息元素，而不是重新渲染整个列表
+    const msgDiv = this.createMessageElement(messageData);
+
+    // 如果有正在流式显示的消息，插入到它之前，否则添加到末尾
+    const streamingMsg = this.elements.chatlog.querySelector('.streaming');
+    if (streamingMsg) {
+      this.elements.chatlog.insertBefore(msgDiv, streamingMsg);
+    } else {
+      this.elements.chatlog.appendChild(msgDiv);
+    }
+
+    // 智能滚动
+    if (this.shouldAutoScrollToBottom()) {
+      this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+    }
   }
 
   /**
@@ -745,16 +1005,31 @@ class UIManager {
   addUserMessage(user, message, timestamp, avatar, color) {
     const messageData = this.createMessageData(user, message, timestamp, avatar, color);
     this.messages.push(messageData);
-    
+
     const msgObj = {
       user: messageData.user,
       text: message,
       timestamp: messageData.timestamp
     };
-    
+
     this.saveMessageToStorage(msgObj);
     this.lastMsgTimestamp = msgObj.timestamp;
-    this.renderMessages();
+
+    // 直接创建并添加消息元素，而不是重新渲染整个列表
+    const msgDiv = this.createMessageElement(messageData);
+
+    // 如果有正在流式显示的消息，插入到它之前，否则添加到末尾
+    const streamingMsg = this.elements.chatlog.querySelector('.streaming');
+    if (streamingMsg) {
+      this.elements.chatlog.insertBefore(msgDiv, streamingMsg);
+    } else {
+      this.elements.chatlog.appendChild(msgDiv);
+    }
+
+    // 智能滚动
+    if (this.shouldAutoScrollToBottom()) {
+      this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+    }
   }
 
   /**

@@ -208,10 +208,23 @@ class NightcordManager {
       }
     } else if (data.timestamp > this.lastSeenTimestamp) {
       this.lastSeenTimestamp = data.timestamp;
-      this.eventBus.emit('message:received', { 
-        name: data.name, 
-        message: data.message,
-        timestamp: data.timestamp
+
+      // 检测是否是 Nako AI 消息
+      let message = data.message;
+      let isNakoMessage = false;
+      let senderName = data.name;
+
+      if (message.startsWith('[Nako]')) {
+        isNakoMessage = true;
+        message = message.slice(6); // 去掉 [Nako] 前缀
+        senderName = 'Nako'; // Nako 消息的发送者应该是 Nako，而不是转发者
+      }
+
+      this.eventBus.emit('message:received', {
+        name: senderName,
+        message: message,
+        timestamp: data.timestamp,
+        isNako: isNakoMessage
       });
     }
   }

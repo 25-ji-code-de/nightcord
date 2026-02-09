@@ -23,6 +23,7 @@
 - 📦 **模块化** - ES6 模块，每个类都是独立文件
 - 🧪 **易测试** - 单一职责，易于单元测试
 - 📝 **完整文档** - API 文档、架构文档、示例文档
+- 🤖 **AI 集成** - 内置 Nako AI 助手，支持流式对话
 
 ## 📁 项目结构
 
@@ -32,6 +33,7 @@
 ├── websocket-mgr.js          # WebSocket 管理器
 ├── nightcord-mgr.js          # 聊天室管理器（NightcordManager）
 ├── storage-manager.js        # 本地存储管理器
+├── nako-ai-service.js        # Nako AI 服务
 ├── ui-manager.js             # UI 管理器（主控）
 ├── ui-sticker-service.js     # UI 贴纸服务（贴纸渲染与数据）
 ├── ui-autocomplete.js        # UI 自动补全（@提及与贴纸补全）
@@ -39,6 +41,7 @@
 ├── index.html                # HTML 入口文件
 ├── docs/API.md               # API 文档
 ├── docs/ARCHITECTURE.md      # 架构文档
+├── docs/NAKO_AI.md           # Nako AI 文档
 └── docs/EXAMPLES.md          # 扩展示例
 ```
 
@@ -82,6 +85,7 @@ app.init();
 
 - **[API.md](./docs/API.md)** - 详细的 API 文档，包含所有类和方法的说明
 - **[ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - 架构设计文档，解释设计原则和数据流
+- **[NAKO_AI.md](./docs/NAKO_AI.md)** - Nako AI 集成文档，使用方法和技术实现
 - **[EXAMPLES.md](./docs/EXAMPLES.md)** - 扩展示例，展示如何添加新功能
 - **[LOCAL_STORAGE.md](./docs/LOCAL_STORAGE.md)** - 本地存储（localStorage）键名、迁移与调试说明
 
@@ -92,6 +96,7 @@ Nightcord (应用协调器)
   ├── EventBus (事件总线)
   ├── NightcordManager (业务逻辑)
   │   └── WebSocketManager (网络通信)
+  ├── NakoAIService (AI 服务)
   └── UIManager (UI 渲染主控)
       ├── StickerService (贴纸解析与加载)
       └── AutocompleteManager (自动补全控制)
@@ -159,6 +164,29 @@ app.init();
 // 获取状态
 const state = app.getState();
 console.log(state.username, state.roomname);
+
+// 使用 Nako AI
+app.getNakoService().ask('你好').then(response => {
+  console.log('Nako:', response);
+});
+```
+
+#### NakoAIService
+Nako AI 服务，负责调用 AI API 和处理流式响应。
+
+```javascript
+const nakoService = new NakoAIService({
+  eventBus,
+  apiUrl: 'https://nako.nightcord.de5.net/api/chat'
+});
+
+// 监听事件
+eventBus.on('nako:stream:chunk', (data) => {
+  console.log('收到片段:', data.chunk);
+});
+
+// 调用 AI
+nakoService.ask('你好');
 ```
 
 ## 🔌 扩展示例

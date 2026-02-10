@@ -20,12 +20,22 @@ class Nightcord {
       stream: config.nakoStream !== false // 默认启用流式
     });
 
+    // Nako 上下文清除时间戳（只获取此时间戳之后的消息）
+    // 从 localStorage 读取持久化的时间戳
+    this.nakoClearTimestamp = this.loadNakoClearTimestamp();
+
+    // 监听 Nako 清除上下文请求
+    this.eventBus.on('nako:clear', () => {
+      this.nakoClearTimestamp = Date.now();
+      this.saveNakoClearTimestamp(this.nakoClearTimestamp);
+    });
+
     // 监听 Nako 调用请求
     this.eventBus.on('nako:ask', (data) => {
       // 获取当前用户名
       const userId = this.chatRoom.username || 'Anonymous';
 
-      // 获取对话历史（最近 15 条消息）
+      // 获取对话历史（最近 15 条消息，只获取清除时间戳之后的）
       const history = this.getRecentHistory(15);
 
       // 调用 Nako
@@ -140,8 +150,10 @@ class Nightcord {
     const messages = this.ui.messages || [];
 
     // 获取最近的消息，排除系统消息
+    // 如果设置了清除时间戳，只获取该时间戳之后的消息
     const recentMessages = messages
       .filter(msg => msg.user !== '系统')
+      .filter(msg => msg.timestamp > this.nakoClearTimestamp)
       .slice(-limit)
       .map(msg => ({
         userId: msg.user,
@@ -158,6 +170,31 @@ class Nightcord {
    */
   getNakoService() {
     return this.nakoService;
+  }
+
+  /**
+   * 从 localStorage 加载 Nako 清除时间戳
+   * @returns {number} 时间戳
+   */
+  loadNakoClearTimestamp() {
+    try {
+      const timestamp = localStorage.getItem('nightcord-nako-clear-timestamp');
+      return timestamp ? Number(timestamp) : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  /**
+   * 保存 Nako 清除时间戳到 localStorage
+   * @param {number} timestamp - 时间戳
+   */
+  saveNakoClearTimestamp(timestamp) {
+    try {
+      localStorage.setItem('nightcord-nako-clear-timestamp', String(timestamp));
+    } catch (e) {
+      console.warn('Failed to save Nako clear timestamp:', e);
+    }
   }
 
   /**

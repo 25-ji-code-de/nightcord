@@ -752,6 +752,22 @@ class UIManager {
       if (event.key === "Enter" && !event.shiftKey && chatInput.value.trim() !== "") {
         let message = chatInput.value.trim();
 
+        // 检测 /clear 命令（清除 Nako 上下文）
+        if (message.match(/^\/clear$/i)) {
+          event.preventDefault();
+
+          // 清空输入框
+          chatInput.value = '';
+
+          // 触发清除上下文事件
+          this.eventBus.emit('nako:clear');
+
+          // 显示确认消息
+          this.addChatMessage('系统', 'Nako 的对话上下文已清除。下次对话将不携带历史消息。', null, this.systemIcon, 'bg-default');
+
+          return;
+        }
+
         // 检测 Nako AI 触发
         // 支持：@Nako 问题、/nako 问题、句中包含 @Nako
         const nakoMention = message.match(/@Nako/i);

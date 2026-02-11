@@ -24,6 +24,10 @@ class Nightcord {
     // 从 localStorage 读取持久化的时间戳
     this.nakoClearTimestamp = this.loadNakoClearTimestamp();
 
+    // 初始化 SEKAI Analytics（事件上报服务）
+    // 注意：sekaiPassAuth 会在 init() 中初始化，这里先设为 null
+    this.analytics = null;
+
     // 监听 Nako 清除上下文请求
     this.eventBus.on('nako:clear', () => {
       this.nakoClearTimestamp = Date.now();
@@ -63,6 +67,13 @@ class Nightcord {
     this.sekaiPassAuth = new SekaiPassAuth({
       clientId: 'nightcord_client',
       redirectUri: isLocalDev ? window.location.origin : `${window.location.origin}/auth/callback`
+    });
+
+    // 初始化 SEKAI Analytics（事件上报服务）
+    this.analytics = new SekaiAnalytics({
+      apiUrl: 'https://api.nightcord.de5.net',
+      eventBus: this.eventBus,
+      sekaiPassAuth: this.sekaiPassAuth
     });
 
     // 检查是否是 OAuth 回调（通过 URL 参数判断）
@@ -259,6 +270,11 @@ class Nightcord {
    * 销毁应用实例
    */
   destroy() {
+    // 停止事件上报
+    if (this.analytics) {
+      this.analytics.stopOnlineTracking();
+    }
+
     this.nakoService.cancelAll();
     this.chatRoom.leave();
     this.eventBus.clear();

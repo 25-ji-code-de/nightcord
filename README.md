@@ -24,6 +24,8 @@
 - 🧪 **易测试** - 单一职责，易于单元测试
 - 📝 **完整文档** - API 文档、架构文档、示例文档
 - 🤖 **AI 集成** - 内置 Nako AI 助手，支持流式对话
+- 🔐 **SSO 认证** - 集成 SEKAI Pass 单点登录
+- 📊 **数据上报** - 自动上报用户活动到 SEKAI Platform
 
 ## 📁 项目结构
 
@@ -33,6 +35,8 @@
 ├── websocket-mgr.js          # WebSocket 管理器
 ├── nightcord-mgr.js          # 聊天室管理器（NightcordManager）
 ├── storage-manager.js        # 本地存储管理器
+├── sekai-pass-auth.js        # SEKAI Pass OAuth 客户端
+├── sekai-analytics.js        # SEKAI Analytics 事件上报服务
 ├── nako-ai-service.js        # Nako AI 服务
 ├── ui-manager.js             # UI 管理器（主控）
 ├── ui-sticker-service.js     # UI 贴纸服务（贴纸渲染与数据）

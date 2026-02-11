@@ -100,9 +100,8 @@
      * 上报事件到 SEKAI Platform API
      */
     async reportEvent(eventType, metadata = {}) {
-      // 检查是否已登录
-      if (!this.sekaiPassAuth || !this.sekaiPassAuth.isAuthenticated()) {
-        console.debug('[SEKAI Analytics] Not authenticated, skipping event report');
+      if (!this.sekaiPassAuth) {
+        console.debug('[SEKAI Analytics] SEKAI Pass not initialized, skipping event report');
         return;
       }
 
@@ -113,7 +112,7 @@
       };
 
       try {
-        // 使用自动刷新的 getAccessToken 方法
+        // 使用自动刷新的 getAccessToken 方法（会自动检查和刷新 token）
         const accessToken = await this.sekaiPassAuth.getAccessToken();
 
         const response = await fetch(`${this.apiUrl}/user/events`, {
@@ -131,7 +130,8 @@
 
         console.debug('[SEKAI Analytics] Event reported:', eventType, metadata);
       } catch (error) {
-        console.error('[SEKAI Analytics] Failed to report event:', error);
+        // 如果未登录或 token 失效，静默跳过
+        console.debug('[SEKAI Analytics] Failed to report event:', error.message);
 
         // 如果上报失败，加入队列（可选：实现离线缓存）
         this.queueEvent(event);

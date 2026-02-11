@@ -56,10 +56,37 @@ class Nightcord {
    */
   init(roomname) {
     this.state.phase = 'name-choosing';
-    
-    // 尝试从 localStorage 获取已保存的用户名
+
+    // 初始化 SEKAI Pass OAuth 客户端
+    // 本地开发时使用根路径作为回调地址
+    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    this.sekaiPassAuth = new SekaiPassAuth({
+      clientId: 'nightcord_client',
+      redirectUri: isLocalDev ? window.location.origin : `${window.location.origin}/auth/callback`
+    });
+
+    // 检查是否是 OAuth 回调（通过 URL 参数判断）
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('code') && urlParams.has('state')) {
+      this.handleOAuthCallback(roomname);
+      return;
+    }
+
+    // 检查是否已通过 SEKAI Pass 登录
+    if (this.sekaiPassAuth.isAuthenticated()) {
+      const user = this.sekaiPassAuth.getCurrentUser();
+      // 优先使用 name，其次 preferred_username，最后 sub
+      const username = user.name || user.preferred_username || user.sub;
+      if (user && username) {
+        this.chatRoom.setUser(username);
+        this.joinRoom(roomname || 'nightcord-default');
+        return;
+      }
+    }
+
+    // 尝试从 localStorage 获取已保存的用户名（降级方案）
     const storedName = localStorage.getItem('nightcord-username');
-    
+
     if (storedName) {
       // 如果已有用户名，直接加入房间
       this.chatRoom.setUser(storedName);
@@ -69,7 +96,38 @@ class Nightcord {
       this.ui.setupNameChooser((username) => {
         this.chatRoom.setUser(username);
         this.joinRoom(roomname || 'nightcord-default');
+      }, () => {
+        // SEKAI Pass 登录回调
+        this.sekaiPassAuth.login();
       });
+    }
+  }
+
+  /**
+   * 处理 OAuth 回调
+   */
+  async handleOAuthCallback(roomname) {
+    try {
+      const userInfo = await this.sekaiPassAuth.handleCallback();
+
+      // 优先使用 name，其次 preferred_username，最后 sub
+      const username = userInfo.name || userInfo.preferred_username || userInfo.sub;
+
+      // 使用 SEKAI Pass 的用户名
+      this.chatRoom.setUser(username);
+
+      // 清理 URL（移除查询参数）
+      window.history.replaceState({}, document.title, '/');
+
+      // 加入房间
+      this.joinRoom(roomname || 'nightcord-default');
+    } catch (error) {
+      console.error('OAuth callback failed:', error);
+      alert('登录失败：' + error.message);
+
+      // 清理 URL 并回到名称选择
+      window.history.replaceState({}, document.title, '/');
+      this.init(roomname);
     }
   }
 

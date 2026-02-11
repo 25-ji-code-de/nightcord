@@ -280,19 +280,19 @@ class UIManager {
    * @param {string} [options.currentName=''] - 当前用户名（修改模式下使用）
    * @param {Function} callback - 成功时的回调函数 (username) => void
    */
-  showNameChooser(options, callback) {
+  showNameChooser(options, callback, sekaiPassCallback) {
     const { mode = 'init', currentName = '' } = options;
     const { nameInput } = this.elements;
     const nameChooser = document.querySelector('#name-chooser');
     const nameSubmit = document.querySelector('#name-submit');
     const nameError = document.querySelector('#name-error');
-    
+
     // Elements for dynamic text
     const titleEl = document.querySelector('#chooser-title');
     const subtitleEl = document.querySelector('#chooser-subtitle');
     const submitTextEl = document.querySelector('#chooser-submit-text');
     const closeBtn = document.querySelector('#chooser-close');
-    
+
     if (!nameInput || !nameChooser) return;
 
     // Reset UI state
@@ -314,7 +314,7 @@ class UIManager {
       subtitleEl.textContent = '请输入你的昵称以加入';
       submitTextEl.textContent = '进入 Nightcord';
       closeBtn.classList.add('hidden');
-      
+
       // Load saved username only in init mode
       try {
         const savedUsername = localStorage.getItem('nightcord-username');
@@ -331,8 +331,9 @@ class UIManager {
 
     // Save callback for the event handler
     this.pendingNameCallback = callback;
+    this.pendingSekaiPassCallback = sekaiPassCallback;
     this.nameChooserMode = mode;
-    
+
     // Bind events only once
     if (!this.nameChooserEventsBound) {
       this.bindNameChooserEvents();
@@ -346,6 +347,7 @@ class UIManager {
     const nameSubmit = document.querySelector('#name-submit');
     const nameError = document.querySelector('#name-error');
     const closeBtn = document.querySelector('#chooser-close');
+    const sekaiPassLoginBtn = document.querySelector('#sekai-pass-login');
 
     const closeDialog = () => {
       nameChooser.classList.add('hidden');
@@ -368,7 +370,7 @@ class UIManager {
         ], { duration: 400, easing: 'ease-in-out' });
       }
     };
-    
+
     const clearInputError = () => {
       if (nameError) nameError.classList.remove('visible');
       nameInput.classList.remove('error');
@@ -377,13 +379,13 @@ class UIManager {
     const submit = () => {
       const username = nameInput.value.trim();
       const currentMode = this.nameChooserMode || 'init';
-      
+
       if (!username) {
         showInputError('请输入昵称');
         if (window.innerWidth > 768) nameInput.focus();
         return;
       }
-      
+
       if (username.length > 32) {
         showInputError('昵称太长了，请控制在 32 个字符以内');
         if (window.innerWidth > 768) nameInput.focus();
@@ -423,6 +425,16 @@ class UIManager {
       });
     }
 
+    // SEKAI Pass 登录按钮
+    if (sekaiPassLoginBtn) {
+      sekaiPassLoginBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (this.pendingSekaiPassCallback) {
+          this.pendingSekaiPassCallback();
+        }
+      });
+    }
+
     if (closeBtn) {
       closeBtn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -442,8 +454,8 @@ class UIManager {
    * 设置用户名选择器 (兼容旧接口，用于初始化)
    * @param {Function} callback - 用户名选择回调函数
    */
-  setupNameChooser(callback) {
-    this.showNameChooser({ mode: 'init' }, callback);
+  setupNameChooser(callback, sekaiPassCallback) {
+    this.showNameChooser({ mode: 'init' }, callback, sekaiPassCallback);
   }
 
   setCurrentRoom(roomname) {

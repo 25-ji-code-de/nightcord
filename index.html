@@ -32,7 +32,18 @@
           <polyline points="9 18 15 12 9 6"></polyline>
         </svg>
       </button>
-      
+
+      <div style="margin: 20px 0; text-align: center; color: rgba(255,255,255,0.5); font-size: 14px;">
+        或
+      </div>
+
+      <button id="sekai-pass-login" class="sekai-pass-login">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+        </svg>
+        <span>使用 SEKAI Pass 登录</span>
+      </button>
+
       <button id="chooser-close" class="chooser-close hidden" title="关闭">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -174,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script> -->
+  <script src="sekai-pass-auth.js"></script>
   <script src="event-bus.js"></script>
   <script src="websocket-mgr.js"></script>
   <script src="nightcord-mgr.js"></script>

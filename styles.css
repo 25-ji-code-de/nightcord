@@ -572,33 +572,96 @@ body {
   background: #3c45a5;
 }
 
+.auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 24px 0;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 12px;
+  width: 100%;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+}
+
+.auth-divider span {
+  padding: 0 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
 .sekai-pass-login {
+  position: relative;
   width: 100%;
   padding: 14px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(35, 39, 42, 0.6);
+  border: 1px solid rgba(88, 101, 242, 0.3);
   border-radius: 12px;
-  color: #ffffff;
+  color: #e0e0e0;
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   outline: none;
+  backdrop-filter: blur(10px);
+  overflow: hidden;
 }
 
 .sekai-pass-login:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
-  transform: translateY(-1px);
+  background: rgba(88, 101, 242, 0.15);
+  border-color: #5865f2;
+  color: #fff;
+  box-shadow: 0 4px 25px rgba(88, 101, 242, 0.35);
+}
+
+.sekai-pass-login svg {
+  transition: transform 0.3s ease, color 0.3s ease, filter 0.3s ease;
+  color: #5865f2;
+  will-change: transform;
+}
+
+.sekai-pass-login:hover svg {
+  transform: scale(1.1);
+  color: #fff;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6));
 }
 
 .sekai-pass-login:active {
-  transform: translateY(0);
-  background: rgba(255, 255, 255, 0.08);
+  transform: scale(0.98);
+  background: rgba(88, 101, 242, 0.1);
+}
+
+/* Optional: Add a subtle shine effect on hover */
+.sekai-pass-login::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  transform: skewX(-20deg);
+  transition: 0.5s;
+}
+
+.sekai-pass-login:hover::after {
+  left: 150%;
+  transition: 0.7s ease-in-out;
 }
 
 @keyframes fadeIn {

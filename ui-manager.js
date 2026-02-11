@@ -95,7 +95,7 @@ class UIManager {
         widthThreshold: UIManager.STICKER_WIDTH_THRESHOLD
       });
       try {
-        this.stickerService.loadAutocompleteData('https://sticker.nightcord.de5.net/autocomplete.json');
+        this.stickerService.loadAutocompleteData('https://api.nightcord.de5.net/sekai/stickers/autocomplete.json');
       } catch (error) {
         console.error('Failed to load sticker autocomplete data:', error);
         this.addChatMessage('系统', '无法加载贴纸数据，请稍后重试。', null, this.systemIcon, 'bg-red-600');

@@ -797,14 +797,16 @@ class UIManager {
         }
 
         // 检测 AI 触发
-        // 支持：@Nako、@Asagi、/nako、/asagi 等
+        // 支持：@Nako、@Asagi、@Miku、/nako、/asagi、/miku 等
         const nakoMention = message.match(/@Nako/i);
         const nakoCommand = message.match(/^\/nako\s+(.+)/i);
         const asagiMention = message.match(/@Asagi/i);
         const asagiCommand = message.match(/^\/asagi\s+(.+)/i);
+        const mikuMention = message.match(/@Miku/i);
+        const mikuCommand = message.match(/^\/miku\s+(.+)/i);
 
         // 统一处理 AI 调用
-        if (nakoMention || nakoCommand || asagiMention || asagiCommand) {
+        if (nakoMention || nakoCommand || asagiMention || asagiCommand || mikuMention || mikuCommand) {
           event.preventDefault();
 
           let prompt = '';
@@ -821,6 +823,11 @@ class UIManager {
             prompt = asagiCommand[1];
             persona = 'asagi';
             aiName = 'Asagi';
+          } else if (mikuCommand) {
+            // /miku 命令
+            prompt = mikuCommand[1];
+            persona = 'miku';
+            aiName = 'Miku';
           } else if (message.startsWith('@Nako ')) {
             // @Nako 开头
             prompt = message.replace(/^@Nako\s+/i, '');
@@ -831,6 +838,11 @@ class UIManager {
             prompt = message.replace(/^@Asagi\s+/i, '');
             persona = 'asagi';
             aiName = 'Asagi';
+          } else if (message.startsWith('@Miku ')) {
+            // @Miku 开头
+            prompt = message.replace(/^@Miku\s+/i, '');
+            persona = 'miku';
+            aiName = 'Miku';
           } else if (nakoMention) {
             // 句中提及 @Nako
             prompt = message;
@@ -841,6 +853,11 @@ class UIManager {
             prompt = message;
             persona = 'asagi';
             aiName = 'Asagi';
+          } else if (mikuMention) {
+            // 句中提及 @Miku
+            prompt = message;
+            persona = 'miku';
+            aiName = 'Miku';
           }
 
           if (!prompt.trim()) {

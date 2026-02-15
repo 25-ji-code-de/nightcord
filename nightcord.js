@@ -82,8 +82,14 @@ class Nightcord {
       join: new Audio(`se_cord.${ext}`),
       quit: new Audio(`se_dcord.${ext}`)
     };
-    this.eventBus.on('user:joined', () => this.sounds.join.cloneNode().play().catch(() => {}));
-    this.eventBus.on('user:quit', () => this.sounds.quit.cloneNode().play().catch(() => {}));
+    this.roomReady = false; // 跟踪 room:ready 状态
+    this.eventBus.on('room:ready', () => { this.roomReady = true; });
+    this.eventBus.on('user:joined', () => {
+      if (this.roomReady) this.sounds.join.cloneNode().play().catch(() => {});
+    });
+    this.eventBus.on('user:quit', () => {
+      if (this.roomReady) this.sounds.quit.cloneNode().play().catch(() => {});
+    });
 
     // Application state
     this.state = {
@@ -178,8 +184,9 @@ class Nightcord {
    */
   joinRoom(roomname) {
     this.state.phase = 'chatting';
+    this.roomReady = false; // 重置 room:ready 状态
     // this.ui.hideRoomChooser();
-    
+
     const success = this.chatRoom.joinRoom(roomname);
     if (success) {
       this.ui.setCurrentRoom(this.chatRoom.roomname);

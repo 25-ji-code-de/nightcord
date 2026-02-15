@@ -155,6 +155,7 @@ body {
 .messages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px 0;
   display: flex;
   flex-direction: column;
@@ -198,6 +199,8 @@ body {
 .message-text {
   font-size: 15px;
   margin: 0;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 /* Nako 流式消息动画 */

@@ -117,6 +117,19 @@ class UIManager {
       console.warn('AutocompleteManager not available, mention/sticker autocomplete disabled');
       this.autocomplete = null;
     }
+
+    // 初始化 SEKAI Renderer
+    if (typeof SekaiRenderer !== 'undefined') {
+      this.sekaiRenderer = new SekaiRenderer({
+        stickerService: this.stickerService,
+        stickerDir: this.stickerDir,
+        aiPersonas: window.AIConfig ? window.AIConfig.getAllDisplayNames() : [],
+        imageWidthThreshold: 400
+      });
+    } else {
+      console.warn('SekaiRenderer not available, falling back to basic text rendering');
+      this.sekaiRenderer = null;
+    }
   }
 
   /**
@@ -664,12 +677,12 @@ class UIManager {
     // 获取当前文本并追加
     const currentText = textElement.textContent + chunk;
 
-    // 重新渲染（支持贴纸）
-    if (this.stickerService) {
-      textElement.innerHTML = '';
-      textElement.appendChild(
-        this.stickerService.renderTextWithStickers(currentText)
-      );
+    // 重新渲染（支持 SEKAI 富文本）
+    textElement.innerHTML = '';
+    if (this.sekaiRenderer) {
+      textElement.appendChild(this.sekaiRenderer.render(currentText));
+    } else if (this.stickerService) {
+      textElement.appendChild(this.stickerService.renderTextWithStickers(currentText));
     } else {
       textElement.textContent = currentText;
     }
@@ -701,11 +714,11 @@ class UIManager {
       const textElement = msgDiv.querySelector('.message-text');
       if (textElement) {
         const cleanContent = fullContent.trim();
-        if (this.stickerService) {
-          textElement.innerHTML = '';
-          textElement.appendChild(
-            this.stickerService.renderTextWithStickers(cleanContent)
-          );
+        textElement.innerHTML = '';
+        if (this.sekaiRenderer) {
+          textElement.appendChild(this.sekaiRenderer.render(cleanContent));
+        } else if (this.stickerService) {
+          textElement.appendChild(this.stickerService.renderTextWithStickers(cleanContent));
         } else {
           textElement.textContent = cleanContent;
         }
@@ -1272,13 +1285,23 @@ class UIManager {
     headerDiv.appendChild(timeSpan);
     contentDiv.appendChild(headerDiv);
 
-    // Message text (may contain stickers) — renderTextWithStickers 返回 DocumentFragment
+    // Message text - 使用 SEKAI Renderer 或降级到 StickerService
     if (msg.text) {
       const p = document.createElement('p');
       p.className = 'message-text';
-      const frag = this.stickerService
-        ? this.stickerService.renderTextWithStickers(msg.text)
-        : document.createTextNode(msg.text);
+
+      let frag;
+      if (this.sekaiRenderer) {
+        // 使用 SEKAI Renderer（支持富文本）
+        frag = this.sekaiRenderer.render(msg.text);
+      } else if (this.stickerService) {
+        // 降级到 StickerService（仅支持 stickers）
+        frag = this.stickerService.renderTextWithStickers(msg.text);
+      } else {
+        // 最终降级到纯文本
+        frag = document.createTextNode(msg.text);
+      }
+
       p.appendChild(frag);
       contentDiv.appendChild(p);
     }

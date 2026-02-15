@@ -1055,3 +1055,136 @@ body {
     display: none;
   }
 }
+
+/* ============================================
+   SEKAI 富文本样式
+   ============================================ */
+
+/* SEKAI 图片 */
+.sekai-image {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 4px 0;
+  display: block;
+}
+
+.sekai-image-loading {
+  opacity: 0.5;
+  filter: blur(4px);
+}
+
+.sekai-image-large {
+  max-width: 400px;
+}
+
+.sekai-image-small {
+  max-width: 200px;
+  display: inline-block;
+}
+
+.sekai-image-error-text {
+  color: #ff6b6b;
+  font-style: italic;
+}
+
+/* SEKAI 音频播放器 */
+.sekai-audio-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.sekai-audio {
+  max-width: 320px;
+}
+
+.sekai-audio-duration {
+  font-size: 12px;
+  color: #bdbdbd;
+}
+
+/* SEKAI 链接卡片 */
+.sekai-link-card {
+  display: block;
+  background: #2b2633;
+  border-radius: 8px;
+  border-left: 3px solid #7c6fac;
+  padding: 12px;
+  margin: 6px 0;
+  max-width: 400px;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.2s;
+}
+
+.sekai-link-card:hover {
+  background: #352d42;
+}
+
+.sekai-link-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #b8a9e6;
+}
+
+.sekai-link-description {
+  font-size: 13px;
+  color: #bdbdbd;
+  margin-bottom: 4px;
+}
+
+.sekai-link-url {
+  font-size: 11px;
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* SEKAI 彩色文字 */
+.sekai-color-text {
+  font-weight: 500;
+}
+
+/* SEKAI 回复卡片 */
+.sekai-reply-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #2b2633;
+  border-left: 3px solid #7c6fac;
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin: 2px 0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.sekai-reply-card:hover {
+  background: #352d42;
+}
+
+.sekai-reply-icon {
+  font-size: 14px;
+}
+
+.sekai-reply-content {
+  font-size: 13px;
+  color: #b8a9e6;
+}
+
+/* 移动端调整 */
+@media screen and (max-width: 768px) {
+  .sekai-link-card {
+    max-width: 100%;
+  }
+
+  .sekai-image-large {
+    max-width: 100%;
+  }
+
+  .sekai-audio {
+    max-width: 100%;
+  }
+}

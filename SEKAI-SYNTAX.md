@@ -300,25 +300,25 @@ const ALLOWED_ATTR = {
   - [ ] HTML5 audio 控件
   - [ ] 自定义播放器样式（可选）
 
-### Phase 3: 文本格式化 ⏳ TODO
-- [ ] 集成 markdown-it（轻量 Markdown 解析器）
-- [ ] 配置 markdown-it
-  - [ ] 禁用不需要的功能（heading, image, table 等）
-  - [ ] 启用 linkify（自动链接）
-  - [ ] 启用 breaks（换行转 `<br>`）
-- [ ] 实现基础格式
-  - [ ] `**粗体**` → `<strong>`
-  - [ ] `*斜体*` → `<em>`
-  - [ ] `~~删除线~~` → `<del>`
-  - [ ] `` `代码` `` → `<code>`
-  - [ ] `> 引用` → `<blockquote>`
-- [ ] 实现黑幕 `||spoiler||`
-  - [ ] 自定义解析规则
-  - [ ] CSS 样式（黑色遮挡）
-  - [ ] 点击/hover 交互
-- [ ] 与 Pangu 集成
-  - [ ] 保护 SEKAI 令牌不被 Pangu 处理
-  - [ ] 保护 Markdown 语法不被破坏
+### Phase 3: 文本格式化 ✅ DONE
+- [x] 集成 markdown-it（轻量 Markdown 解析器）
+- [x] 配置 markdown-it
+  - [x] 禁用不需要的功能（heading, image, table 等）
+  - [x] 启用 linkify（自动链接）
+  - [x] 启用 breaks（换行转 `<br>`）
+- [x] 实现基础格式
+  - [x] `**粗体**` → `<strong>`
+  - [x] `*斜体*` → `<em>`
+  - [x] `~~删除线~~` → `<del>`
+  - [x] `` `代码` `` → `<code>`
+  - [x] `> 引用` → `<blockquote>`
+- [x] 实现黑幕 `||spoiler||`
+  - [x] 自定义解析规则
+  - [x] CSS 样式（黑色遮挡）
+  - [x] 点击/hover 交互
+- [x] 与 Sticker 集成
+  - [x] Markdown 处理后递归查找文本节点
+  - [x] 替换 [xxx] 为 sticker 图片
 
 ### Phase 4: 高级交互 ⏳ TODO
 - [ ] `[re:timestamp]` 回复引用

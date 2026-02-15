@@ -27,6 +27,101 @@ class SekaiRenderer {
     this.stickerDir = options.stickerDir || 'https://sticker.nightcord.de5.net/stickers';
     this.aiPersonas = options.aiPersonas || [];
     this.imageWidthThreshold = options.imageWidthThreshold || 400;
+
+    // 初始化 markdown-it
+    this.initMarkdownIt();
+  }
+
+  /**
+   * 初始化 markdown-it 解析器
+   */
+  initMarkdownIt() {
+    if (typeof markdownit === 'undefined') {
+      console.warn('markdown-it not loaded, text formatting disabled');
+      this.md = null;
+      return;
+    }
+
+    this.md = markdownit({
+      html: false,        // 禁止原始 HTML
+      breaks: true,       // 换行转 <br>
+      linkify: true,      // 自动识别 URL
+      typographer: false  // 不转换引号等
+    });
+
+    // 禁用不需要的功能
+    this.md.disable(['image', 'heading', 'table']);
+
+    // 添加黑幕（spoiler）支持
+    this.addSpoilerPlugin();
+  }
+
+  /**
+   * 添加黑幕（||spoiler||）插件
+   */
+  addSpoilerPlugin() {
+    if (!this.md) return;
+
+    const md = this.md;
+
+    // 黑幕的 tokenizer
+    function tokenizeSpoiler(state, silent) {
+      const start = state.pos;
+      const marker = state.src.charCodeAt(start);
+
+      // 检查是否是 ||
+      if (marker !== 0x7C /* | */) {
+        return false;
+      }
+      if (state.src.charCodeAt(start + 1) !== 0x7C) {
+        return false;
+      }
+
+      if (silent) return false;
+
+      const max = state.posMax;
+
+      state.pos = start + 2; // 跳过开始的 ||
+
+      // 查找结束的 ||
+      let found = false;
+      while (state.pos < max) {
+        if (state.src.charCodeAt(state.pos) === 0x7C &&
+            state.src.charCodeAt(state.pos + 1) === 0x7C) {
+          found = true;
+          break;
+        }
+        state.pos++;
+      }
+
+      if (!found) {
+        // 没找到结束标记，回退
+        state.pos = start;
+        return false;
+      }
+
+      const content = state.src.slice(start + 2, state.pos);
+
+      // 创建 tokens
+      const token_o = state.push('spoiler_open', 'span', 1);
+      token_o.markup = '||';
+
+      const token_t = state.push('text', '', 0);
+      token_t.content = content;
+
+      const token_c = state.push('spoiler_close', 'span', -1);
+      token_c.markup = '||';
+
+      state.pos += 2; // 跳过结束的 ||
+      return true;
+    }
+
+    // 注册 inline rule - 必须在 text 之前
+    md.inline.ruler.before('text', 'spoiler', tokenizeSpoiler);
+
+    // 渲染规则
+    md.renderer.rules.spoiler_open = () => '<span class="spoiler">';
+    md.renderer.rules.spoiler_close = () => '</span>';
   }
 
   /**
@@ -172,29 +267,132 @@ class SekaiRenderer {
   }
 
   /**
-   * 渲染纯文本（包含 sticker）
-   * 将非 SEKAI 令牌的文本（如 [airi_xxx]）传递给 StickerService 处理
+   * 渲染纯文本（包含 Markdown 和 sticker）
+   * 处理流程：
+   * 1. Markdown 格式化（**粗体**、*斜体*、||黑幕|| 等）
+   * 2. Sticker 替换（[airi_xxx] 等）
    * @param {string} text - 文本内容
    * @returns {DocumentFragment} 文本片段
    */
   renderText(text) {
-    if (this.stickerService) {
-      // 使用 StickerService 处理文本中的 sticker（如 [airi_xxx]、[category_name]）
-      return this.stickerService.renderTextWithStickers(text);
-    } else {
-      // 降级：纯文本渲染（保留换行）
-      const fragment = document.createDocumentFragment();
-      const lines = text.split('\n');
-      lines.forEach((line, index) => {
-        if (line.length > 0) {
-          fragment.appendChild(document.createTextNode(line));
-        }
-        if (index < lines.length - 1) {
-          fragment.appendChild(document.createElement('br'));
-        }
-      });
-      return fragment;
+    const fragment = document.createDocumentFragment();
+
+    if (!text) return fragment;
+
+    // 1. Markdown 处理
+    let processedHTML = text;
+    if (this.md) {
+      // 检测是否有块级元素（引用、列表等）
+      const hasBlockElements = /^>/.test(text.trim());
+
+      if (hasBlockElements) {
+        // 使用 render 处理块级元素
+        processedHTML = this.md.render(text);
+      } else {
+        // 使用 renderInline 处理行内元素
+        processedHTML = this.md.renderInline(text);
+      }
     }
+
+    // 2. 如果有 Markdown 处理结果，解析 HTML
+    if (this.md && processedHTML !== text) {
+      // 创建临时容器来解析 HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = processedHTML;
+
+      // 3. 在 HTML 中处理 sticker
+      this.processStickerInHTML(tempDiv);
+
+      // 4. 移动所有子节点到 fragment
+      while (tempDiv.firstChild) {
+        fragment.appendChild(tempDiv.firstChild);
+      }
+
+      // 5. 添加黑幕点击交互
+      this.addSpoilerInteractions(fragment);
+    } else {
+      // 没有 Markdown，直接使用 StickerService
+      if (this.stickerService) {
+        return this.stickerService.renderTextWithStickers(text);
+      } else {
+        // 最终降级：纯文本
+        const lines = text.split('\n');
+        lines.forEach((line, index) => {
+          if (line.length > 0) {
+            fragment.appendChild(document.createTextNode(line));
+          }
+          if (index < lines.length - 1) {
+            fragment.appendChild(document.createElement('br'));
+          }
+        });
+      }
+    }
+
+    return fragment;
+  }
+
+  /**
+   * 在 HTML 元素中处理 sticker
+   * 递归遍历文本节点，替换 [xxx] 为 sticker 图片
+   * @param {HTMLElement} element - 要处理的元素
+   */
+  processStickerInHTML(element) {
+    if (!this.stickerService) return;
+
+    const walker = document.createTreeWalker(
+      element,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+
+    const textNodes = [];
+    let node;
+    while ((node = walker.nextNode())) {
+      textNodes.push(node);
+    }
+
+    textNodes.forEach(textNode => {
+      const text = textNode.textContent;
+      // 检查是否包含 [xxx] 格式
+      if (/\[[^\]]+\]/.test(text)) {
+        // 使用 StickerService 渲染
+        const fragment = this.stickerService.renderTextWithStickers(text);
+        textNode.replaceWith(fragment);
+      }
+    });
+  }
+
+  /**
+   * 添加黑幕点击交互
+   * @param {DocumentFragment|HTMLElement} container - 容器
+   */
+  addSpoilerInteractions(container) {
+    // DocumentFragment 没有 querySelectorAll，需要先遍历子节点
+    const elements = [];
+
+    // 递归收集所有元素
+    const collectElements = (node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.classList && node.classList.contains('spoiler')) {
+          elements.push(node);
+        }
+        // 递归子节点
+        node.childNodes.forEach(child => collectElements(child));
+      }
+    };
+
+    // 遍历容器的所有子节点
+    if (container.childNodes) {
+      container.childNodes.forEach(child => collectElements(child));
+    }
+
+    // 添加点击事件
+    elements.forEach(spoiler => {
+      spoiler.addEventListener('click', () => {
+        spoiler.classList.toggle('revealed');
+      });
+    });
   }
 
   /**

@@ -1188,3 +1188,78 @@ body {
     max-width: 100%;
   }
 }
+
+/* ============================================
+   Markdown 文本格式化样式
+   ============================================ */
+
+/* 消息文本内的基础格式 */
+.message-text strong {
+  font-weight: 700;
+  color: #fff;
+}
+
+.message-text em {
+  font-style: italic;
+  color: #e0d4f7;
+}
+
+.message-text del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.message-text code {
+  background: #2b2633;
+  color: #f8c555;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.message-text blockquote {
+  border-left: 3px solid #7c6fac;
+  padding-left: 12px;
+  margin: 8px 0;
+  color: #bdbdbd;
+  font-style: italic;
+}
+
+.message-text a {
+  color: #88b3f5;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.message-text a:hover {
+  color: #a8c9ff;
+}
+
+/* 黑幕/防剧透 */
+.message-text .spoiler {
+  background: #000;
+  color: transparent;
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.message-text .spoiler:hover {
+  background: #1a1a1a;
+}
+
+.message-text .spoiler.revealed {
+  background: transparent;
+  color: inherit;
+  cursor: default;
+}
+
+/* 移动端黑幕：点击显示，而不是 hover */
+@media screen and (max-width: 768px) {
+  .message-text .spoiler:hover {
+    background: #000;
+  }
+}

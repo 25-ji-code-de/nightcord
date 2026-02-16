@@ -1495,7 +1495,7 @@ class UIManager {
 
   /**
    * 从消息文本中提取纯文本内容
-   * 移除嵌套回复引用和所有 SEKAI 标记，只保留正文文本
+   * 移除嵌套回复引用和 SEKAI 标记，保留有文本意义的内容
    * @param {string} text - 原始消息文本
    * @returns {string} 纯文本内容
    * @private
@@ -1508,10 +1508,20 @@ class UIManager {
     // 1. 移除嵌套回复标记 [re:timestamp|preview]
     plainText = plainText.replace(/\[re:[^\]]+\]/g, '');
 
-    // 2. 移除所有 SEKAI 标记 [type:data|metadata...]
+    // 2. 处理有文本内容的 SEKAI 标记
+    // [color:hex|text] 和 [truecolor:hex|text] - 保留文本部分
+    plainText = plainText.replace(/\[(color|truecolor):([^|\]]+)\|([^\]]+)\]/g, '$3');
+
+    // [img:url|alt] - 保留 alt 文本
+    plainText = plainText.replace(/\[img:[^|\]]+\|([^\]]+)\]/g, '$1');
+
+    // [link:url|title] - 保留标题
+    plainText = plainText.replace(/\[link:[^|\]]+\|([^\]]+)\]/g, '$1');
+
+    // 3. 移除其他 SEKAI 标记（stamp, file, audio, code 等）
     plainText = plainText.replace(/\[(\w+):([^\]]+)\]/g, '');
 
-    // 3. 移除 Markdown 格式标记
+    // 4. 移除 Markdown 格式标记
     plainText = plainText.replace(/\*\*(.+?)\*\*/g, '$1'); // 粗体
     plainText = plainText.replace(/\*(.+?)\*/g, '$1'); // 斜体
     plainText = plainText.replace(/~~(.+?)~~/g, '$1'); // 删除线
@@ -1519,7 +1529,7 @@ class UIManager {
     plainText = plainText.replace(/`(.+?)`/g, '$1'); // 代码
     plainText = plainText.replace(/^>\s+/gm, ''); // 引用
 
-    // 4. 清理多余空白
+    // 5. 清理多余空白
     plainText = plainText.trim();
 
     return plainText;

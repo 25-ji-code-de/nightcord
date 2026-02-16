@@ -209,7 +209,8 @@ class SekaiRenderer {
       case 'file': return this.renderFile(data, metadata[0], metadata[1]);
       case 'audio': return this.renderAudio(data, metadata[0]);
       case 'link': return this.renderLinkCard(data, metadata[0], metadata[1]);
-      case 'color': return this.renderColor(data, metadata[0]);
+      case 'color': return this.renderColor(data, metadata[0], false);
+      case 'truecolor': return this.renderColor(data, metadata[0], true);
       case 're': return this.renderReply(data, metadata[0]);
       case 'code': return this.renderCodeBlock(data, metadata[0]);
       default: return document.createTextNode(token.raw);
@@ -436,17 +437,82 @@ class SekaiRenderer {
     return chip;
   }
 
-  renderColor(hex, text) {
-      const span = document.createElement('span');
-      // Fix: Normalize hex by adding # if missing
-      const normalizedHex = hex.startsWith('#') ? hex : '#' + hex;
-      const validHex = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(normalizedHex) ? normalizedHex : '#fff';
-      
-      span.style.color = validHex;
+  /**
+   * Render colored text with optional luminance adjustment
+   * @param {string} hex - Hex color code (with or without #)
+   * @param {string} text - Text content to display
+   * @param {boolean} preserveOriginal - If true, skip luminance adjustment (truecolor mode)
+   * @returns {HTMLSpanElement} Styled span element
+   */
+  renderColor(hex, text, preserveOriginal = false) {
+    const span = document.createElement('span');
+    span.className = 'sekai-colored-text';
+
+    // Normalize hex format
+    let normalizedHex = hex.startsWith('#') ? hex : '#' + hex;
+
+    /**
+     * Ensure minimum luminance for readability on dark backgrounds
+     * @param {string} h - Hex color (e.g., "#RRGGBB")
+     * @returns {string} Adjusted hex color
+     */
+    const ensureLuminance = (h) => {
+      let c = h.substring(1);
+
+      // Expand shorthand hex (#ABC → #AABBCC)
+      if (c.length === 3) {
+        c = c.split('').map(x => x + x).join('');
+      }
+
+      // Validate length
+      if (c.length !== 6) return '#fff';
+
+      // Parse RGB components (0-1 range)
+      const r = parseInt(c.substr(0, 2), 16) / 255;
+      const g = parseInt(c.substr(2, 2), 16) / 255;
+      const b = parseInt(c.substr(4, 2), 16) / 255;
+
+      // Calculate relative luminance using WCAG formula
+      // https://www.w3.org/WAI/GL/wiki/Relative_luminance
+      const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+      // Threshold: 0.45 ensures good contrast against dark backgrounds
+      // (Nightcord background ~0.05, so we need significant difference)
+      if (luminance < 0.45) {
+        // Lighten by mixing with white (60% white contribution)
+        // Formula: new_val = original + (1 - original) * 0.6
+        // This preserves hue while increasing lightness
+        const lighten = (val) =>
+          Math.round((val + (1 - val) * 0.6) * 255)
+            .toString(16)
+            .padStart(2, '0');
+
+        return '#' + lighten(r) + lighten(g) + lighten(b);
+      }
+
+      return h;
+    };
+
+    // Validate and optionally adjust color
+    const validHex = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(normalizedHex)
+      ? (preserveOriginal ? normalizedHex : ensureLuminance(normalizedHex))
+      : '#fff';
+
+    span.style.color = validHex;
+    
+    // Stronger glow for emphasis and better visibility
+    span.style.textShadow = `0 0 5px ${validHex}66`;
+
+    if (preserveOriginal) {
+      span.classList.add('sekai-truecolor');
+      span.style.fontWeight = '600';
+      span.textContent = '◆ ' + (text || hex);
+      span.title = `TrueColor: ${normalizedHex}`;
+    } else {
       span.textContent = text || hex;
-      span.style.textShadow = `0 0 2px ${validHex}40`;
-      
-      return span;
+    }
+
+    return span;
   }
   
   renderCodeBlock(lang, content) {

@@ -1552,6 +1552,33 @@ body {
   100% { transform: scaleY(1.5); }
 }
 
+/* --- Colored Text --- */
+
+.sekai-colored-text {
+  font-weight: 500;
+  transition: text-shadow 0.2s;
+}
+
+.sekai-colored-text:hover {
+  filter: brightness(1.1);
+}
+
+/* Truecolor mode: Original colors without adjustment */
+.sekai-truecolor {
+  /* Distinct styling to indicate "raw" mode */
+  font-weight: 600;
+  position: relative;
+}
+
+/* Optional: Add a subtle indicator that this is unmodified color */
+.sekai-truecolor::before {
+  content: '◆';
+  font-size: 0.7em;
+  opacity: 0.3;
+  margin-right: 2px;
+  vertical-align: super;
+}
+
 /* Mobile Adjustments */
 @media screen and (max-width: 600px) {
   .sekai-link-card, .sekai-file-card, .sekai-audio-player {

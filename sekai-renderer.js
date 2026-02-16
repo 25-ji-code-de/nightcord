@@ -19,7 +19,8 @@ class SekaiRenderer {
     this.stickerService = options.stickerService;
     this.stickerDir = options.stickerDir || 'https://sticker.nightcord.de5.net/stickers';
     this.aiPersonas = options.aiPersonas || [];
-    
+    this.imageWidthThreshold = options.imageWidthThreshold || 400;
+
     // Theme Configuration
     this.theme = {
       imageMaxWidth: 360,
@@ -254,8 +255,18 @@ class SekaiRenderer {
     img.src = url;
     img.alt = alt || 'Image';
     img.loading = 'lazy';
-    
-    img.onload = () => container.classList.remove('loading');
+
+    img.onload = () => {
+      container.classList.remove('loading');
+
+      // 根据图片实际宽度调整容器大小类
+      if (img.naturalWidth > this.imageWidthThreshold) {
+        container.classList.add('sekai-image-large');
+      } else {
+        container.classList.add('sekai-image-small');
+      }
+    };
+
     img.onerror = () => {
         container.innerHTML = `<div class="sekai-error-placeholder">
             <span class="sekai-error-icon">⚠️</span>

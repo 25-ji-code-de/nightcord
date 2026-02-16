@@ -1106,24 +1106,28 @@ body {
 
 /* Spoiler / 黑幕 */
 .sekai-spoiler {
-  background: #000;
+  background: #181520; /* Deep geometric dark, not pitch black */
   color: transparent;
-  padding: 2px 4px;
-  border-radius: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .sekai-spoiler:hover {
-  background: #1a1a1a;
+  background: #252030;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
 .sekai-spoiler.revealed {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.1); /* Keep distinct from normal text */
   color: inherit;
-  cursor: default;
+  cursor: text;
   user-select: text;
+  box-shadow: none;
 }
 
 /* Auto-linked URLs */
@@ -1181,6 +1185,11 @@ body {
   max-width: 100%;
 }
 
+/* Loading 状态默认使用 large 尺寸 */
+.sekai-image-container.loading {
+  max-width: 400px;
+}
+
 .sekai-image-container.loading::after {
   content: '';
   position: absolute;
@@ -1193,7 +1202,7 @@ body {
 .sekai-image-content {
   display: block;
   max-width: 100%;
-  max-height: 400px; /* Constrain height */
+  max-height: 400px;
   transition: opacity 0.3s;
 }
 
@@ -1212,6 +1221,32 @@ body {
 
 .sekai-image-container:hover .sekai-image-caption {
   transform: translateY(0);
+}
+
+/* Image size classes - based on naturalWidth */
+.sekai-image-container.sekai-image-large {
+  max-width: 400px;
+}
+
+.sekai-image-container.sekai-image-small {
+  max-width: 200px;
+}
+
+.sekai-error-placeholder {
+  padding: 20px;
+  text-align: center;
+  color: #ff6b6b;
+}
+
+.sekai-error-icon {
+  font-size: 24px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.sekai-error-text {
+  font-size: 13px;
+  font-style: italic;
 }
 
 /* --- Audio Player (Custom Geometric) --- */
@@ -1495,13 +1530,13 @@ body {
 
 /* Blockquote */
 .sekai-text-node blockquote {
-  border-left: 3px solid #7c6fac;
-  padding-left: 12px;
-  margin: 8px 0;
-  color: #bdbdbd;
-  font-style: italic;
-  border-radius: 0 4px 4px 0;
-  background: rgba(0, 0, 0, 0.1);
+  border-left: 4px solid var(--sekai-accent);
+  margin: 10px 0;
+  padding: 8px 16px;
+  background: rgba(124, 111, 172, 0.08); /* Subtle tint matching accent */
+  color: #eeeff1;
+  border-radius: 0 8px 8px 0;
+  font-style: normal; /* Modern UI prefers normal style */
 }
 
 /* Mobile spoiler adjustment - click to reveal instead of hover */

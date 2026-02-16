@@ -844,17 +844,59 @@ class UIManager {
         // 普通消息处理
         if (message && onSendMessage) {
           if (pangu) {
-            // 保护表情符号不被 pangu 处理（提取表情符号，处理后再恢复）
-            const stickerPlaceholders = [];
-            message = message.replace(/\[[^\]]+\]/g, (match) => {
-              const index = stickerPlaceholders.length;
-              stickerPlaceholders.push(match);
-              return `__STICKER_${index}__`;
+            // 保护 SEKAI 语法不被 pangu 处理
+            const placeholders = [];
+
+            // 保护所有 SEKAI 格式标记
+            // 1. 保护 [type:data] 格式
+            message = message.replace(/\[([^\]]+)\]/g, (match) => {
+              const index = placeholders.length;
+              placeholders.push(match);
+              return `__SEKAI_${index}__`;
             });
+
+            // 2. 保护 markdown 格式标记
+            // 保护 **粗体**
+            message = message.replace(/\*\*([^*]+)\*\*/g, (match) => {
+              const index = placeholders.length;
+              placeholders.push(match);
+              return `__SEKAI_${index}__`;
+            });
+
+            // 保护 *斜体*
+            message = message.replace(/\*([^*\s][^*]*[^*\s])\*/g, (match) => {
+              const index = placeholders.length;
+              placeholders.push(match);
+              return `__SEKAI_${index}__`;
+            });
+
+            // 保护 ~~删除线~~
+            message = message.replace(/~~([^~]+)~~/g, (match) => {
+              const index = placeholders.length;
+              placeholders.push(match);
+              return `__SEKAI_${index}__`;
+            });
+
+            // 保护 ||黑幕||
+            message = message.replace(/\|\|([^|]+)\|\|/g, (match) => {
+              const index = placeholders.length;
+              placeholders.push(match);
+              return `__SEKAI_${index}__`;
+            });
+
+            // 保护 `代码`
+            message = message.replace(/`([^`]+)`/g, (match) => {
+              const index = placeholders.length;
+              placeholders.push(match);
+              return `__SEKAI_${index}__`;
+            });
+
+            // 应用 pangu 处理
             message = pangu.spacingText(message);
-            // 恢复表情符号
-            stickerPlaceholders.forEach((sticker, index) => {
-              message = message.replace(`__STICKER_${index}__`, sticker);
+
+            // 恢复所有被保护的格式
+            placeholders.forEach((original, index) => {
+              message = message.replace(`__SEKAI_${index}__`, original);
             });
           }
           // Normalize stamp emoji format: replace [stamp_0806] with [stamp0806] to unify sticker rendering

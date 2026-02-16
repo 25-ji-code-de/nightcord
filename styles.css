@@ -1104,41 +1104,86 @@ body {
   border: 1px solid rgba(255,255,255,0.05);
 }
 
-/* Spoiler / 黑幕 */
+/* Spoiler / 黑幕 - Optical Blur Redesign */
+/* Spoiler / 黑幕 - Digital Interference Tape */
 .sekai-spoiler {
-  background: #181520; /* Deep geometric dark, not pitch black */
+  /* "Stuck on" feel: Solid noise texture masking the text */
+  background: #2a2635;
   color: transparent;
-  padding: 2px 6px;
+  text-shadow: none; /* Removed text hint to ensure total spoiler safety */
+  padding: 0 4px; /* Tighter padding like a tape */
+  margin: 0 2px;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
   font-weight: 500;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(124, 111, 172, 0.2); /* Subtle purple border */
+  
+  /* Texture: Digital Noise Stripe */
+  background-image: repeating-linear-gradient(
+    135deg,
+    #2a2635,
+    #2a2635 6px,
+    #332e42 6px,
+    #332e42 12px
+  );
+  /* Soft shadow to lift it up (Layering) */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .sekai-spoiler:hover {
-  background: #252030;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  /* Interactive feedback: Brighter, slightly unstable feel */
+  border-color: rgba(167, 139, 250, 0.6); /* Purple accent highlight */
+  background-image: repeating-linear-gradient(
+    135deg,
+    #322d40,
+    #322d40 6px,
+    #3e3750 6px,
+    #3e3750 12px
+  );
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255,255,255,0.05);
 }
 
 .sekai-spoiler.revealed {
-  background: rgba(255, 255, 255, 0.1); /* Keep distinct from normal text */
+  /* "Dug out" / Contextual feel: Texture vanishes, text remains */
+  background: rgba(124, 111, 172, 0.1); 
+  background-image: none;
   color: inherit;
   cursor: text;
   user-select: text;
+  border-color: transparent;
   box-shadow: none;
+  padding: 0 2px; /* Slight shrink to fit text naturally */
+}
+
+.sekai-spoiler.revealed {
+  background: rgba(124, 111, 172, 0.15); /* Highlighted background when revealed */
+  color: inherit;
+  text-shadow: none; /* Clear blur */
+  cursor: text;
+  user-select: text;
+  animation: sekai-spoiler-reveal 0.3s ease-out;
+}
+
+@keyframes sekai-spoiler-reveal {
+  0% { filter: blur(4px); opacity: 0.5; }
+  100% { filter: blur(0); opacity: 1; }
 }
 
 /* Auto-linked URLs */
 .sekai-link-inline {
   color: #88b3f5;
-  text-decoration: underline;
-  transition: color 0.2s;
+  text-decoration: none; /* No underline by default to keep clean */
+  border-bottom: 1px solid rgba(136, 179, 245, 0.3); /* Subtle hint instead */
+  transition: all 0.2s;
+  padding-bottom: 0px;
 }
 
 .sekai-link-inline:hover {
   color: #a8c9ff;
+  border-bottom-color: #a8c9ff; /* Fully underline on hover */
+  border-bottom-width: 1.5px;
 }
 
 /* --- Stickers --- */

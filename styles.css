@@ -1219,34 +1219,42 @@ body {
 .sekai-audio-player {
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: var(--sekai-bg-card);
-  padding: 8px 12px;
-  border-radius: var(--sekai-radius);
+  gap: 16px;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)); /* Gradient for depth without greyness */
+  padding: 12px 16px;
+  border-radius: 12px;
   margin: 6px 0;
   width: fit-content;
-  min-width: 260px;
-  border: 1px solid rgba(255,255,255,0.05);
-  transition: border-color 0.2s;
+  min-width: 320px;
+  max-width: 480px;
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: all 0.2s ease;
+  backdrop-filter: blur(4px);
 }
 
 .sekai-audio-player:hover {
-  border-color: rgba(124, 111, 172, 0.4);
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+  border-color: rgba(124, 111, 172, 0.6);
 }
 
 .sekai-audio-control {
-  background: var(--sekai-accent);
+  background: #ec4899; /* Pink as per design */
   border: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%; /* Circle contrast with rect card */
+  min-width: 40px;
+  height: 40px;
+  border-radius: 50%;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 14px;
-  transition: transform 0.1s, background 0.2s;
+  transition: transform 0.1s, background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.3);
+}
+
+.sekai-audio-control:hover {
+  transform: scale(1.05);
+  background: #f472b6;
 }
 
 .sekai-audio-control:active {
@@ -1255,18 +1263,18 @@ body {
 
 .sekai-audio-wave {
   display: flex;
-  align-items: flex-end; /* Bars grow up */
-  gap: 2px;
-  height: 24px;
+  align-items: center;
+  gap: 3px;
+  height: 32px;
   flex: 1;
 }
 
 .sekai-audio-wave .bar {
   flex: 1;
   background: #50476a;
-  border-radius: 2px;
+  border-radius: 4px;
   min-height: 4px;
-  transition: height 0.2s;
+  transition: height 0.2s, background-color 0.2s;
 }
 
 .sekai-audio-player.playing .sekai-audio-wave .bar {
@@ -1276,10 +1284,11 @@ body {
 
 .sekai-audio-time {
   font-family: var(--sekai-font-mono);
-  font-size: 0.8em;
+  font-size: 0.85em;
   color: var(--sekai-text-dim);
-  min-width: 40px;
+  min-width: 45px;
   text-align: right;
+  font-weight: 500;
 }
 
 /* --- File Card --- */
@@ -1287,33 +1296,35 @@ body {
 .sekai-file-card {
   display: flex;
   align-items: center;
-  background: var(--sekai-bg-card);
-  border-radius: var(--sekai-radius);
-  padding: 10px;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border-radius: 8px; /* Slightly less rounded than audio for distinct feel */
+  padding: 12px;
   margin: 6px 0;
-  gap: 12px;
+  gap: 14px;
   cursor: pointer;
-  transition: transform 0.2s, background 0.2s;
-  border: 1px solid transparent;
+  transition: transform 0.2s, background 0.2s, border-color 0.2s;
+  border: 1px solid rgba(255,255,255,0.1);
   width: fit-content;
-  min-width: 250px;
+  min-width: 300px;
+  max-width: 450px;
+  backdrop-filter: blur(4px);
 }
 
 .sekai-file-card:hover {
-  background: var(--sekai-bg-hover);
-  border-color: rgba(255,255,255,0.05);
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+  border-color: rgba(255,255,255,0.2);
   transform: translateY(-1px);
 }
 
 .sekai-file-icon {
-  width: 40px;
-  height: 40px;
-  background: rgba(255,255,255,0.05);
-  border-radius: 6px; /* Slightly squared */
+  width: 48px;
+  height: 48px;
+  background: rgba(167, 139, 250, 0.15); /* Purple tint instead of grey-white */
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  color: #a78bfa; /* Purple icon */
 }
 
 .sekai-file-details {
@@ -1321,12 +1332,13 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  gap: 2px;
   overflow: hidden;
 }
 
 .sekai-file-name {
   font-size: 0.95em;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

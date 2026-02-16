@@ -274,26 +274,58 @@ class SekaiImageViewer {
     // Touch gestures (Pinch Zoom)
     let touchStartDistance = 0;
     let touchStartScale = 1;
+    let isPinching = false;
 
     this.container.addEventListener('touchstart', (e) => {
       if (e.touches.length === 2) {
+        e.preventDefault();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         touchStartDistance = Math.sqrt(dx * dx + dy * dy);
         touchStartScale = this.scale;
+        isPinching = true;
+
+        // Disable transition for smooth pinch
+        this.image.style.transition = 'none';
       }
-    });
+    }, { passive: false });
 
     this.container.addEventListener('touchmove', (e) => {
-      if (e.touches.length === 2) {
+      if (e.touches.length === 2 && isPinching) {
         e.preventDefault();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const distance = Math.sqrt(dx * dx + dy * dy);
         const scaleDelta = distance / touchStartDistance;
-        this.setScale(touchStartScale * scaleDelta);
+        const newScale = touchStartScale * scaleDelta;
+
+        // Clamp scale
+        this.scale = Math.max(this.minScale, Math.min(this.maxScale, newScale));
+
+        // Reset translation if zooming out to 1x
+        if (this.scale <= 1) {
+          this.translateX = 0;
+          this.translateY = 0;
+        }
+
+        // Update transform immediately
+        this.image.style.transform =
+          `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale}) rotate(${this.rotation}deg)`;
+        this.scaleText.textContent = `${Math.round(this.scale * 100)}%`;
+        this.image.style.cursor = this.scale > 1 ? 'grab' : 'default';
       }
     }, { passive: false });
+
+    this.container.addEventListener('touchend', (e) => {
+      if (isPinching) {
+        isPinching = false;
+        // Re-enable transition
+        this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)';
+
+        // Update the final scale - this persists the zoom level
+        touchStartScale = this.scale;
+      }
+    });
   }
 
   open(imageSrc, filename = '') {

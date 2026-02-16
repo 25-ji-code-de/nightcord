@@ -426,14 +426,18 @@ class SekaiRenderer {
   renderReply(timestamp, preview) {
     const chip = document.createElement('div');
     chip.className = 'sekai-reply-chip';
-    chip.title = `Jump to #${timestamp}`; // Show timestamp on hover
+    chip.title = `点击跳转到 #${timestamp}`;
 
     // Escape user content
-    const escapedPreview = this.escapeHtml(preview || 'Reply');
+    const escapedPreview = this.escapeHtml(preview || '回复');
 
     chip.innerHTML = `
-      <span class="sekai-reply-icon">↪</span>
-      <span class="sekai-reply-text">${escapedPreview}</span>
+      <div class="sekai-reply-accent">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+              <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"></path>
+          </svg>
+      </div>
+      <div class="sekai-reply-content">${escapedPreview}</div>
     `;
 
     chip.onclick = () => {

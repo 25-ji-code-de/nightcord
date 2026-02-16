@@ -1654,28 +1654,47 @@ body {
 .sekai-reply-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 2px 8px 2px 4px;
-  border-radius: 12px; /* Pill shape */
+  gap: 8px;
+  background: rgba(40, 35, 50, 0.4);
+  padding: 3px 8px 3px 6px;
+  border-radius: 4px;
   font-size: 0.85em;
-  color: var(--sekai-text-dim);
+  color: #a0a0a0;
   cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.2s;
+  border-left: 3px solid #7c6fac;
+  transition: all 0.2s ease;
   margin-right: 4px;
+  margin-bottom: 2px;
   user-select: none;
+  max-width: 100%;
 }
 
 .sekai-reply-chip:hover {
-  background: rgba(124, 111, 172, 0.15);
-  border-color: rgba(124, 111, 172, 0.3);
-  color: #dadada;
+  background: rgba(65, 55, 90, 0.5);
+  color: #eee;
+  border-left-color: #9d8ec4;
 }
 
-.sekai-reply-icon {
-  font-size: 1.1em;
-  color: var(--sekai-accent);
+.sekai-reply-accent {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #7c6fac;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.sekai-reply-chip:hover .sekai-reply-accent {
+  opacity: 1;
+  color: #9d8ec4;
+}
+
+.sekai-reply-content {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  font-weight: 500;
 }
 
 /* --- Animations --- */

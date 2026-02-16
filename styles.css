@@ -1104,6 +1104,20 @@ body {
   border: 1px solid rgba(255,255,255,0.05);
 }
 
+.sekai-code-block {
+  font-family: var(--sekai-font-mono);
+  display: block;
+  background: #2b2633;
+  color: #e0d4f7;
+  padding: 12px;
+  border-radius: var(--sekai-radius);
+  margin: 8px 0;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  border: 1px solid rgba(255,255,255,0.05);
+  line-height: 1.5;
+}
+
 /* Spoiler / 黑幕 - Optical Blur Redesign */
 /* Spoiler / 黑幕 - Digital Interference Tape */
 .sekai-spoiler {

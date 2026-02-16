@@ -437,7 +437,8 @@ class SekaiRenderer {
     `;
 
     chip.onclick = () => {
-        const event = new CustomEvent('reply-jump', { detail: { timestamp } });
+        // Convert string timestamp to number for messageIndex lookup
+        const event = new CustomEvent('reply-jump', { detail: { timestamp: Number(timestamp) } });
         document.dispatchEvent(event);
     };
 

@@ -1408,8 +1408,8 @@ class UIManager {
     const btn = document.createElement('button');
     btn.className = 'message-reply-btn';
     btn.title = '回复此消息';
-    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor">
-      <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/>
+    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor">
+      <path d="M760-200v-160q0-50-35-85t-85-35H273l144 144-57 56-240-240 240-240 57 56-144 144h367q83 0 141.5 58.5T840-360v160h-80Z"/>
     </svg>`;
 
     btn.onclick = (e) => {

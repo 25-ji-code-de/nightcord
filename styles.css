@@ -178,39 +178,48 @@ body {
 /* Reply button */
 .message-reply-btn {
   position: absolute;
-  top: 8px;
-  right: 16px;
-  width: 28px;
-  height: 28px;
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
+  top: -12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  background: #3f355b; /* 调整为侧边栏深紫色 */
+  border: 1px solid #2b2633; /* 调整为深色边框 */
   border-radius: 4px;
   cursor: pointer;
-  display: none;
+  display: flex !important;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-  transition: all 0.15s ease;
-  color: #4a4a4a;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out, background-color 0.1s;
+  color: #b9bbbe;
+  opacity: 0;
+  transform: translateY(4px) scale(0.95);
+  pointer-events: none;
+  z-index: 10;
 }
 
 .message:hover .message-reply-btn {
-  display: flex;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
 }
 
 .message-reply-btn:hover {
-  background: #7c6fac;
-  color: white;
-  transform: scale(1.05);
+  background: #50476a; /* 悬停时变亮，呼应主体背景色 */
+  color: #fff;
+  border-color: #6d638a; /* 悬停时边框也稍微提亮 */
+  box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+  transform: translateY(0) scale(1.05);
 }
 
 .message-reply-btn:active {
-  transform: scale(0.95);
+  transform: translateY(0) scale(0.95);
+  background: #3f355b;
 }
 
 .message-reply-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   fill: currentColor;
 }
 

@@ -24,8 +24,17 @@ class SekaiImageViewer {
     this.dragStartY = 0;
 
     this.minScale = 0.1;
-    this.maxScale = 5;
+    this.maxScale = 8;
     this.scaleStep = 0.2;
+
+    this.idleTimer = null;
+    this.idleDelay = 3000;
+    
+    this.wheelTimer = null;
+    
+    // Smooth zoom state
+    this.targetScale = 1;
+    this.isZooming = false;
 
     this.createViewer();
     this.bindEvents();
@@ -42,6 +51,14 @@ class SekaiImageViewer {
           <div class="sekai-spinner"></div>
         </div>
       </div>
+      
+      <button class="sekai-viewer-close-fixed" title="关闭 (ESC)">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+
       <div class="sekai-viewer-toolbar">
         <button class="sekai-viewer-btn" data-action="zoom-out" title="缩小 (Scroll Down)">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
@@ -98,9 +115,15 @@ class SekaiImageViewer {
     this.toolbar = viewer.querySelector('.sekai-viewer-toolbar');
     this.scaleText = viewer.querySelector('.sekai-viewer-scale');
     this.filenameText = viewer.querySelector('.sekai-viewer-filename');
+    this.fixedCloseBtn = viewer.querySelector('.sekai-viewer-close-fixed');
   }
 
   bindEvents() {
+    this.boundResetIdle = this.resetIdle.bind(this);
+    
+    // Fixed close button
+    this.fixedCloseBtn.addEventListener('click', () => this.close());
+
     // Toolbar buttons
     this.toolbar.addEventListener('click', (e) => {
       const btn = e.target.closest('.sekai-viewer-btn');
@@ -134,57 +157,109 @@ class SekaiImageViewer {
       }
     });
 
-    // Mouse wheel zoom
     this.container.addEventListener('wheel', (e) => {
       if (!this.isOpen) return;
       e.preventDefault();
 
-      if (e.deltaY < 0) {
-        this.zoomIn();
-      } else {
-        this.zoomOut();
-      }
+      // Smoother exponential zoom based on delta
+      // Smaller factor for smoother control. e.deltaY is usually +-100 or +-53
+      const zoomFactor = Math.exp(-e.deltaY * 0.001);
+      
+      const newScale = this.scale * zoomFactor;
+      
+      // Calculate scaling relative to cursor position
+      // Only if we actually have a mouse event context (not programmatic)
+      const rect = this.container.getBoundingClientRect();
+      const offsetX = e.clientX - rect.left - rect.width / 2;
+      const offsetY = e.clientY - rect.top - rect.height / 2;
+
+      // Adjust translation to zoom towards cursor
+      // Formula: newTrans = oldTrans + (cursorOffset - oldTrans) * (1 - zoomFactor)
+      // This keeps the point under cursor stable
+      this.translateX += (offsetX - this.translateX) * (1 - zoomFactor);
+      this.translateY += (offsetY - this.translateY) * (1 - zoomFactor);
+      
+      this.setScale(newScale);
+      
+      // Force immediate update without transition for wheel to feel instant/snappy
+      this.image.style.transition = 'none';
+      this.updateTransform();
+      
+      // Debounce re-enabling transition
+      clearTimeout(this.wheelTimer);
+      this.wheelTimer = setTimeout(() => {
+          this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)';
+      }, 100);
+
     }, { passive: false });
 
-    // Drag to pan (when zoomed)
-    this.image.addEventListener('mousedown', (e) => {
-      if (this.scale <= 1) return;
-
+    // Drag to pan
+    this.container.addEventListener('mousedown', (e) => {
+      if (this.scale <= 1) return; // Only drag when zoomed
+      
       this.isDragging = true;
       this.dragStartX = e.clientX - this.translateX;
       this.dragStartY = e.clientY - this.translateY;
+      
       this.image.style.cursor = 'grabbing';
+      this.image.style.transition = 'none'; // Disable transition for instant drag response
       e.preventDefault();
     });
 
-    document.addEventListener('mousemove', (e) => {
+    // Window mousemove to handle dragging outside container
+    window.addEventListener('mousemove', (e) => {
       if (!this.isDragging) return;
+      e.preventDefault();
 
       this.translateX = e.clientX - this.dragStartX;
       this.translateY = e.clientY - this.dragStartY;
-      this.updateTransform();
+      
+      this.image.style.transform = 
+        `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale}) rotate(${this.rotation}deg)`;
     });
 
-    document.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', () => {
       if (this.isDragging) {
         this.isDragging = false;
         this.image.style.cursor = this.scale > 1 ? 'grab' : 'default';
+        this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)'; // Restore transition
       }
     });
 
-    // Double click to toggle zoom
-    this.image.addEventListener('dblclick', () => {
-      if (this.scale === 1) {
-        this.scale = 2;
+    // Double tap/click handler
+    const handleDoubleAction = (e) => {
+      e.stopPropagation(); // Prevent bubbling issues
+      
+      if (this.scale > 1.1) { // Fuzzy compare against 1
+        this.reset(); // Reset to fit
       } else {
-        this.scale = 1;
-        this.translateX = 0;
-        this.translateY = 0;
+        this.setScale(2.5); // Zoom to 2.5x
       }
-      this.updateTransform();
+    };
+
+    // Double click (Desktop)
+    this.container.addEventListener('dblclick', (e) => {
+      if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+      handleDoubleAction(e);
+    });
+    
+    // Double tap (Touch) - Manual implementation because 'dblclick' is unreliable on some touch devices
+    let lastTap = 0;
+    this.container.addEventListener('touchend', (e) => {
+      const currentTime = new Date().getTime();
+      const tapLength = currentTime - lastTap;
+      
+      // Detect double tap (taps within 300ms)
+      if (tapLength < 300 && tapLength > 0) {
+        // e.preventDefault(); // Don't prevent default here, might block click on buttons
+        if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
+            handleDoubleAction(e);
+        }
+      }
+      lastTap = currentTime;
     });
 
-    // Touch gestures (basic pinch zoom)
+    // Touch gestures (Pinch Zoom)
     let touchStartDistance = 0;
     let touchStartScale = 1;
 
@@ -222,6 +297,15 @@ class SekaiImageViewer {
     // Set filename
     this.filenameText.textContent = filename || this.getFilenameFromUrl(imageSrc);
 
+    // Initial idle reset
+    this.resetIdle();
+
+    // Add activity listeners
+    window.addEventListener('mousemove', this.boundResetIdle);
+    window.addEventListener('touchstart', this.boundResetIdle);
+    window.addEventListener('keydown', this.boundResetIdle);
+    this.viewer.addEventListener('click', this.boundResetIdle);
+
     // Load image
     this.image.src = imageSrc;
     this.image.onload = () => {
@@ -233,9 +317,29 @@ class SekaiImageViewer {
   close() {
     this.isOpen = false;
     this.viewer.classList.remove('active');
+    this.viewer.classList.remove('ui-hidden');
+    clearTimeout(this.idleTimer);
+    
+    window.removeEventListener('mousemove', this.boundResetIdle);
+    window.removeEventListener('touchstart', this.boundResetIdle);
+    window.removeEventListener('keydown', this.boundResetIdle);
+    this.viewer.removeEventListener('click', this.boundResetIdle);
+
     document.body.style.overflow = '';
     this.image.src = '';
     this.reset();
+  }
+
+  resetIdle() {
+    if (!this.isOpen) return;
+    this.viewer.classList.remove('ui-hidden');
+    clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => {
+      // Don't hide if dragging or hovering toolbar (optional, but good UX)
+      if (this.isOpen && !this.isDragging) {
+        this.viewer.classList.add('ui-hidden');
+      }
+    }, this.idleDelay);
   }
 
   zoomIn() {
@@ -274,6 +378,11 @@ class SekaiImageViewer {
   updateTransform() {
     this.image.style.transform =
       `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale}) rotate(${this.rotation}deg)`;
+
+    // Only update transition if not dragging
+    if (!this.isDragging) {
+      this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)';
+    }
 
     this.scaleText.textContent = `${Math.round(this.scale * 100)}%`;
     this.image.style.cursor = this.scale > 1 ? 'grab' : 'default';

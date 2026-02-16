@@ -254,27 +254,13 @@ class SekaiImageViewer {
       if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
       handleDoubleAction(e);
     });
-    
-    // Double tap (Touch) - Manual implementation because 'dblclick' is unreliable on some touch devices
-    let lastTap = 0;
-    this.container.addEventListener('touchend', (e) => {
-      const currentTime = new Date().getTime();
-      const tapLength = currentTime - lastTap;
-      
-      // Detect double tap (taps within 300ms)
-      if (tapLength < 300 && tapLength > 0) {
-        // e.preventDefault(); // Don't prevent default here, might block click on buttons
-        if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
-            handleDoubleAction(e);
-        }
-      }
-      lastTap = currentTime;
-    });
 
-    // Touch gestures (Pinch Zoom)
+    // Touch gestures (Pinch Zoom + Double Tap)
     let touchStartDistance = 0;
     let touchStartScale = 1;
     let isPinching = false;
+    let lastTap = 0;
+    let didPinch = false; // Track if user performed pinch gesture
 
     this.container.addEventListener('touchstart', (e) => {
       if (e.touches.length === 2) {
@@ -284,6 +270,7 @@ class SekaiImageViewer {
         touchStartDistance = Math.sqrt(dx * dx + dy * dy);
         touchStartScale = this.scale;
         isPinching = true;
+        didPinch = true; // Mark that pinch started
 
         // Disable transition for smooth pinch
         this.image.style.transition = 'none';
@@ -317,13 +304,34 @@ class SekaiImageViewer {
     }, { passive: false });
 
     this.container.addEventListener('touchend', (e) => {
-      if (isPinching) {
+      // Handle pinch end - only when all fingers are lifted
+      if (isPinching && e.touches.length === 0) {
         isPinching = false;
         // Re-enable transition
         this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)';
 
         // Update the final scale - this persists the zoom level
         touchStartScale = this.scale;
+
+        // Disable double tap detection for a short period after pinch
+        setTimeout(() => {
+          didPinch = false;
+        }, 300);
+        return;
+      }
+
+      // Double tap detection - only if not pinching
+      if (!isPinching && !didPinch && e.touches.length === 0) {
+        const currentTime = new Date().getTime();
+        const tapLength = currentTime - lastTap;
+
+        // Detect double tap (taps within 300ms)
+        if (tapLength < 300 && tapLength > 0) {
+          if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
+            handleDoubleAction(e);
+          }
+        }
+        lastTap = currentTime;
       }
     });
   }

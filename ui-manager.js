@@ -628,20 +628,50 @@ class UIManager {
   }
 
   /**
-   * 渲染消息列表
+   * 渲染消息列表（性能优化版本）
    */
   renderMessages() {
-    this.elements.chatlog.innerHTML = '';
-    this.messages.forEach(msg => {
-      const msgDiv = this.createMessageElement(msg);
-      this.elements.chatlog.appendChild(msgDiv);
-    });
+    // Performance optimization: Use PerformanceOptimizer if available
+    if (typeof PerformanceOptimizer !== 'undefined') {
+      PerformanceOptimizer.mark('renderMessages-start');
+    }
 
-    // 智能滚动逻辑
-    // 检查是否应该自动滚动到底部
-    const shouldAutoScroll = this.shouldAutoScrollToBottom();
-    if (shouldAutoScroll) {
-      this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+    // Batch DOM operations to avoid layout thrashing
+    const batchOperation = () => {
+      this.elements.chatlog.innerHTML = '';
+
+      // Use DocumentFragment for efficient batch insertion
+      const fragment = document.createDocumentFragment();
+
+      this.messages.forEach(msg => {
+        const msgDiv = this.createMessageElement(msg);
+        fragment.appendChild(msgDiv);
+      });
+
+      this.elements.chatlog.appendChild(fragment);
+    };
+
+    // Execute batch operation using RAF if available
+    if (typeof PerformanceOptimizer !== 'undefined') {
+      PerformanceOptimizer.raf(batchOperation);
+    } else {
+      batchOperation();
+    }
+
+    // 智能滚动逻辑（延迟到下一帧避免强制布局）
+    const scrollOperation = () => {
+      const shouldAutoScroll = this.shouldAutoScrollToBottom();
+      if (shouldAutoScroll) {
+        this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+      }
+    };
+
+    if (typeof PerformanceOptimizer !== 'undefined') {
+      PerformanceOptimizer.raf(scrollOperation);
+      PerformanceOptimizer.mark('renderMessages-end');
+      PerformanceOptimizer.measure('renderMessages', 'renderMessages-start', 'renderMessages-end');
+    } else {
+      setTimeout(scrollOperation, 0);
     }
   }
 
@@ -1132,20 +1162,29 @@ class UIManager {
     const messageData = this.createMessageData('系统', message, timestamp, avatar, color);
     this.messages.push(messageData);
 
-    // 直接创建并添加消息元素，而不是重新渲染整个列表
-    const msgDiv = this.createMessageElement(messageData);
+    // 使用 RAF 优化 DOM 操作
+    const appendOperation = () => {
+      // 直接创建并添加消息元素，而不是重新渲染整个列表
+      const msgDiv = this.createMessageElement(messageData);
 
-    // 如果有正在流式显示的消息，插入到它之前，否则添加到末尾
-    const streamingMsg = this.elements.chatlog.querySelector('.streaming');
-    if (streamingMsg) {
-      this.elements.chatlog.insertBefore(msgDiv, streamingMsg);
+      // 如果有正在流式显示的消息，插入到它之前，否则添加到末尾
+      const streamingMsg = this.elements.chatlog.querySelector('.streaming');
+      if (streamingMsg) {
+        this.elements.chatlog.insertBefore(msgDiv, streamingMsg);
+      } else {
+        this.elements.chatlog.appendChild(msgDiv);
+      }
+
+      // 智能滚动
+      if (this.shouldAutoScrollToBottom()) {
+        this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+      }
+    };
+
+    if (typeof PerformanceOptimizer !== 'undefined') {
+      PerformanceOptimizer.raf(appendOperation);
     } else {
-      this.elements.chatlog.appendChild(msgDiv);
-    }
-
-    // 智能滚动
-    if (this.shouldAutoScrollToBottom()) {
-      this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+      appendOperation();
     }
   }
 
@@ -1166,20 +1205,29 @@ class UIManager {
     this.saveMessageToStorage(msgObj);
     this.lastMsgTimestamp = msgObj.timestamp;
 
-    // 直接创建并添加消息元素，而不是重新渲染整个列表
-    const msgDiv = this.createMessageElement(messageData);
+    // 使用 RAF 优化 DOM 操作
+    const appendOperation = () => {
+      // 直接创建并添加消息元素，而不是重新渲染整个列表
+      const msgDiv = this.createMessageElement(messageData);
 
-    // 如果有正在流式显示的消息，插入到它之前，否则添加到末尾
-    const streamingMsg = this.elements.chatlog.querySelector('.streaming');
-    if (streamingMsg) {
-      this.elements.chatlog.insertBefore(msgDiv, streamingMsg);
+      // 如果有正在流式显示的消息，插入到它之前，否则添加到末尾
+      const streamingMsg = this.elements.chatlog.querySelector('.streaming');
+      if (streamingMsg) {
+        this.elements.chatlog.insertBefore(msgDiv, streamingMsg);
+      } else {
+        this.elements.chatlog.appendChild(msgDiv);
+      }
+
+      // 智能滚动
+      if (this.shouldAutoScrollToBottom()) {
+        this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+      }
+    };
+
+    if (typeof PerformanceOptimizer !== 'undefined') {
+      PerformanceOptimizer.raf(appendOperation);
     } else {
-      this.elements.chatlog.appendChild(msgDiv);
-    }
-
-    // 智能滚动
-    if (this.shouldAutoScrollToBottom()) {
-      this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+      appendOperation();
     }
   }
 

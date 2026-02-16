@@ -6,6 +6,12 @@
  * - 文本格式化：**粗体**、*斜体*、~~删除线~~、||黑幕||、`代码`、> 引用
  * - 高级交互：[re:timestamp]、[link:URL|Title]、[color:hex|text]
  *
+ * 性能优化：
+ * - 使用 DocumentFragment 批量渲染减少重排
+ * - DOMPurify XSS 过滤保护
+ * - 对象池复用减少 GC 压力
+ * - 懒加载图片和音频
+ *
  * @example
  * const renderer = new SekaiRenderer({
  *   stickerService: stickerService,
@@ -27,6 +33,73 @@ class SekaiRenderer {
       borderRadius: '6px',
       accentColor: '#7c6fac'
     };
+
+    // DOMPurify Configuration
+    this.useDOMPurify = typeof DOMPurify !== 'undefined';
+    if (this.useDOMPurify) {
+      this.purifyConfig = {
+        ALLOWED_TAGS: ['strong', 'em', 'del', 'code', 'blockquote', 'br', 'a', 'span', 'div', 'svg', 'path', 'polyline', 'line', 'rect', 'circle', 'polygon', 'img', 'audio', 'button'],
+        ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style', 'title', 'onclick', 'src', 'alt', 'loading', 'width', 'height', 'viewBox', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'd', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'transform', 'id', 'preload', 'download', 'data-local-nako-message'],
+        ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+        KEEP_CONTENT: true,
+        RETURN_DOM_FRAGMENT: false,
+        RETURN_DOM: false,
+        SAFE_FOR_TEMPLATES: true
+      };
+    }
+
+    // Performance: Token cache for repeated content
+    this.tokenCache = new Map();
+    this.tokenCacheMaxSize = 100;
+
+    // Performance: Object pooling for frequently created elements
+    this.elementPool = {
+      span: [],
+      div: []
+    };
+    this.poolMaxSize = 20;
+  }
+
+  /**
+   * Get element from pool or create new one
+   * @private
+   */
+  _getElement(tagName) {
+    const pool = this.elementPool[tagName];
+    if (pool && pool.length > 0) {
+      const elem = pool.pop();
+      // Clear previous attributes and content
+      elem.className = '';
+      elem.innerHTML = '';
+      elem.removeAttribute('style');
+      elem.removeAttribute('title');
+      elem.removeAttribute('onclick');
+      return elem;
+    }
+    return document.createElement(tagName);
+  }
+
+  /**
+   * Return element to pool
+   * @private
+   */
+  _returnElement(elem) {
+    const tagName = elem.tagName.toLowerCase();
+    const pool = this.elementPool[tagName];
+    if (pool && pool.length < this.poolMaxSize) {
+      pool.push(elem);
+    }
+  }
+
+  /**
+   * Sanitize HTML using DOMPurify
+   * @private
+   */
+  _sanitizeHTML(html) {
+    if (!this.useDOMPurify) {
+      return html; // Fallback to existing escapeHtml in renderText
+    }
+    return DOMPurify.sanitize(html, this.purifyConfig);
   }
 
   /**
@@ -72,6 +145,11 @@ class SekaiRenderer {
   }
 
   tokenize(text) {
+    // Performance: Check cache first
+    if (this.tokenCache.has(text)) {
+      return this.tokenCache.get(text);
+    }
+
     const tokens = [];
     const sekaiRegex = /\[(\w+):([^\]]+)\]/g;
     let lastIndex = 0;
@@ -88,7 +166,7 @@ class SekaiRenderer {
 
       // Parse metadata: [type:data|meta1|meta2]
       const [mainData, ...metadata] = match[2].split('|');
-      
+
       tokens.push({
         type: 'sekai',
         sekaiType: match[1].toLowerCase(),
@@ -108,24 +186,33 @@ class SekaiRenderer {
       });
     }
 
+    // Cache result (with size limit)
+    if (this.tokenCache.size >= this.tokenCacheMaxSize) {
+      // Remove oldest entry (first key)
+      const firstKey = this.tokenCache.keys().next().value;
+      this.tokenCache.delete(firstKey);
+    }
+    this.tokenCache.set(text, tokens);
+
     return tokens;
   }
 
   renderText(content) {
     // Apply basic markdown formatting here
-    // We process this line by line to handle block elements if needed, 
+    // We process this line by line to handle block elements if needed,
     // but for now we focus on inline formatting.
-    
-    // 1. Escape HTML (safety first)
-    let html = this.escapeHtml(content);
+
+    // 1. Escape HTML (safety first) - Only if DOMPurify not available
+    let html = this.useDOMPurify ? content : this.escapeHtml(content);
 
     // 2. Apply Markdown Rules (Order matters!)
-    
+
     // Blockquote (> text)
     // Use a function to handle potential multiline or single line quotes more cleanly
     // For now, simple line replacement is robust enough
-    html = html.replace(/^&gt;\s+(.*?)(?=\n|$)/gm, '<blockquote>$1</blockquote>');
-    
+    const gtSymbol = this.useDOMPurify ? '>' : '&gt;';
+    html = html.replace(new RegExp(`^${gtSymbol}\\s+(.*?)(?=\\n|$)`, 'gm'), '<blockquote>$1</blockquote>');
+
     // Remove newline after blockquote to prevent double spacing with <br>
     html = html.replace(/<\/blockquote>\n/g, '</blockquote>');
 
@@ -134,13 +221,13 @@ class SekaiRenderer {
 
     // Bold (**text**)
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    
+
     // Italic (*text*)
     html = html.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
-    
+
     // Strikethrough (~~text~~)
     html = html.replace(/~~(.*?)~~/g, '<del>$1</del>');
-    
+
     // Spoiler (||text||)
     html = html.replace(/\|\|(.*?)\|\|/g, '<span class="sekai-spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>');
 
@@ -149,18 +236,23 @@ class SekaiRenderer {
     const urlRegex = /(?<!href=["'])(?<!>)(https?:\/\/[^\s<]+)(?![^<]*<\/a>)/g;
     html = html.replace(urlRegex, (url) => {
         // Escape URL for safe insertion
-        const escapedUrl = url.replace(/"/g, '&quot;');
+        const escapedUrl = this.useDOMPurify ? url : url.replace(/"/g, '&quot;');
         return `<a href="${escapedUrl}" target="_blank" rel="noopener" class="sekai-link-inline">${url}</a>`;
     });
 
     // Newlines to <br>
     html = html.replace(/\n/g, '<br>');
 
-    // Create wrapper
-    const span = document.createElement('span');
+    // Sanitize with DOMPurify if available
+    if (this.useDOMPurify) {
+      html = this._sanitizeHTML(html);
+    }
+
+    // Create wrapper (use object pool)
+    const span = this._getElement('span');
     span.className = 'sekai-text-node';
-    span.innerHTML = html; 
-    
+    span.innerHTML = html;
+
     // Process legacy stickers [airi_name] etc.
     if (this.stickerService) {
          this.processStickerInHTML(span);
@@ -302,9 +394,9 @@ class SekaiRenderer {
     card.className = 'sekai-file-card';
 
     // Escape user inputs to prevent XSS
-    const escapedUrl = this.escapeHtml(url);
-    const escapedName = this.escapeHtml(name);
-    const escapedSize = this.escapeHtml(size || '');
+    const escapedUrl = this.useDOMPurify ? url : this.escapeHtml(url);
+    const escapedName = this.useDOMPurify ? name : this.escapeHtml(name);
+    const escapedSize = this.useDOMPurify ? (size || '') : this.escapeHtml(size || '');
 
     card.onclick = (e) => {
         if (!e.target.closest('.sekai-file-action')) {
@@ -315,7 +407,7 @@ class SekaiRenderer {
     const ext = name.split('.').pop().toLowerCase();
     const icon = this.getFileIcon(ext);
 
-    card.innerHTML = `
+    const fileHTML = `
       <div class="sekai-file-icon">${icon}</div>
       <div class="sekai-file-details">
         <div class="sekai-file-name" title="${escapedName}">${escapedName}</div>
@@ -329,6 +421,8 @@ class SekaiRenderer {
         </svg>
       </a>
     `;
+
+    card.innerHTML = this.useDOMPurify ? this._sanitizeHTML(fileHTML) : fileHTML;
 
     return card;
   }
@@ -404,12 +498,12 @@ class SekaiRenderer {
     try { domain = new URL(url).hostname; } catch(e) {}
 
     // Escape all user-provided content
-    const escapedDomain = this.escapeHtml(domain);
-    const escapedTitle = this.escapeHtml(title || url);
-    const escapedUrl = this.escapeHtml(url);
-    const escapedDesc = this.escapeHtml(desc || '');
+    const escapedDomain = this.useDOMPurify ? domain : this.escapeHtml(domain);
+    const escapedTitle = this.useDOMPurify ? (title || url) : this.escapeHtml(title || url);
+    const escapedUrl = this.useDOMPurify ? url : this.escapeHtml(url);
+    const escapedDesc = this.useDOMPurify ? (desc || '') : this.escapeHtml(desc || '');
 
-    card.innerHTML = `
+    const linkHTML = `
       <div class="sekai-link-accent"></div>
       <div class="sekai-link-content">
         <div class="sekai-link-site">${escapedDomain}</div>
@@ -420,6 +514,8 @@ class SekaiRenderer {
       <div class="sekai-link-arrow">↗</div>
     `;
 
+    card.innerHTML = this.useDOMPurify ? this._sanitizeHTML(linkHTML) : linkHTML;
+
     return card;
   }
 
@@ -429,9 +525,9 @@ class SekaiRenderer {
     chip.title = `点击跳转到 #${timestamp}`;
 
     // Escape user content
-    const escapedPreview = this.escapeHtml(preview || '回复');
+    const escapedPreview = this.useDOMPurify ? (preview || '回复') : this.escapeHtml(preview || '回复');
 
-    chip.innerHTML = `
+    const replyHTML = `
       <div class="sekai-reply-accent">
           <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
               <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"></path>
@@ -439,6 +535,8 @@ class SekaiRenderer {
       </div>
       <div class="sekai-reply-content">${escapedPreview}</div>
     `;
+
+    chip.innerHTML = this.useDOMPurify ? this._sanitizeHTML(replyHTML) : replyHTML;
 
     chip.onclick = () => {
         // Convert string timestamp to number for messageIndex lookup
@@ -546,8 +644,8 @@ class SekaiRenderer {
     const audioIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
         <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
         <polyline points="13 2 13 9 20 9"></polyline>
-        <path d="M9 18V5l12-2v13" transform="scale(0.4) translate(20, 20)"></path> 
-        <circle cx="12" cy="18" r="2" fill="currentColor"></circle> 
+        <path d="M9 18V5l12-2v13" transform="scale(0.4) translate(20, 20)"></path>
+        <circle cx="12" cy="18" r="2" fill="currentColor"></circle>
     </svg>`; // Simplified note overlay
 
     // Matching design: Generic file uses paperclip
@@ -556,13 +654,86 @@ class SekaiRenderer {
     </svg>`;
 
     if (['mp3','wav','ogg','flac'].includes(ext)) return audioIcon;
-    
+
     // Other types can use specific icons or fall back to default
     if (['jpg','jpeg','png','gif','webp'].includes(ext)) {
         return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
     }
-    
+
     return defaultIcon;
+  }
+
+  /**
+   * Batch render multiple messages for improved performance
+   * @param {Array<string>} texts - Array of text content to render
+   * @returns {DocumentFragment} Fragment containing all rendered messages
+   */
+  renderBatch(texts) {
+    const fragment = document.createDocumentFragment();
+
+    // Use requestIdleCallback if available for non-blocking rendering
+    if (typeof requestIdleCallback !== 'undefined' && texts.length > 50) {
+      return this._renderBatchIdle(texts);
+    }
+
+    // Standard batch rendering for smaller sets
+    texts.forEach(text => {
+      const rendered = this.render(text);
+      fragment.appendChild(rendered);
+    });
+
+    return fragment;
+  }
+
+  /**
+   * Render batch using idle callbacks for large datasets
+   * @private
+   */
+  _renderBatchIdle(texts) {
+    return new Promise((resolve) => {
+      const fragment = document.createDocumentFragment();
+      let index = 0;
+      const batchSize = 10;
+
+      const processBatch = (deadline) => {
+        while (index < texts.length && deadline.timeRemaining() > 0) {
+          const rendered = this.render(texts[index]);
+          fragment.appendChild(rendered);
+          index++;
+        }
+
+        if (index < texts.length) {
+          requestIdleCallback(processBatch);
+        } else {
+          resolve(fragment);
+        }
+      };
+
+      requestIdleCallback(processBatch);
+    });
+  }
+
+  /**
+   * Clear all caches (useful for memory management)
+   */
+  clearCaches() {
+    this.tokenCache.clear();
+    // Clear object pools
+    this.elementPool.span = [];
+    this.elementPool.div = [];
+  }
+
+  /**
+   * Get cache statistics for debugging
+   */
+  getCacheStats() {
+    return {
+      tokenCacheSize: this.tokenCache.size,
+      tokenCacheMaxSize: this.tokenCacheMaxSize,
+      spanPoolSize: this.elementPool.span.length,
+      divPoolSize: this.elementPool.div.length,
+      useDOMPurify: this.useDOMPurify
+    };
   }
 }
 

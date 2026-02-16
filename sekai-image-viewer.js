@@ -258,6 +258,10 @@ class SekaiImageViewer {
     // Touch gestures (Pinch Zoom + Pan/Drag + Double Tap)
     let touchStartDistance = 0;
     let touchStartScale = 1;
+    let touchStartTranslateX = 0;
+    let touchStartTranslateY = 0;
+    let touchCenterX = 0;
+    let touchCenterY = 0;
     let isPinching = false;
     let isTouchDragging = false;
     let touchDragStartX = 0;
@@ -273,6 +277,14 @@ class SekaiImageViewer {
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         touchStartDistance = Math.sqrt(dx * dx + dy * dy);
         touchStartScale = this.scale;
+        touchStartTranslateX = this.translateX;
+        touchStartTranslateY = this.translateY;
+
+        // Calculate center point between two fingers
+        const rect = this.container.getBoundingClientRect();
+        touchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left - rect.width / 2;
+        touchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top - rect.height / 2;
+
         isPinching = true;
         isTouchDragging = false; // Cancel any drag
 
@@ -300,7 +312,15 @@ class SekaiImageViewer {
         const newScale = touchStartScale * scaleDelta;
 
         // Clamp scale
-        this.scale = Math.max(this.minScale, Math.min(this.maxScale, newScale));
+        const clampedScale = Math.max(this.minScale, Math.min(this.maxScale, newScale));
+
+        // Calculate zoom center adjustment
+        // Formula: newTranslate = startTranslate + center * (1 - scaleFactor)
+        const scaleFactor = clampedScale / touchStartScale;
+        this.translateX = touchStartTranslateX + touchCenterX * (1 - scaleFactor);
+        this.translateY = touchStartTranslateY + touchCenterY * (1 - scaleFactor);
+
+        this.scale = clampedScale;
 
         // Reset translation if zooming out to 1x
         if (this.scale <= 1) {

@@ -255,29 +255,43 @@ class SekaiImageViewer {
       handleDoubleAction(e);
     });
 
-    // Touch gestures (Pinch Zoom + Double Tap)
+    // Touch gestures (Pinch Zoom + Pan/Drag + Double Tap)
     let touchStartDistance = 0;
     let touchStartScale = 1;
     let isPinching = false;
+    let isTouchDragging = false;
+    let touchDragStartX = 0;
+    let touchDragStartY = 0;
     let lastTap = 0;
     let lastPinchEnd = -1000; // Initialize to old time to allow initial taps
 
     this.container.addEventListener('touchstart', (e) => {
       if (e.touches.length === 2) {
+        // Two-finger pinch zoom
         e.preventDefault();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         touchStartDistance = Math.sqrt(dx * dx + dy * dy);
         touchStartScale = this.scale;
         isPinching = true;
+        isTouchDragging = false; // Cancel any drag
 
         // Disable transition for smooth pinch
+        this.image.style.transition = 'none';
+      } else if (e.touches.length === 1 && this.scale > 1) {
+        // Single-finger drag when zoomed
+        isTouchDragging = true;
+        touchDragStartX = e.touches[0].clientX - this.translateX;
+        touchDragStartY = e.touches[0].clientY - this.translateY;
+
+        // Disable transition for smooth drag
         this.image.style.transition = 'none';
       }
     }, { passive: false });
 
     this.container.addEventListener('touchmove', (e) => {
       if (e.touches.length === 2 && isPinching) {
+        // Two-finger pinch zoom
         e.preventDefault();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -309,6 +323,14 @@ class SekaiImageViewer {
 
         // Persist the scale
         touchStartScale = this.scale;
+      } else if (e.touches.length === 1 && isTouchDragging && this.scale > 1) {
+        // Single-finger drag
+        e.preventDefault();
+        this.translateX = e.touches[0].clientX - touchDragStartX;
+        this.translateY = e.touches[0].clientY - touchDragStartY;
+
+        this.image.style.transform =
+          `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale}) rotate(${this.rotation}deg)`;
       }
     }, { passive: false });
 
@@ -324,6 +346,21 @@ class SekaiImageViewer {
         // Update the final scale - this persists the zoom level
         touchStartScale = this.scale;
         return;
+      }
+
+      // Handle drag end
+      if (isTouchDragging) {
+        isTouchDragging = false;
+
+        // Re-enable transition
+        this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)';
+
+        // If no remaining touches, allow double tap detection
+        if (e.touches.length === 0) {
+          // Continue to double tap detection below
+        } else {
+          return;
+        }
       }
 
       // Double tap detection - only for single-finger taps

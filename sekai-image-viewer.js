@@ -260,7 +260,7 @@ class SekaiImageViewer {
     let touchStartScale = 1;
     let isPinching = false;
     let lastTap = 0;
-    let lastPinchEnd = 0; // Track when pinch ended
+    let lastPinchEnd = -1000; // Initialize to old time to allow initial taps
 
     this.container.addEventListener('touchstart', (e) => {
       if (e.touches.length === 2) {
@@ -326,14 +326,15 @@ class SekaiImageViewer {
         return;
       }
 
-      // Double tap detection - only if no recent pinch (within 500ms)
-      const timeSincePinch = Date.now() - lastPinchEnd;
-      if (e.touches.length === 0 && timeSincePinch > 500) {
-        const currentTime = new Date().getTime();
+      // Double tap detection - only for single-finger taps
+      // e.touches.length === 0 means all fingers are now off the screen
+      if (e.touches.length === 0) {
+        const currentTime = Date.now();
+        const timeSincePinch = currentTime - lastPinchEnd;
         const tapLength = currentTime - lastTap;
 
-        // Detect double tap (taps within 300ms)
-        if (tapLength < 300 && tapLength > 0) {
+        // Only process if no recent pinch (within 300ms) and within double tap window
+        if (timeSincePinch > 300 && tapLength < 300 && tapLength > 0) {
           if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
             handleDoubleAction(e);
           }

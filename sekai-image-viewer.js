@@ -260,7 +260,7 @@ class SekaiImageViewer {
     let touchStartScale = 1;
     let isPinching = false;
     let lastTap = 0;
-    let didPinch = false; // Track if user performed pinch gesture
+    let lastPinchEnd = 0; // Track when pinch ended
 
     this.container.addEventListener('touchstart', (e) => {
       if (e.touches.length === 2) {
@@ -270,7 +270,6 @@ class SekaiImageViewer {
         touchStartDistance = Math.sqrt(dx * dx + dy * dy);
         touchStartScale = this.scale;
         isPinching = true;
-        didPinch = true; // Mark that pinch started
 
         // Disable transition for smooth pinch
         this.image.style.transition = 'none';
@@ -300,28 +299,36 @@ class SekaiImageViewer {
           `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale}) rotate(${this.rotation}deg)`;
         this.scaleText.textContent = `${Math.round(this.scale * 100)}%`;
         this.image.style.cursor = this.scale > 1 ? 'grab' : 'default';
+      } else if (isPinching && e.touches.length < 2) {
+        // One finger lifted during pinch - end pinch immediately
+        isPinching = false;
+        lastPinchEnd = Date.now();
+
+        // Re-enable transition
+        this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)';
+
+        // Persist the scale
+        touchStartScale = this.scale;
       }
     }, { passive: false });
 
     this.container.addEventListener('touchend', (e) => {
-      // Handle pinch end - only when all fingers are lifted
-      if (isPinching && e.touches.length === 0) {
+      // Handle pinch end
+      if (isPinching) {
         isPinching = false;
+        lastPinchEnd = Date.now();
+
         // Re-enable transition
         this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)';
 
         // Update the final scale - this persists the zoom level
         touchStartScale = this.scale;
-
-        // Disable double tap detection for a short period after pinch
-        setTimeout(() => {
-          didPinch = false;
-        }, 300);
         return;
       }
 
-      // Double tap detection - only if not pinching
-      if (!isPinching && !didPinch && e.touches.length === 0) {
+      // Double tap detection - only if no recent pinch (within 500ms)
+      const timeSincePinch = Date.now() - lastPinchEnd;
+      if (e.touches.length === 0 && timeSincePinch > 500) {
         const currentTime = new Date().getTime();
         const tapLength = currentTime - lastTap;
 

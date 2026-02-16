@@ -821,7 +821,19 @@ class UIManager {
       if (event.key === "Enter" && this.autocomplete && this.autocomplete.isOpen()) {
         return;
       }
+
+      // Shift+Enter 换行逻辑
+      if (event.key === "Enter" && event.shiftKey) {
+        // 允许默认行为（textarea 自动插入换行符）
+        // 触发自适应高度调整
+        setTimeout(() => {
+          chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }, 0);
+        return; // 不执行发送逻辑
+      }
+
       if (event.key === "Enter" && !event.shiftKey && chatInput.value.trim() !== "") {
+        event.preventDefault(); // 阻止 textarea 默认换行行为
         let message = chatInput.value.trim();
 
         // 检测 /clear 命令（清除 Nako 上下文）
@@ -830,6 +842,7 @@ class UIManager {
 
           // 清空输入框
           chatInput.value = '';
+          chatInput.style.height = 'auto'; // 重置为单行高度
 
           // 触发清除上下文事件
           this.eventBus.emit('nako:clear');
@@ -857,6 +870,7 @@ class UIManager {
 
           // 清空输入框
           chatInput.value = '';
+          chatInput.style.height = 'auto'; // 重置为单行高度
 
           // 先广播用户的问题（让所有人看到）
           if (onSendMessage) {
@@ -944,8 +958,23 @@ class UIManager {
 
     // Limit message length
     chatInput.addEventListener("input", (event) => {
-      if (event.currentTarget.value.length > 256) {
-        event.currentTarget.value = event.currentTarget.value.slice(0, 256);
+      const input = event.currentTarget;
+
+      // 1. 字符限制（保持现有逻辑）
+      if (input.value.length > 256) {
+        input.value = input.value.slice(0, 256);
+      }
+
+      // 2. 自适应高度调整
+      input.style.height = 'auto'; // 重置高度以获取正确的 scrollHeight
+      const newHeight = Math.min(Math.max(input.scrollHeight, 22), 140);
+      input.style.height = `${newHeight}px`;
+
+      // 3. 超过最大高度时显示滚动条
+      if (input.scrollHeight > 140) {
+        input.style.overflowY = 'auto';
+      } else {
+        input.style.overflowY = 'hidden';
       }
     });
 
@@ -1204,6 +1233,7 @@ class UIManager {
    */
   clearChatInput() {
     this.elements.chatInput.value = "";
+    this.elements.chatInput.style.height = 'auto'; // 重置为单行高度
   }
 
   /**

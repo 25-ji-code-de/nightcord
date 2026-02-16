@@ -349,6 +349,33 @@ body {
   outline: none;
   color: #fff;
   font-size: 15px;
+  font-family: inherit;
+
+  /* textarea 专属属性 */
+  resize: none;
+  overflow-y: hidden;
+  line-height: 1.5;
+  min-height: 22px;
+  max-height: 140px;
+  padding: 0;
+  vertical-align: top;
+
+  /* 滚动条样式 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(167, 139, 250, 0.3) transparent;
+}
+
+.input::-webkit-scrollbar {
+  width: 6px;
+}
+
+.input::-webkit-scrollbar-thumb {
+  background: rgba(167, 139, 250, 0.3);
+  border-radius: 3px;
+}
+
+.input::-webkit-scrollbar-thumb:hover {
+  background: rgba(167, 139, 250, 0.5);
 }
 .input::placeholder {
   color: #888;
@@ -356,6 +383,8 @@ body {
 .input-btns {
   display: flex;
   gap: 8px;
+  align-self: flex-start;
+  margin-top: 5px;
 }
 .input-btn {
   background: none;

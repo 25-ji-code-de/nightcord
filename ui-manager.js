@@ -1389,7 +1389,75 @@ class UIManager {
     msgDiv.appendChild(avatarSpan);
     msgDiv.appendChild(contentDiv);
 
+    // 回复按钮（只给非系统消息添加）
+    if (msg.user !== '系统' && msg.timestamp) {
+      const replyBtn = this.createReplyButton(msg);
+      msgDiv.appendChild(replyBtn);
+    }
+
     return msgDiv;
+  }
+
+  /**
+   * 创建回复按钮
+   * @param {Object} msg - 消息对象
+   * @returns {HTMLElement}
+   * @private
+   */
+  createReplyButton(msg) {
+    const btn = document.createElement('button');
+    btn.className = 'message-reply-btn';
+    btn.title = '回复此消息';
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor">
+      <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/>
+    </svg>`;
+
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      this.insertReplyReference(msg);
+    };
+
+    return btn;
+  }
+
+  /**
+   * 在输入框插入回复引用
+   * @param {Object} msg - 要引用的消息对象
+   * @private
+   */
+  insertReplyReference(msg) {
+    const input = this.elements.chatInput;
+    if (!input) return;
+
+    // 生成预览文本（截取前30个字符）
+    const preview = msg.text.length > 30
+      ? msg.text.substring(0, 30) + '...'
+      : msg.text;
+
+    // 移除可能的换行符
+    const cleanPreview = preview.replace(/\n/g, ' ');
+
+    // 构造引用语法
+    const reference = `[re:${msg.timestamp}|${cleanPreview}] `;
+
+    // 插入到当前光标位置
+    const start = input.selectionStart || 0;
+    const end = input.selectionEnd || start;
+    const current = input.value;
+
+    input.value = current.substring(0, start) + reference + current.substring(end);
+
+    // 设置光标位置到引用后面
+    const newPos = start + reference.length;
+    input.setSelectionRange(newPos, newPos);
+
+    // 聚焦输入框
+    if (window.innerWidth > 768) {
+      input.focus();
+    }
+
+    // 触发 input 事件以通知其他监听器
+    input.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   /**

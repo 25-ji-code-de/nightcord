@@ -214,15 +214,15 @@ class UIManager {
           timestamp
         };
       });
-      // 渲染
+      // 欢迎消息（在渲染之前添加到 messages 数组）
+      this.showWelcomeMessages(data);
+      // 渲染（包含欢迎消息）
       this.renderMessages();
       // 记录最新消息时间戳 到 per-room lastmsg
       if (this.messages.length > 0) {
         const lastTs = this.messages[this.messages.length - 1].timestamp;
         if (this.storage) this.storage.setLastMsgTimestamp(room, lastTs); else this.setLastMsgTimestamp(room, lastTs);
       }
-      // 欢迎消息
-      this.showWelcomeMessages(data);
     });
     this.eventBus.on('error', (data) => this.showError(data.message));
 
@@ -1364,9 +1364,17 @@ class UIManager {
    * @param {Object} data - 欢迎消息数据
    */
   showWelcomeMessages(data) {
-    this.addChatMessage('系统', `警告: 此聊天室的参与者是互联网上的随机用户。用户名未经认证，任何人都可以冒充任何人。聊天记录将被保存。`, null, this.systemIcon, 'bg-red-600');
-    this.addChatMessage('系统', '提示: 若要修改你的昵称，点击左侧在线用户列表中你的昵称并输入新昵称。', null, this.systemIcon, 'bg-default');
-    this.addChatMessage('系统', `欢迎来到聊天室: ${data.roomname}`, null, this.systemIcon, 'bg-default');
+    // 只添加到 messages 数组，不触发 DOM 操作（由 renderMessages 统一渲染）
+    const messages = [
+      { text: `警告: 此聊天室的参与者是互联网上的随机用户。用户名未经认证，任何人都可以冒充任何人。聊天记录将被保存。`, color: 'bg-red-600' },
+      { text: '提示: 若要修改你的昵称，点击左侧在线用户列表中你的昵称并输入新昵称。', color: 'bg-default' },
+      { text: `欢迎来到聊天室: ${data.roomname}`, color: 'bg-default' }
+    ];
+
+    messages.forEach(({ text, color }) => {
+      const messageData = this.createMessageData('系统', text, null, this.systemIcon, color);
+      this.messages.push(messageData);
+    });
   }
 
   /**

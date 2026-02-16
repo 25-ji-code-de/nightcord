@@ -151,7 +151,13 @@ class SekaiImageViewer {
         case 'Escape': this.close(); break;
         case '+': case '=': this.zoomIn(); break;
         case '-': case '_': this.zoomOut(); break;
-        case 'r': case 'R': this.rotate(); break;
+        case 'r': case 'R':
+          if (e.shiftKey) {
+            this.rotateCounterClockwise();
+          } else {
+            this.rotate();
+          }
+          break;
         case ' ': e.preventDefault(); this.reset(); break;
         case 'd': case 'D': this.download(); break;
       }
@@ -164,27 +170,33 @@ class SekaiImageViewer {
       // Smoother exponential zoom based on delta
       // Smaller factor for smoother control. e.deltaY is usually +-100 or +-53
       const zoomFactor = Math.exp(-e.deltaY * 0.001);
-      
-      const newScale = this.scale * zoomFactor;
-      
-      // Calculate scaling relative to cursor position
-      // Only if we actually have a mouse event context (not programmatic)
-      const rect = this.container.getBoundingClientRect();
-      const offsetX = e.clientX - rect.left - rect.width / 2;
-      const offsetY = e.clientY - rect.top - rect.height / 2;
 
-      // Adjust translation to zoom towards cursor
-      // Formula: newTrans = oldTrans + (cursorOffset - oldTrans) * (1 - zoomFactor)
-      // This keeps the point under cursor stable
-      this.translateX += (offsetX - this.translateX) * (1 - zoomFactor);
-      this.translateY += (offsetY - this.translateY) * (1 - zoomFactor);
-      
-      this.setScale(newScale);
-      
+      const newScale = this.scale * zoomFactor;
+
+      // Clamp to min/max before calculating translation
+      const clampedScale = Math.max(this.minScale, Math.min(this.maxScale, newScale));
+
+      // Only adjust translation if scale actually changed
+      if (clampedScale !== this.scale) {
+        // Calculate scaling relative to cursor position
+        const rect = this.container.getBoundingClientRect();
+        const offsetX = e.clientX - rect.left - rect.width / 2;
+        const offsetY = e.clientY - rect.top - rect.height / 2;
+
+        // Adjust translation to zoom towards cursor
+        // Formula: newTrans = oldTrans + (cursorOffset - oldTrans) * (1 - zoomFactor)
+        // This keeps the point under cursor stable
+        const actualZoomFactor = clampedScale / this.scale;
+        this.translateX += (offsetX - this.translateX) * (1 - actualZoomFactor);
+        this.translateY += (offsetY - this.translateY) * (1 - actualZoomFactor);
+      }
+
+      this.setScale(clampedScale);
+
       // Force immediate update without transition for wheel to feel instant/snappy
       this.image.style.transition = 'none';
       this.updateTransform();
-      
+
       // Debounce re-enabling transition
       clearTimeout(this.wheelTimer);
       this.wheelTimer = setTimeout(() => {
@@ -364,6 +376,11 @@ class SekaiImageViewer {
 
   rotate() {
     this.rotation = (this.rotation + 90) % 360;
+    this.updateTransform();
+  }
+
+  rotateCounterClockwise() {
+    this.rotation = (this.rotation - 90 + 360) % 360;
     this.updateTransform();
   }
 

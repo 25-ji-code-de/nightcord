@@ -426,14 +426,14 @@ class SekaiRenderer {
   renderReply(timestamp, preview) {
     const chip = document.createElement('div');
     chip.className = 'sekai-reply-chip';
+    chip.title = `Jump to #${timestamp}`; // Show timestamp on hover
 
     // Escape user content
     const escapedPreview = this.escapeHtml(preview || 'Reply');
-    const escapedTimestamp = this.escapeHtml(timestamp);
 
     chip.innerHTML = `
       <span class="sekai-reply-icon">↪</span>
-      <span class="sekai-reply-text">${escapedPreview} #${escapedTimestamp}</span>
+      <span class="sekai-reply-text">${escapedPreview}</span>
     `;
 
     chip.onclick = () => {

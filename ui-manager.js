@@ -1459,10 +1459,13 @@ class UIManager {
     const input = this.elements.chatInput;
     if (!input) return;
 
+    // 从消息文本中提取纯文本（移除嵌套引用和 SEKAI 标记）
+    const plainText = this.extractPlainTextForReply(msg.text);
+
     // 生成预览文本（截取前30个字符）
-    const preview = msg.text.length > 30
-      ? msg.text.substring(0, 30) + '...'
-      : msg.text;
+    const preview = plainText.length > 30
+      ? plainText.substring(0, 30) + '...'
+      : plainText;
 
     // 移除可能的换行符
     const cleanPreview = preview.replace(/\n/g, ' ');
@@ -1488,6 +1491,38 @@ class UIManager {
 
     // 触发 input 事件以通知其他监听器
     input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  /**
+   * 从消息文本中提取纯文本内容
+   * 移除嵌套回复引用和所有 SEKAI 标记，只保留正文文本
+   * @param {string} text - 原始消息文本
+   * @returns {string} 纯文本内容
+   * @private
+   */
+  extractPlainTextForReply(text) {
+    if (!text) return '';
+
+    let plainText = text;
+
+    // 1. 移除嵌套回复标记 [re:timestamp|preview]
+    plainText = plainText.replace(/\[re:[^\]]+\]/g, '');
+
+    // 2. 移除所有 SEKAI 标记 [type:data|metadata...]
+    plainText = plainText.replace(/\[(\w+):([^\]]+)\]/g, '');
+
+    // 3. 移除 Markdown 格式标记
+    plainText = plainText.replace(/\*\*(.+?)\*\*/g, '$1'); // 粗体
+    plainText = plainText.replace(/\*(.+?)\*/g, '$1'); // 斜体
+    plainText = plainText.replace(/~~(.+?)~~/g, '$1'); // 删除线
+    plainText = plainText.replace(/\|\|(.+?)\|\|/g, '$1'); // 黑幕
+    plainText = plainText.replace(/`(.+?)`/g, '$1'); // 代码
+    plainText = plainText.replace(/^>\s+/gm, ''); // 引用
+
+    // 4. 清理多余空白
+    plainText = plainText.trim();
+
+    return plainText;
   }
 
   /**

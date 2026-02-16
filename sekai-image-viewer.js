@@ -263,8 +263,14 @@ class SekaiImageViewer {
     let isTouchDragging = false;
     let touchDragStartX = 0;
     let touchDragStartY = 0;
-    let lastTap = 0;
+    let lastTapTime = 0;
+    let lastTapX = 0;
+    let lastTapY = 0;
+    let singleTouchStartX = 0;
+    let singleTouchStartY = 0;
     let lastPinchEnd = -1000; // Initialize to old time to allow initial taps
+    const TAP_THRESHOLD = 10; // Max movement in pixels to be considered a tap
+    const DOUBLE_TAP_DELAY = 400; // Max time between taps in ms
 
     this.container.addEventListener('touchstart', (e) => {
       if (e.touches.length === 2) {
@@ -281,14 +287,20 @@ class SekaiImageViewer {
 
         // Disable transition for smooth pinch
         this.image.style.transition = 'none';
-      } else if (e.touches.length === 1 && this.scale > 1) {
-        // Single-finger drag when zoomed
-        isTouchDragging = true;
-        touchDragStartX = e.touches[0].clientX - this.translateX;
-        touchDragStartY = e.touches[0].clientY - this.translateY;
+      } else if (e.touches.length === 1) {
+        // Record single touch start position for tap detection
+        singleTouchStartX = e.touches[0].clientX;
+        singleTouchStartY = e.touches[0].clientY;
 
-        // Disable transition for smooth drag
-        this.image.style.transition = 'none';
+        if (this.scale > 1) {
+          // Single-finger drag when zoomed
+          isTouchDragging = true;
+          touchDragStartX = e.touches[0].clientX - this.translateX;
+          touchDragStartY = e.touches[0].clientY - this.translateY;
+
+          // Disable transition for smooth drag
+          this.image.style.transition = 'none';
+        }
       }
     }, { passive: false });
 
@@ -373,28 +385,43 @@ class SekaiImageViewer {
         // Re-enable transition
         this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)';
 
-        // If no remaining touches, allow double tap detection
-        if (e.touches.length === 0) {
-          // Continue to double tap detection below
-        } else {
-          return;
-        }
+        // Don't process double tap if was dragging
+        return;
       }
 
-      // Double tap detection - only for single-finger taps
-      // e.touches.length === 0 means all fingers are now off the screen
-      if (e.touches.length === 0) {
+      // Double tap detection - only for single-finger taps without movement
+      if (e.touches.length === 0 && e.changedTouches.length === 1) {
+        const touch = e.changedTouches[0];
         const currentTime = Date.now();
         const timeSincePinch = currentTime - lastPinchEnd;
-        const tapLength = currentTime - lastTap;
 
-        // Only process if no recent pinch (within 300ms) and within double tap window
-        if (timeSincePinch > 300 && tapLength < 300 && tapLength > 0) {
-          if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
-            handleDoubleAction(e);
+        // Check if touch moved (swipe vs tap)
+        const deltaX = Math.abs(touch.clientX - singleTouchStartX);
+        const deltaY = Math.abs(touch.clientY - singleTouchStartY);
+        const didMove = deltaX > TAP_THRESHOLD || deltaY > TAP_THRESHOLD;
+
+        if (!didMove && timeSincePinch > 300) {
+          // This was a valid tap (not a swipe, not right after pinch)
+          const tapLength = currentTime - lastTapTime;
+          const tapDeltaX = Math.abs(touch.clientX - lastTapX);
+          const tapDeltaY = Math.abs(touch.clientY - lastTapY);
+          const sameTapLocation = tapDeltaX < 50 && tapDeltaY < 50; // Taps within 50px
+
+          // Detect double tap (within time window and same general location)
+          if (tapLength < DOUBLE_TAP_DELAY && tapLength > 0 && sameTapLocation) {
+            if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
+              handleDoubleAction(e);
+              // Reset tap tracking after successful double tap
+              lastTapTime = 0;
+              return;
+            }
           }
+
+          // Record this tap for next comparison
+          lastTapTime = currentTime;
+          lastTapX = touch.clientX;
+          lastTapY = touch.clientY;
         }
-        lastTap = currentTime;
       }
     });
   }

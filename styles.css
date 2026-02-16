@@ -1160,18 +1160,48 @@ body {
   border: 1px solid rgba(255,255,255,0.05);
 }
 
+/* --- Code Block (IDE Style Integration) --- */
 .sekai-code-block {
   font-family: var(--sekai-font-mono);
   display: block;
-  background: #2b2633;
-  color: #e0d4f7;
-  padding: 12px;
-  border-radius: var(--sekai-radius);
-  margin: 8px 0;
-  white-space: pre-wrap;
-  overflow-x: auto;
-  border: 1px solid rgba(255,255,255,0.05);
-  line-height: 1.5;
+  /* Upgrade to gradient glass background to match file-card */
+  background: linear-gradient(145deg, rgba(43, 38, 51, 0.9), rgba(30, 25, 40, 0.95));
+  color: #e0d4f7; /* Keep the soft purple text */
+  padding: 12px 16px;
+  border-radius: 8px; /* Slightly smoother radius */
+  margin: 10px 0;
+  white-space: pre; /* Use pre to strictly respect formatting */
+  overflow-x: auto; /* Scroll for long lines */
+  
+  /* Geometric Accent: Left border strip */
+  border-left: 3px solid rgba(124, 111, 172, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08); /* Unified border style */
+  border-left-width: 3px; /* Ensure left border takes precedence */
+  
+  line-height: 1.6;
+  font-size: 0.9em; /* Slightly smaller for density */
+  tab-size: 2;
+  
+  /* UX: Subtle shadow to lift it from chat background */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: border-color 0.2s;
+}
+
+.sekai-code-block:hover {
+  border-color: rgba(167, 139, 250, 0.3); /* Integrated hover state */
+  border-left-color: #a78bfa; /* Highlight accent on hover */
+}
+
+/* Scrollbar styling for code block */
+.sekai-code-block::-webkit-scrollbar {
+  height: 6px;
+}
+.sekai-code-block::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+.sekai-code-block::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Spoiler / 黑幕 - Optical Blur Redesign */

@@ -236,7 +236,7 @@ class SekaiRenderer {
     
     img.onerror = () => {
         const replacement = document.createElement('span');
-        replacement.className = 'sekai-sticker-broken';
+        replacement.className = 'sticker-broken';
         replacement.textContent = `[${stampName}]`;
         img.replaceWith(replacement);
     }
@@ -276,8 +276,15 @@ class SekaiRenderer {
         container.classList.remove('loading');
     };
 
-    // Lightbox / Zoom support (Placeholder for future interaction)
-    img.onclick = () => window.open(url, '_blank');
+    // Open in full-screen image viewer
+    img.onclick = () => {
+      if (window.sekaiImageViewer) {
+        window.sekaiImageViewer.open(url, alt || '');
+      } else {
+        // Fallback if viewer not loaded
+        window.open(url, '_blank');
+      }
+    };
 
     container.appendChild(img);
     if (alt) {

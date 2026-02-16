@@ -1510,3 +1510,149 @@ body {
     background: #000;
   }
 }
+
+/* --- Update Toast (Version Checker) --- */
+
+.sekai-update-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  background: rgba(30, 25, 40, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-family: inherit;
+  animation: sekai-toast-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 280px;
+}
+
+@keyframes sekai-toast-in {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.sekai-update-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #eee;
+  flex: 1;
+}
+
+.sekai-update-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.sekai-update-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sekai-update-btn {
+  background: var(--sekai-accent, #7c6fac);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.sekai-update-btn:hover {
+  filter: brightness(1.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(124, 111, 172, 0.3);
+}
+
+.sekai-update-btn:active {
+  transform: translateY(0);
+}
+
+/* Old dismiss button styles removed in favor of the new ones below */
+
+/* Mobile responsive */
+@media screen and (max-width: 600px) {
+  .sekai-update-toast {
+    bottom: 12px;
+    right: 12px;
+    left: 12px;
+    min-width: unset;
+    max-width: 100%;
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .sekai-update-content {
+    font-size: 13px;
+  }
+
+  .sekai-update-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .sekai-update-btn {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  .sekai-update-btn-dismiss {
+    padding: 4px 8px;
+    font-size: 14px;
+  }
+}
+
+/* --- Added Action Container & Refined Dismiss Button --- */
+
+.sekai-update-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sekai-update-btn-dismiss {
+  /* Reset & Layout */
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  
+  /* Visual */
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sekai-update-btn-dismiss:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  transform: rotate(90deg); /* Playful interaction */
+}
+
+.sekai-update-btn-dismiss:active {
+  background: rgba(255, 255, 255, 0.15);
+  transform: rotate(90deg) scale(0.9);
+}

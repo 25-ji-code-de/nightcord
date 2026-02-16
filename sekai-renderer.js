@@ -518,11 +518,9 @@ class SekaiRenderer {
     if (preserveOriginal) {
       span.classList.add('sekai-truecolor');
       span.style.fontWeight = '600';
-      span.textContent = '◆ ' + (text || hex);
       span.title = `TrueColor: ${normalizedHex}`;
-    } else {
-      span.textContent = text || hex;
     }
+    span.textContent = text || hex;
 
     return span;
   }

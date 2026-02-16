@@ -130,6 +130,12 @@ class UIManager {
       console.warn('SekaiRenderer not available, falling back to basic text rendering');
       this.sekaiRenderer = null;
     }
+
+    // 消息索引：timestamp → message element (for reply jumps)
+    this.messageIndex = new Map();
+
+    // 监听回复跳转事件
+    this.setupReplyJumpListener();
   }
 
   /**
@@ -222,6 +228,31 @@ class UIManager {
 
     // Nako AI 事件监听
     this.setupNakoEventListeners();
+  }
+
+  /**
+   * 设置回复跳转事件监听器
+   * @private
+   */
+  setupReplyJumpListener() {
+    document.addEventListener('reply-jump', (event) => {
+      const { timestamp } = event.detail;
+      const messageEl = this.messageIndex.get(timestamp);
+
+      if (messageEl) {
+        // 滚动到目标消息
+        messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // 添加高亮动画
+        messageEl.classList.add('message-highlighted');
+        setTimeout(() => {
+          messageEl.classList.remove('message-highlighted');
+        }, 2000);
+      } else {
+        // 消息不存在或不在当前视图中
+        console.warn('Reply target message not found:', timestamp);
+      }
+    });
   }
 
   /**
@@ -1299,7 +1330,14 @@ class UIManager {
   createMessageElement(msg) {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message';
-    
+
+    // 存储 timestamp 用于回复跳转
+    if (msg.timestamp) {
+      msgDiv.dataset.timestamp = msg.timestamp;
+      // 注册到消息索引
+      this.messageIndex.set(msg.timestamp, msgDiv);
+    }
+
     // 检查是否被提及
     if (this.isMentioned(msg.text)) {
       msgDiv.classList.add('mentioned');
@@ -1350,7 +1388,7 @@ class UIManager {
 
     msgDiv.appendChild(avatarSpan);
     msgDiv.appendChild(contentDiv);
-    
+
     return msgDiv;
   }
 

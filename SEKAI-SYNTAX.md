@@ -320,20 +320,21 @@ const ALLOWED_ATTR = {
   - [x] Markdown 处理后递归查找文本节点
   - [x] 替换 [xxx] 为 sticker 图片
 
-### Phase 4: 高级交互 ⏳ TODO
-- [ ] `[re:timestamp]` 回复引用
-  - [ ] 消息索引维护（timestamp → message）
-  - [ ] 回复卡片 UI
-  - [ ] 点击跳转功能
-  - [ ] 预览文本支持 `[re:ts|preview]`
-- [ ] `[link:URL|Title]` 链接卡片
-  - [ ] 链接卡片 UI 组件
-  - [ ] 描述文本支持
-  - [ ] Open Graph 预览（可选，需要服务端）
-- [ ] `[color:hex|text]` 彩色文字
-  - [ ] hex 颜色解析（支持 3/6 位，带/不带 `#`）
-  - [ ] 应用内联样式或 CSS 变量
-  - [ ] 颜色对比度检查（确保可读性）
+### Phase 4: 高级交互 ✅ DONE
+- [x] `[re:timestamp]` 回复引用
+  - [x] 消息索引维护（timestamp → message）
+  - [x] 回复卡片 UI
+  - [x] 点击跳转功能
+  - [x] 预览文本支持 `[re:ts|preview]`
+- [x] `[link:URL|Title]` 链接卡片
+  - [x] 链接卡片 UI 组件
+  - [x] 描述文本支持
+  - ⏸️ Open Graph 预览（可选，需要服务端）
+- [x] `[color:hex|text]` 彩色文字
+  - [x] hex 颜色解析（支持 3/6 位，带/不带 `#`）
+  - [x] 应用内联样式或 CSS 变量
+  - [x] 颜色对比度检查（确保可读性）
+- [x] `[truecolor:hex|text]` 真彩色文字（保持原始颜色）
 
 ### Phase 5: 集成与优化 ⏳ TODO
 - [ ] 替换 ui-manager.js 中的 StickerService 调用

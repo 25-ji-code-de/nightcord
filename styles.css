@@ -173,6 +173,22 @@ body {
 .message:hover {
   background: rgba(4, 4, 5, 0.07);
 }
+
+/* Reply jump highlight animation */
+.message-highlighted {
+  background: rgba(124, 111, 172, 0.2) !important;
+  animation: message-highlight-pulse 2s ease-out;
+}
+
+@keyframes message-highlight-pulse {
+  0% {
+    background: rgba(124, 111, 172, 0.4);
+  }
+  100% {
+    background: rgba(124, 111, 172, 0.2);
+  }
+}
+
 .message .avatar {
   width: 40px;
   height: 40px;

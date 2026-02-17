@@ -1,3 +1,20 @@
+/*
+ * Nightcord - A modern, modular real-time chat application
+ * Copyright (C) 2025 The 25-ji-code-de Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 /**
  * NightcordManager - 聊天室管理器
  * 负责处理聊天室的业务逻辑，包括用户管理、消息处理、房间管理等

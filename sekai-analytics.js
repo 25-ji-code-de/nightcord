@@ -1,3 +1,20 @@
+/*
+ * Nightcord - A modern, modular real-time chat application
+ * Copyright (C) 2025 The 25-ji-code-de Team
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 /**
  * SEKAI Analytics - 事件上报服务
  * 将用户活动数据上报到 SEKAI Platform API

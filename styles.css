@@ -1509,34 +1509,87 @@ body {
   transform: scale(0.95);
 }
 
-.sekai-audio-wave {
+/* 进度条容器 */
+.sekai-audio-progress-container {
+  flex: 1;
   display: flex;
-  align-items: center;
-  gap: 3px;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 音频可视化器 */
+.sekai-audio-visualizer {
   height: 32px;
-  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  opacity: 0.6;
+  transition: opacity 0.3s;
 }
 
-.sekai-audio-wave .bar {
-  flex: 1;
-  background: #50476a;
-  border-radius: 4px;
-  min-height: 4px;
-  transition: height 0.2s, background-color 0.2s;
+.sekai-audio-player.playing .sekai-audio-visualizer {
+  opacity: 1;
 }
 
-.sekai-audio-player.playing .sekai-audio-wave .bar {
-  animation: sekai-wave 0.6s ease-in-out infinite alternate;
-  background: #a78bfa;
+.sekai-audio-visualizer-bar {
+  flex: 1;
+  background: linear-gradient(180deg, #a78bfa, #ec4899);
+  border-radius: 2px 2px 0 0;
+  min-width: 2px;
+  height: 2px;
+  transition: height 0.05s ease-out;
+}
+
+.sekai-audio-progress-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: height 0.2s;
+}
+
+.sekai-audio-progress-bar:hover {
+  height: 8px;
+}
+
+.sekai-audio-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ec4899, #a78bfa);
+  border-radius: 3px;
+  width: 0%;
+  transition: width 0.1s linear;
+  position: relative;
+}
+
+.sekai-audio-progress-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translate(50%, -50%); /* 居中对齐播放头 */
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.sekai-audio-progress-bar:hover .sekai-audio-progress-fill::after {
+  opacity: 1;
 }
 
 .sekai-audio-time {
   font-family: var(--sekai-font-mono);
-  font-size: 0.85em;
+  font-size: 0.8em;
   color: var(--sekai-text-dim);
-  min-width: 45px;
+  min-width: 90px;
   text-align: right;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 /* --- File Card --- */
@@ -1732,11 +1785,6 @@ body {
 @keyframes sekai-shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
-}
-
-@keyframes sekai-wave {
-  0% { transform: scaleY(1); }
-  100% { transform: scaleY(1.5); }
 }
 
 /* --- Colored Text --- */

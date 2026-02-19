@@ -452,6 +452,7 @@ class SekaiRenderer {
     const audio = document.createElement('audio');
     audio.src = url;
     audio.preload = 'metadata';
+    audio.crossOrigin = 'anonymous'; // 允许 Web Audio API 访问
     audio.id = playerId;
 
     // Define icons constants for reuse and consistency - Redesigned by Top Tier UI/UX
@@ -469,29 +470,116 @@ class SekaiRenderer {
     playBtn.className = 'sekai-audio-control';
     playBtn.innerHTML = ICONS.PLAY;
     playBtn.setAttribute('aria-label', 'Play');
-    
-    const wave = document.createElement('div');
-    wave.className = 'sekai-audio-wave';
-    let barsHtml = '';
-    for(let i=0; i<30; i++) { // Increased bar count for smoother look
-        const h = 20 + Math.random() * 60;
-        barsHtml += `<div class="bar" style="height:${h}%; animation-delay:${i*0.05}s"></div>`;
-    }
-    wave.innerHTML = barsHtml;
 
+    // 创建进度条容器
+    const progressContainer = document.createElement('div');
+    progressContainer.className = 'sekai-audio-progress-container';
+
+    // Web Audio API 可视化器
+    const visualizer = document.createElement('div');
+    visualizer.className = 'sekai-audio-visualizer';
+
+    const barCount = 40;
+    const bars = [];
+    for (let i = 0; i < barCount; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'sekai-audio-visualizer-bar';
+      visualizer.appendChild(bar);
+      bars.push(bar);
+    }
+
+    // Web Audio API 设置
+    let audioContext = null;
+    let analyser = null;
+    let source = null;
+    let dataArray = null;
+    let animationId = null;
+
+    const setupAudioContext = () => {
+      if (audioContext) return;
+
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 128;
+        analyser.smoothingTimeConstant = 0.8;
+
+        source = audioContext.createMediaElementSource(audio);
+        source.connect(analyser);
+        analyser.connect(audioContext.destination);
+
+        const bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+      } catch (e) {
+        console.warn('Web Audio API not supported:', e);
+      }
+    };
+
+    const updateVisualizer = () => {
+      if (!analyser || !dataArray) return;
+
+      analyser.getByteFrequencyData(dataArray);
+
+      // 将频谱数据映射到条形
+      const step = Math.floor(dataArray.length / barCount);
+      for (let i = 0; i < barCount; i++) {
+        const index = i * step;
+        const value = dataArray[index] || 0;
+        const height = Math.max(2, (value / 255) * 100);
+        bars[i].style.height = `${height}%`;
+      }
+
+      if (!audio.paused) {
+        animationId = requestAnimationFrame(updateVisualizer);
+      }
+    };
+
+    const progressBar = document.createElement('div');
+    progressBar.className = 'sekai-audio-progress-bar';
+
+    const progressFill = document.createElement('div');
+    progressFill.className = 'sekai-audio-progress-fill';
+    progressBar.appendChild(progressFill);
+
+    progressContainer.appendChild(visualizer);
+    progressContainer.appendChild(progressBar);
+
+    // 时间显示：当前时间 / 总时长
     const timeDisplay = document.createElement('div');
     timeDisplay.className = 'sekai-audio-time';
-    timeDisplay.textContent = duration || '0:00';
+    timeDisplay.textContent = '0:00 / ' + (duration || '0:00');
+
+    // 格式化时间
+    const formatTime = (seconds) => {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+      return `${mins}:${secs}`;
+    };
 
     const updatePlayState = (isPlaying) => {
         if (isPlaying) {
             playBtn.innerHTML = ICONS.PAUSE;
             playBtn.setAttribute('aria-label', 'Pause');
             container.classList.add('playing');
+
+            // 启动可视化
+            if (!audioContext) {
+              setupAudioContext();
+            }
+            if (audioContext && audioContext.state === 'suspended') {
+              audioContext.resume();
+            }
+            updateVisualizer();
         } else {
             playBtn.innerHTML = ICONS.PLAY;
             playBtn.setAttribute('aria-label', 'Play');
             container.classList.remove('playing');
+
+            // 停止可视化动画
+            if (animationId) {
+              cancelAnimationFrame(animationId);
+              animationId = null;
+            }
         }
     };
 
@@ -505,21 +593,88 @@ class SekaiRenderer {
         }
     };
 
+    // 更新进度条和时间显示
     audio.ontimeupdate = () => {
-       if (!duration) {
-             const mins = Math.floor(audio.currentTime / 60);
-             const secs = Math.floor(audio.currentTime % 60).toString().padStart(2, '0');
-             timeDisplay.textContent = `${mins}:${secs}`;
-       }
+      const current = audio.currentTime;
+      const total = audio.duration || 0;
+
+      if (total > 0) {
+        const percent = (current / total) * 100;
+        progressFill.style.width = `${percent}%`;
+        timeDisplay.textContent = `${formatTime(current)} / ${formatTime(total)}`;
+      } else {
+        timeDisplay.textContent = `${formatTime(current)} / ${duration || '0:00'}`;
+      }
     };
+
+    // 加载元数据后更新总时长
+    audio.onloadedmetadata = () => {
+      if (audio.duration) {
+        timeDisplay.textContent = `0:00 / ${formatTime(audio.duration)}`;
+      }
+    };
+
+    // 进度条点击跳转
+    let isDragging = false;
+
+    const seek = (e) => {
+      const rect = progressBar.getBoundingClientRect();
+      const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      if (audio.duration) {
+        audio.currentTime = percent * audio.duration;
+      }
+    };
+
+    progressBar.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      seek(e);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        seek(e);
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    progressBar.addEventListener('click', seek);
+
+    // 触摸设备支持
+    progressBar.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = progressBar.getBoundingClientRect();
+      const percent = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+      if (audio.duration) {
+        audio.currentTime = percent * audio.duration;
+      }
+    });
 
     audio.onended = () => {
         updatePlayState(false);
+        progressFill.style.width = '0%';
+        audio.currentTime = 0;
+
+        // 重置可视化条形
+        bars.forEach(bar => {
+          bar.style.height = '2px';
+        });
+    };
+
+    // 暂停时也停止可视化
+    audio.onpause = () => {
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
     };
 
     container.appendChild(audio);
     container.appendChild(playBtn);
-    container.appendChild(wave);
+    container.appendChild(progressContainer);
     container.appendChild(timeDisplay);
 
     return container;

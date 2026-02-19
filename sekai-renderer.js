@@ -28,7 +28,28 @@
  * - DOMPurify XSS 过滤保护
  * - 对象池复用减少 GC 压力
  * - 懒加载图片和音频
- *
+ */
+
+// Audio Visualizer Configuration
+const AUDIO_VIZ_CONFIG = {
+  OSCILLOSCOPE: {
+    BG_COLOR_IDLE: '#2f273f',
+    BG_COLOR_PLAYING: 'rgba(53, 46, 70, 0.25)',
+    LINE_COLOR: 'rgba(167, 139, 250, 1)',
+    LINE_WIDTH: 1.5,
+    FFT_SIZE: 2048
+  },
+  INDICATOR: {
+    ACCENT_COLOR: '#ff5500',
+    RMS_SCALE: 1.5,
+    BASE_OPACITY: 0.6,
+    GLOW_BASE: 2,
+    GLOW_SCALE: 15,
+    MAX_SCALE: 1.5
+  }
+};
+
+/**
  * @example
  * const renderer = new SekaiRenderer({
  *   stickerService: stickerService,
@@ -214,6 +235,70 @@ class SekaiRenderer {
     }
 
     return { container, bars };
+  }
+
+  /**
+   * Create oscilloscope canvas
+   * @private
+   */
+  _createOscilloscope(width = 160, height = 28) {
+    const canvas = document.createElement('canvas');
+    const dpr = window.devicePixelRatio || 1;
+
+    // Set display size
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+
+    // Set actual canvas size (DPI aware)
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.className = 'sekai-audio-oscilloscope';
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // Initial State
+    ctx.fillStyle = AUDIO_VIZ_CONFIG.OSCILLOSCOPE.BG_COLOR_IDLE;
+    ctx.fillRect(0, 0, width, height);
+
+    // Initial gradient line
+    const gradient = ctx.createLinearGradient(0, 0, width, 0);
+    gradient.addColorStop(0, 'rgba(167, 139, 250, 0)');
+    gradient.addColorStop(0.1, AUDIO_VIZ_CONFIG.OSCILLOSCOPE.LINE_COLOR);
+    gradient.addColorStop(0.9, AUDIO_VIZ_CONFIG.OSCILLOSCOPE.LINE_COLOR);
+    gradient.addColorStop(1, 'rgba(167, 139, 250, 0)');
+
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = AUDIO_VIZ_CONFIG.OSCILLOSCOPE.LINE_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
+
+    return { canvas, ctx, width, height };
+  }
+
+  /**
+   * Reset oscilloscope to idle state
+   * @private
+   */
+  _resetOscilloscope(ctx, width, height) {
+    const cfg = AUDIO_VIZ_CONFIG.OSCILLOSCOPE;
+    ctx.fillStyle = cfg.BG_COLOR_IDLE;
+    ctx.fillRect(0, 0, width, height);
+
+    const gradient = ctx.createLinearGradient(0, 0, width, 0);
+    gradient.addColorStop(0, 'rgba(167, 139, 250, 0)');
+    gradient.addColorStop(0.1, cfg.LINE_COLOR);
+    gradient.addColorStop(0.9, cfg.LINE_COLOR);
+    gradient.addColorStop(1, 'rgba(167, 139, 250, 0)');
+
+    ctx.lineWidth = cfg.LINE_WIDTH;
+    ctx.strokeStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
   }
 
   /**
@@ -976,8 +1061,17 @@ class SekaiRenderer {
 
     const playBtn = document.createElement('button');
     playBtn.className = 'sekai-audio-control';
-    playBtn.innerHTML = ICONS.PLAY;
     playBtn.setAttribute('aria-label', 'Play');
+
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'sekai-audio-icon-span';
+    iconSpan.innerHTML = ICONS.PLAY;
+
+    const indicator = document.createElement('div');
+    indicator.className = 'sekai-audio-indicator';
+
+    playBtn.appendChild(iconSpan);
+    playBtn.appendChild(indicator);
 
     const contentArea = document.createElement('div');
     contentArea.className = 'sekai-audio-content-simple';
@@ -985,13 +1079,15 @@ class SekaiRenderer {
     const infoRow = document.createElement('div');
     infoRow.className = 'sekai-audio-info-row';
 
-    const { container: visualizer, bars } = this._createVisualizerBars(40);
+    const { canvas: visualizerCanvas, ctx, width, height } = this._createOscilloscope(200, 20);
+    // Add margin to prevent visual clutter
+    visualizerCanvas.style.marginRight = '8px';
 
     const timeDisplay = document.createElement('div');
     timeDisplay.className = 'sekai-audio-time';
     timeDisplay.textContent = '0:00 / ' + (duration || '0:00');
 
-    infoRow.appendChild(visualizer);
+    infoRow.appendChild(visualizerCanvas);
     infoRow.appendChild(timeDisplay);
 
     contentArea.appendChild(infoRow);
@@ -1016,12 +1112,72 @@ class SekaiRenderer {
 
     const setupAudioContext = () => {
       if (analysisContext) return;
-      analysisContext = this._setupAudioAnalysis(audio, 128);
+      analysisContext = this._setupAudioAnalysis(audio, AUDIO_VIZ_CONFIG.OSCILLOSCOPE.FFT_SIZE);
     };
 
     const updateVisualizer = () => {
       if (!analysisContext) return;
-      this._updateVisualizerBars(analysisContext.analyser, analysisContext.dataArray, bars);
+      
+      const { analyser, dataArray } = analysisContext;
+      
+      // Get Time Domain Data (Waveform) - 128 is center
+      analyser.getByteTimeDomainData(dataArray);
+
+      // Clear with transparency for "Afterglow" effect
+      ctx.fillStyle = AUDIO_VIZ_CONFIG.OSCILLOSCOPE.BG_COLOR_PLAYING;
+      ctx.fillRect(0, 0, width, height);
+
+      // Create gradient mask
+      const cfg = AUDIO_VIZ_CONFIG.OSCILLOSCOPE;
+      const gradient = ctx.createLinearGradient(0, 0, width, 0);
+      gradient.addColorStop(0, 'rgba(167, 139, 250, 0)');
+      gradient.addColorStop(0.1, cfg.LINE_COLOR);
+      gradient.addColorStop(0.9, cfg.LINE_COLOR);
+      gradient.addColorStop(1, 'rgba(167, 139, 250, 0)');
+
+      ctx.lineWidth = cfg.LINE_WIDTH;
+      ctx.strokeStyle = gradient;
+      ctx.beginPath();
+
+      const sliceWidth = width / dataArray.length;
+      let x = 0;
+      
+      // For RMS calculation
+      let sumSquares = 0;
+
+      for(let i = 0; i < dataArray.length; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = v * height / 2;
+
+        if(i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+
+        x += sliceWidth;
+
+        // Calculate RMS
+        const amplitude = (dataArray[i] - 128) / 128;
+        sumSquares += amplitude * amplitude;
+      }
+
+      ctx.lineTo(width, height / 2);
+      ctx.stroke();
+
+      // RMS-based indicator pulsing
+      const rms = Math.sqrt(sumSquares / dataArray.length);
+      const indicatorCfg = AUDIO_VIZ_CONFIG.INDICATOR;
+
+      // Scale for visibility
+      const pulseScale = 1 + (rms * indicatorCfg.RMS_SCALE);
+      const pulseOpacity = indicatorCfg.BASE_OPACITY + (rms * 2);
+      const glowSpread = indicatorCfg.GLOW_BASE + (rms * indicatorCfg.GLOW_SCALE);
+
+      // Apply to indicator
+      indicator.style.transform = `scale(${Math.min(indicatorCfg.MAX_SCALE, pulseScale)})`;
+      indicator.style.opacity = Math.min(1, pulseOpacity);
+      indicator.style.boxShadow = `0 0 ${glowSpread}px ${indicatorCfg.ACCENT_COLOR}`;
 
       if (!audio.paused) {
         animationId = requestAnimationFrame(updateVisualizer);
@@ -1030,18 +1186,27 @@ class SekaiRenderer {
 
     const updatePlayState = (isPlaying) => {
         if (isPlaying) {
-            playBtn.innerHTML = ICONS.PAUSE;
+            iconSpan.innerHTML = ICONS.PAUSE;
             playBtn.setAttribute('aria-label', 'Pause');
             container.classList.add('playing');
+            indicator.classList.add('active');
 
             if (!analysisContext) {
               setupAudioContext();
             }
             updateVisualizer();
         } else {
-            playBtn.innerHTML = ICONS.PLAY;
+            iconSpan.innerHTML = ICONS.PLAY;
             playBtn.setAttribute('aria-label', 'Play');
             container.classList.remove('playing');
+            indicator.classList.remove('active');
+
+            // Reset indicator and canvas
+            indicator.style.transform = '';
+            indicator.style.opacity = '';
+            indicator.style.boxShadow = '';
+
+            this._resetOscilloscope(ctx, width, height);
 
             if (animationId) {
               cancelAnimationFrame(animationId);

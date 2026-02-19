@@ -1817,6 +1817,7 @@ body {
   --control-hover: rgba(255, 255, 255, 0.05);
   --primary-accent: #a78bfa;
   --track-bg: rgba(0, 0, 0, 0.2);
+  --accent-on: #ff5500; /* Added for indicator */
 
   display: flex;
   align-items: stretch;
@@ -1855,31 +1856,56 @@ body {
   width: 52px;
   height: 100%;
   border-radius: 8px 0 0 8px;
-  background: transparent;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%);
   border: none;
   border-right: 1px solid rgba(255, 255, 255, 0.05);
 
   color: #bbb;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.1s ease-out; /* Faster matching tactile feel */
   flex-shrink: 0;
+  
+  /* Tactile Button Feel */
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .sekai-audio-control:hover {
-  background: var(--control-hover);
+  background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
   color: #fff;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 3px 6px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
 }
 
 .sekai-audio-control:active {
-  background: rgba(0, 0, 0, 0.1);
-  transform: translateY(0);
+  background: rgba(0, 0, 0, 0.15);
+  box-shadow: 
+    inset 0 2px 4px rgba(0, 0, 0, 0.2),
+    0 0 0 rgba(0, 0, 0, 0);
+  transform: translateY(1px);
+  border-right-color: transparent;
 }
 
 .sekai-audio-player-simple.playing .sekai-audio-control {
   color: var(--primary-accent);
+  /* Playing state "pressed" or active feel if desired, but user asked for button feel generally */
+}
+
+/* Specific wrappers for layout */
+.sekai-audio-icon-span {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px; /* Space between icon and indicator */
 }
 
 .sekai-audio-control svg {
@@ -1888,6 +1914,22 @@ body {
   fill: currentColor;
   stroke: currentColor;
   stroke-width: 0;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3)); /* Depth for icon */
+}
+
+/* Status Indicator */
+.sekai-audio-indicator {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.2); /* Inactive state */
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.3); /* Recessed look when off */
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.sekai-audio-indicator.active {
+  background-color: var(--accent-on); /* Active Color */
+  box-shadow: 0 0 6px var(--accent-on); /* Glow */
 }
 
 /* Content Area */
@@ -2893,4 +2935,220 @@ body {
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
+}
+
+/* --- Nightcord Voice Message Component (Studio/Talkback Style) --- */
+
+.sekai-voice-bubble {
+  /* Reset/Override base player styles for a cleaner bubble look */
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 4px 0 !important;
+  height: 48px !important; /* Compact height */
+  width: auto !important;
+  min-width: 200px !important;
+  max-width: 320px !important;
+  
+  /* Flex layout for the bubble */
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  
+  /* Bubble container styling */
+  background-color: rgba(40, 35, 55, 0.6) !important; /* Semi-transparent dark */
+  border-radius: 24px !important; /* Fully rounded bubble */
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding-right: 20px !important; /* Space for time duration on the right */
+  
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+.sekai-voice-bubble:hover {
+  background-color: rgba(50, 45, 65, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+.sekai-voice-bubble.playing {
+  background-color: rgba(55, 50, 75, 0.9) !important;
+  border-color: rgba(167, 139, 250, 0.3) !important; /* Nightcord Purple Tint */
+  box-shadow: 0 4px 16px rgba(167, 139, 250, 0.15) !important;
+}
+
+/* --- Left Module: Talkback Button & LED --- */
+
+.sekai-voice-control-module {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sekai-voice-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(145deg, #3a324b, #2a2536); /* Subtle 3D gradient */
+  box-shadow: 
+    3px 3px 6px #1e1b26, 
+    -1px -1px 2px #463d5a; /* Neumorphic-ish depth */
+  color: #bbb;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.sekai-voice-btn:hover {
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.sekai-voice-btn:active, .sekai-voice-btn.active {
+  background: #252030;
+  box-shadow: 
+    inset 2px 2px 5px #1a1722, 
+    inset -1px -1px 2px #3a324b; /* Pressed state */
+  transform: scale(0.95);
+  color: #a78bfa; /* Active accent color */
+}
+
+.sekai-voice-btn svg {
+  width: 14px; /* Smaller, sharper icon */
+  height: 14px;
+  fill: currentColor;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5));
+}
+
+/* Status LED (The "Recording Studio" Dot) */
+.sekai-voice-led {
+  position: absolute;
+  bottom: 8px; /* Slightly below the button center visually */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #554a4a; /* Dim/Off state (dark brownish-red) */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  transition: all 0.3s ease;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.sekai-voice-led.on {
+  background-color: #ff4757; /* Studio Recording Red */
+  box-shadow: 0 0 6px #ff4757, 0 0 12px rgba(255, 71, 87, 0.6);
+}
+
+.sekai-voice-bubble:hover .sekai-voice-led:not(.on) {
+  background-color: #776a6a; /* Slightly lighter on hover */
+}
+
+/* --- Right Module: Content & Visualizer --- */
+
+.sekai-voice-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer; /* Whole area is seekable */
+}
+
+/* New Digital Waveform Visualizer */
+.sekai-voice-visualizer {
+  display: flex;
+  align-items: center; /* Center vertically */
+  gap: 2px;
+  height: 20px;
+  width: 100%;
+}
+
+.sekai-voice-bar {
+  flex: 1;
+  background-color: #625b75; /* Inactive bar color */
+  border-radius: 1px;
+  min-width: 2px;
+  transition: height 0.1s ease, background-color 0.2s;
+  height: 4px; /* Default height */
+}
+
+.sekai-voice-bubble.playing .sekai-voice-bar {
+  background-color: #a78bfa; /* Active bar color */
+  box-shadow: 0 0 4px rgba(167, 139, 250, 0.4);
+}
+
+/* Metadata Row (Time) */
+.sekai-voice-meta {
+  position: absolute;
+  right: 0;
+  bottom: 8px; /* Stick to bottom right inside content area? No, let's move it to the far right of the bubble */
+  display: none; /* Hide default meta row placement logic */
+}
+
+/* Time Display - Positioned at the end of the bubble */
+.sekai-voice-time {
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+  letter-spacing: -0.5px;
+  margin-left: auto; /* Push to right if inside flex */
+  white-space: nowrap;
+}
+
+/* Redefine layout to include time on the right side of visualizer or below */
+.sekai-voice-content {
+    flex-direction: row; /* Horizontal layout: Vis | Time */
+    align-items: center;
+    gap: 12px;
+}
+
+.sekai-voice-visualizer {
+    flex: 1;
+    height: 24px;
+    align-items: center;
+}
+
+/* Progress Track (Subtle line below/behind visualizer) */
+.sekai-voice-progress-track {
+    position: absolute;
+    bottom: 0px;
+    left: 0;
+    width: 100%;
+    height: 2px; /* Very thin line */
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.sekai-voice-progress-fill {
+    height: 100%;
+    background: #a78bfa;
+    width: 0%;
+    opacity: 0.8;
+    transition: width 0.1s linear;
+}
+
+/* Mobile responsive tweak */
+@media (max-width: 480px) {
+    .sekai-voice-bubble {
+        min-width: 160px;
+    }
+    .sekai-voice-time {
+        font-size: 10px;
+    }
 }

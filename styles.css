@@ -1564,7 +1564,7 @@ body {
   min-width: 240px;
 }
 
-/* Top Bar: Time & Transport Status */
+/* Top Bar: Status + Track Info + Time */
 .sekai-screen-meta {
   height: 20px;
   border-bottom: 1px solid #222;
@@ -1574,18 +1574,69 @@ body {
   padding: 0 8px;
   font-size: 10px;
   color: var(--text-dim);
+  gap: 8px;
+  overflow: hidden;
 }
+
+/* Status Indicator (LED + STEREO) */
 .sekai-status-indicator {
-  display: flex; gap: 6px;
+  display: flex;
+  gap: 6px;
   align-items: center;
+  flex-shrink: 0;
 }
+
 .sekai-status-text {
-  font-size: 9px; letter-spacing: 1px;
+  font-size: 9px;
+  letter-spacing: 1px;
 }
+
 .sekai-led {
-  width: 6px; height: 6px; border-radius: 50%; background: #333;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #333;
+  flex-shrink: 0;
 }
-.sekai-led.active { background: var(--accent-on); box-shadow: 0 0 4px var(--accent-on); }
+
+.sekai-led.active {
+  background: var(--accent-on);
+  box-shadow: 0 0 4px var(--accent-on);
+}
+
+/* Track Info (Title - Artist) */
+.sekai-track-info {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sekai-track-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #eee;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+}
+
+.sekai-track-artist {
+  font-size: 9px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.7;
+  flex-shrink: 2;
+}
+
+.sekai-track-artist::before {
+  content: '- ';
+}
 
 /* Center: Visualizer & Tape Overlay */
 .sekai-viz-area {

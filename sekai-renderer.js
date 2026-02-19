@@ -134,6 +134,108 @@ class SekaiRenderer {
   }
 
   /**
+   * Common icons used in audio players
+   * @private
+   */
+  _getAudioIcons(size = 16) {
+    return {
+      PLAY: `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor"></polygon></svg>`,
+      PAUSE: `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"></rect><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"></rect></svg>`,
+      STOP: `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor"></rect></svg>`,
+      RW: `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><polygon points="11 19 2 12 11 5 11 19" fill="currentColor"></polygon><polygon points="22 19 13 12 22 5 22 19" fill="currentColor"></polygon></svg>`,
+      FF: `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><polygon points="13 19 22 12 13 5 13 19" fill="currentColor"></polygon><polygon points="2 19 11 12 2 5 2 19" fill="currentColor"></polygon></svg>`
+    };
+  }
+
+  /**
+   * Create audio element with common configuration
+   * @private
+   */
+  _createAudioElement(url) {
+    const audio = document.createElement('audio');
+    audio.src = url;
+    audio.preload = 'metadata';
+    audio.crossOrigin = 'anonymous';
+    audio.id = 'audio_' + Math.random().toString(36).substr(2, 9);
+    return audio;
+  }
+
+  /**
+   * Format seconds to MM:SS
+   * @private
+   */
+  _formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
+  }
+
+  /**
+   * Setup audio analysis for visualization
+   * @private
+   */
+  _setupAudioAnalysis(audio, fftSize = 128) {
+    const ctx = this._getAudioContext();
+    if (!ctx) return null;
+
+    try {
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = fftSize;
+      analyser.smoothingTimeConstant = 0.8;
+
+      const source = ctx.createMediaElementSource(audio);
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      return { analyser, source, dataArray };
+    } catch (e) {
+      console.warn('Failed to setup audio analysis:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Create visualizer bars
+   * @private
+   */
+  _createVisualizerBars(count, className = 'sekai-audio-visualizer-bar') {
+    const bars = [];
+    const container = document.createElement('div');
+    container.className = 'sekai-audio-visualizer';
+
+    for (let i = 0; i < count; i++) {
+      const bar = document.createElement('div');
+      bar.className = className;
+      container.appendChild(bar);
+      bars.push(bar);
+    }
+
+    return { container, bars };
+  }
+
+  /**
+   * Update visualizer bars with frequency data
+   * @private
+   */
+  _updateVisualizerBars(analyser, dataArray, bars) {
+    if (!analyser || !dataArray) return;
+
+    analyser.getByteFrequencyData(dataArray);
+
+    const step = Math.floor(dataArray.length / bars.length);
+    bars.forEach((bar, index) => {
+      if (index < dataArray.length) {
+        const value = dataArray[index * step] || 0;
+        const height = Math.max(2, (value / 255) * 100);
+        bar.style.height = `${height}%`;
+      }
+    });
+  }
+
+  /**
    * Sanitize HTML using DOMPurify
    * @private
    */
@@ -142,6 +244,16 @@ class SekaiRenderer {
       return html; // Fallback to existing escapeHtml in renderText
     }
     return DOMPurify.sanitize(html, this.purifyConfig);
+  }
+
+  /**
+   * Escape HTML special characters
+   * @private
+   */
+  _escapeHTML(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
   }
 
   /**
@@ -472,23 +584,10 @@ class SekaiRenderer {
 
   renderMusic(url, title, artist, duration) {
     const container = document.createElement('div');
-    const playerId = 'audio_' + Math.random().toString(36).substr(2, 9);
     container.className = 'sekai-audio-player';
 
-    const audio = document.createElement('audio');
-    audio.src = url;
-    audio.preload = 'metadata';
-    audio.crossOrigin = 'anonymous'; 
-    audio.id = playerId;
-
-    // --- Icons ---
-    const ICONS = {
-      PLAY: `<svg viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor"></polygon></svg>`,
-      PAUSE: `<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"></rect><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"></rect></svg>`,
-      STOP: `<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor"></rect></svg>`,
-      RW: `<svg viewBox="0 0 24 24"><polygon points="11 19 2 12 11 5 11 19" fill="currentColor"></polygon><polygon points="22 19 13 12 22 5 22 19" fill="currentColor"></polygon></svg>`,
-      FF: `<svg viewBox="0 0 24 24"><polygon points="13 19 22 12 13 5 13 19" fill="currentColor"></polygon><polygon points="2 19 11 12 2 5 2 19" fill="currentColor"></polygon></svg>`
-    };
+    const audio = this._createAudioElement(url);
+    const ICONS = this._getAudioIcons(14);
 
     // --- Container Structure (Hybrid: Walkman x DAW x Console) ---
     // [ [Fader (Vol)] ] - Left Module (Console Style)
@@ -523,11 +622,12 @@ class SekaiRenderer {
     // 2. Main Screen Module (DAW + Tape Hybrid)
     const content = document.createElement('div');
     content.className = 'sekai-audio-content';
-    
-    // Top Row: Meta Info & Status LEDs
+
+    // Top Row: Meta Info & Track Details
     const metaRow = document.createElement('div');
     metaRow.className = 'sekai-screen-meta';
-    
+
+    // Status Box (LED + STEREO)
     const statusBox = document.createElement('div');
     statusBox.className = 'sekai-status-indicator';
     statusBox.innerHTML = `
@@ -535,11 +635,20 @@ class SekaiRenderer {
         <span class="sekai-status-text">STEREO</span>
     `;
 
+    // Track Info (Title - Artist)
+    const trackInfo = document.createElement('div');
+    trackInfo.className = 'sekai-track-info';
+    trackInfo.innerHTML = `
+        <div class="sekai-track-title">${this._escapeHTML(title)}</div>
+        <div class="sekai-track-artist">${this._escapeHTML(artist)}</div>
+    `;
+
     const timeDisplay = document.createElement('div');
     timeDisplay.className = 'sekai-audio-time';
     timeDisplay.textContent = '0:00 / ' + (duration || '-:--');
-    
+
     metaRow.appendChild(statusBox);
+    metaRow.appendChild(trackInfo);
     metaRow.appendChild(timeDisplay);
 
     // Center: Visualizer Area (Reels + Bars)
@@ -552,20 +661,13 @@ class SekaiRenderer {
     tapeMech.innerHTML = `<div class="sekai-reel"></div><div class="sekai-reel"></div>`;
     vizArea.appendChild(tapeMech);
 
-    // Waveform Bars (Foreground)
-    const visualizer = document.createElement('div');
+    // Waveform Bars (Foreground) - Use helper method
+    const { container: visualizer, bars } = this._createVisualizerBars(32, 'sekai-viz-bar');
     visualizer.className = 'sekai-audio-visualizer-bars';
-    // Create bars
-    const barCount = 32;
-    const bars = [];
-    for (let i = 0; i < barCount; i++) {
-        const bar = document.createElement('div');
-        bar.className = 'sekai-viz-bar';
-        // Randomize initial height for "static" look
+    // Randomize initial height for "static" look
+    bars.forEach(bar => {
         bar.style.transform = `scaleY(${0.1 + Math.random() * 0.2})`;
-        visualizer.appendChild(bar);
-        bars.push(bar);
-    }
+    });
     vizArea.appendChild(visualizer);
 
     // Bottom: Scrubber
@@ -628,35 +730,12 @@ class SekaiRenderer {
     let isFaderDragging = false;
     let animationId;
 
-    // Audio Analysis Setup
-    let analyser = null;
-    let dataArray = null;
-    let audioSource = null;
+    // Audio Analysis Setup - Use helper method
+    let analysisContext = null;
 
     const setupAudioAnalysis = () => {
-        const ctx = this._getAudioContext();
-        if (!ctx || audioSource) return; // Already set up or context unavailable
-
-        try {
-            // Create source node from audio element (can only be created once)
-            audioSource = ctx.createMediaElementSource(audio);
-
-            // Create analyser
-            analyser = ctx.createAnalyser();
-            analyser.fftSize = 64; // 32 frequency bins (bars)
-            analyser.smoothingTimeConstant = 0.8; // Smooth animation
-
-            // Connect: source -> analyser -> destination (speakers)
-            audioSource.connect(analyser);
-            analyser.connect(ctx.destination);
-
-            // Prepare data array
-            const bufferLength = analyser.frequencyBinCount;
-            dataArray = new Uint8Array(bufferLength);
-        } catch (e) {
-            console.warn('Failed to setup audio analysis:', e);
-            analyser = null;
-        }
+        if (analysisContext) return;
+        analysisContext = this._setupAudioAnalysis(audio, 64);
     };
     
     // Tape/Progress Update
@@ -681,22 +760,14 @@ class SekaiRenderer {
 
         // Update Time Display with actual duration
         if (audio.duration && isFinite(audio.duration)) {
-             const current = Math.floor(audio.currentTime);
-             const currentM = Math.floor(current / 60);
-             const currentS = current % 60;
-
-             const total = Math.floor(audio.duration);
-             const totalM = Math.floor(total / 60);
-             const totalS = total % 60;
-
-             timeDisplay.textContent = `${currentM}:${currentS.toString().padStart(2,'0')} / ${totalM}:${totalS.toString().padStart(2,'0')}`;
+             timeDisplay.textContent = `${this._formatTime(audio.currentTime)} / ${this._formatTime(audio.duration)}`;
         }
     };
 
     const togglePlay = () => {
       if (audio.paused) {
         // Setup audio analysis on first play
-        if (!audioSource) {
+        if (!analysisContext) {
             setupAudioAnalysis();
         }
 
@@ -726,21 +797,8 @@ class SekaiRenderer {
         if (audio.paused) return;
 
         // Real audio visualization using Web Audio API
-        if (analyser && dataArray) {
-            analyser.getByteFrequencyData(dataArray);
-
-            // Map frequency data to bars (32 bars for 32 frequency bins)
-            bars.forEach((bar, index) => {
-                if (index < dataArray.length) {
-                    // Normalize to 0-1 range
-                    const value = dataArray[index] / 255;
-                    // Add minimum height for visual consistency
-                    const height = 0.1 + value * 0.9;
-                    bar.style.transform = `scaleY(${height})`;
-                } else {
-                    bar.style.transform = `scaleY(0.1)`;
-                }
-            });
+        if (analysisContext) {
+            this._updateVisualizerBars(analysisContext.analyser, analysisContext.dataArray, bars);
         } else {
             // Fallback: Fake visualization if analysis failed
             bars.forEach(bar => {
@@ -911,24 +969,10 @@ class SekaiRenderer {
 
   renderAudio(url, duration) {
     const container = document.createElement('div');
-    const playerId = 'audio_' + Math.random().toString(36).substr(2, 9);
     container.className = 'sekai-audio-player-simple';
 
-    const audio = document.createElement('audio');
-    audio.src = url;
-    audio.preload = 'metadata';
-    audio.crossOrigin = 'anonymous';
-    audio.id = playerId;
-
-    const ICONS = {
-      PLAY: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
-        <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"></polygon>
-      </svg>`,
-      PAUSE: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
-        <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"></rect>
-        <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"></rect>
-      </svg>`
-    };
+    const audio = this._createAudioElement(url);
+    const ICONS = this._getAudioIcons(16);
 
     const playBtn = document.createElement('button');
     playBtn.className = 'sekai-audio-control';
@@ -941,17 +985,7 @@ class SekaiRenderer {
     const infoRow = document.createElement('div');
     infoRow.className = 'sekai-audio-info-row';
 
-    const visualizer = document.createElement('div');
-    visualizer.className = 'sekai-audio-visualizer';
-
-    const barCount = 40;
-    const bars = [];
-    for (let i = 0; i < barCount; i++) {
-      const bar = document.createElement('div');
-      bar.className = 'sekai-audio-visualizer-bar';
-      visualizer.appendChild(bar);
-      bars.push(bar);
-    }
+    const { container: visualizer, bars } = this._createVisualizerBars(40);
 
     const timeDisplay = document.createElement('div');
     timeDisplay.className = 'sekai-audio-time';
@@ -959,6 +993,8 @@ class SekaiRenderer {
 
     infoRow.appendChild(visualizer);
     infoRow.appendChild(timeDisplay);
+
+    contentArea.appendChild(infoRow);
 
     const progressContainer = document.createElement('div');
     progressContainer.className = 'sekai-audio-progress-container';
@@ -975,55 +1011,21 @@ class SekaiRenderer {
     contentArea.appendChild(infoRow);
     contentArea.appendChild(progressContainer);
 
-    let analyser = null;
-    let source = null;
-    let dataArray = null;
+    let analysisContext = null;
     let animationId = null;
 
     const setupAudioContext = () => {
-      if (source) return;
-
-      const audioContext = this._getAudioContext();
-      if (!audioContext) return;
-
-      try {
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 128;
-        analyser.smoothingTimeConstant = 0.8;
-
-        source = audioContext.createMediaElementSource(audio);
-        source.connect(analyser);
-        analyser.connect(audioContext.destination);
-
-        const bufferLength = analyser.frequencyBinCount;
-        dataArray = new Uint8Array(bufferLength);
-      } catch (e) {
-        console.warn('Failed to setup audio analyzer:', e);
-      }
+      if (analysisContext) return;
+      analysisContext = this._setupAudioAnalysis(audio, 128);
     };
 
     const updateVisualizer = () => {
-      if (!analyser || !dataArray) return;
-
-      analyser.getByteFrequencyData(dataArray);
-
-      const step = Math.floor(dataArray.length / barCount);
-      for (let i = 0; i < barCount; i++) {
-        const index = i * step;
-        const value = dataArray[index] || 0;
-        const height = Math.max(2, (value / 255) * 100);
-        bars[i].style.height = `${height}%`;
-      }
+      if (!analysisContext) return;
+      this._updateVisualizerBars(analysisContext.analyser, analysisContext.dataArray, bars);
 
       if (!audio.paused) {
         animationId = requestAnimationFrame(updateVisualizer);
       }
-    };
-
-    const formatTime = (seconds) => {
-      const mins = Math.floor(seconds / 60);
-      const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
-      return `${mins}:${secs}`;
     };
 
     const updatePlayState = (isPlaying) => {
@@ -1032,7 +1034,7 @@ class SekaiRenderer {
             playBtn.setAttribute('aria-label', 'Pause');
             container.classList.add('playing');
 
-            if (!source) {
+            if (!analysisContext) {
               setupAudioContext();
             }
             updateVisualizer();
@@ -1064,7 +1066,7 @@ class SekaiRenderer {
 
       if (total > 0) {
         progressFill.style.width = `${(current / total) * 100}%`;
-        timeDisplay.textContent = `${formatTime(current)} / ${formatTime(total)}`;
+        timeDisplay.textContent = `${this._formatTime(current)} / ${this._formatTime(total)}`;
       }
     };
 

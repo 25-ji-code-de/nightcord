@@ -88,6 +88,7 @@ class UIManager {
       attachmentBtn: document.querySelector("#attachmentBtn"),
       fileUploadMenu: document.querySelector("#fileUploadMenu"),
       imageInput: document.querySelector("#imageInput"),
+      musicInput: document.querySelector("#musicInput"),
       fileInput: document.querySelector("#fileInput"),
       uploadProgress: document.querySelector("#fileUploadProgress"),
       uploadFilename: document.querySelector("#uploadFilename"),
@@ -1166,7 +1167,7 @@ class UIManager {
    * 设置文件上传功能
    */
   setupFileUpload() {
-    const { attachmentBtn, fileUploadMenu, imageInput, fileInput, chatInput } = this.elements;
+    const { attachmentBtn, fileUploadMenu, imageInput, musicInput, fileInput, chatInput } = this.elements;
 
     if (!attachmentBtn || !fileUploadMenu) {
       console.warn('文件上传初始化失败: 未找到必需的元素');
@@ -1197,6 +1198,8 @@ class UIManager {
 
         if (type === 'image') {
           imageInput.click();
+        } else if (type === 'music') {
+          musicInput.click();
         } else if (type === 'file') {
           fileInput.click();
         }
@@ -1256,7 +1259,12 @@ class UIManager {
       if (files.length > 0) {
         const file = files[0];
         // 简单判断类型
-        const type = file.type.startsWith('image/') ? 'image' : 'file';
+        let type = 'file';
+        if (file.type.startsWith('image/')) {
+          type = 'image';
+        } else if (file.type.startsWith('audio/')) {
+          type = 'music';
+        }
         this.handleFileUpload(file, type);
       }
     });
@@ -1269,7 +1277,12 @@ class UIManager {
           if (item.kind === 'file') {
             e.preventDefault();
             const file = item.getAsFile();
-            const type = file.type.startsWith('image/') ? 'image' : 'file';
+            let type = 'file';
+            if (file.type.startsWith('image/')) {
+              type = 'image';
+            } else if (file.type.startsWith('audio/')) {
+              type = 'music';
+            }
             this.handleFileUpload(file, type);
             return; // 只处理第一个文件
           }
@@ -1282,6 +1295,12 @@ class UIManager {
       const file = e.target.files[0];
       if (file) this.handleFileUpload(file, 'image');
       imageInput.value = ''; // 清空以允许重复选择同一文件
+    });
+
+    musicInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) this.handleFileUpload(file, 'music');
+      musicInput.value = '';
     });
 
     fileInput.addEventListener('change', (e) => {
@@ -1349,6 +1368,10 @@ class UIManager {
       if (uploadType === 'image') {
         // 图片上传使用 [img:url] 语法
         fileMsg = `[img:${fileUrl}]`;
+      } else if (uploadType === 'music') {
+        // 音乐上传使用 [music:url|title|artist|duration] 语法
+        const metadata = await this.extractAudioMetadata(file);
+        fileMsg = `[music:${fileUrl}|${metadata.title}|${metadata.artist}|${metadata.duration}]`;
       } else {
         // 文件上传使用 [file:url|filename|size] 语法
         const formattedSize = FileUploadService.formatSize(result.size);
@@ -1394,6 +1417,49 @@ class UIManager {
         chatInput.dispatchEvent(new Event('input', { bubbles: true }));
       }
     }
+  }
+
+  /**
+   * 提取音频文件元数据
+   * @param {File} file 音频文件
+   * @returns {Promise<{title: string, artist: string, duration: string}>}
+   */
+  async extractAudioMetadata(file) {
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      const objectUrl = URL.createObjectURL(file);
+
+      audio.addEventListener('loadedmetadata', () => {
+        // 格式化时长为 MM:SS
+        const duration = audio.duration;
+        const minutes = Math.floor(duration / 60);
+        const seconds = Math.floor(duration % 60).toString().padStart(2, '0');
+        const formattedDuration = `${minutes}:${seconds}`;
+
+        // 从文件名提取标题（移除扩展名）
+        const title = file.name.replace(/\.[^/.]+$/, '');
+
+        URL.revokeObjectURL(objectUrl);
+
+        resolve({
+          title: title,
+          artist: 'Unknown Artist',
+          duration: formattedDuration
+        });
+      });
+
+      audio.addEventListener('error', () => {
+        URL.revokeObjectURL(objectUrl);
+        // 失败时使用默认值
+        resolve({
+          title: file.name.replace(/\.[^/.]+$/, ''),
+          artist: 'Unknown Artist',
+          duration: '0:00'
+        });
+      });
+
+      audio.src = objectUrl;
+    });
   }
 
 

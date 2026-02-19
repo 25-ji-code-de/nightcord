@@ -37,7 +37,9 @@ const AUDIO_VIZ_CONFIG = {
     BG_COLOR_PLAYING: 'rgba(53, 46, 70, 0.25)',
     LINE_COLOR: 'rgba(167, 139, 250, 1)',
     LINE_WIDTH: 1.5,
-    FFT_SIZE: 2048
+    FFT_SIZE: 2048,
+    DRAW_FPS: 60, // Target framerate
+    RMS_SAMPLE_RATE: 4 // Sample every Nth point for RMS
   },
   INDICATOR: {
     ACCENT_COLOR: '#ff5500',
@@ -45,7 +47,8 @@ const AUDIO_VIZ_CONFIG = {
     BASE_OPACITY: 0.6,
     GLOW_BASE: 2,
     GLOW_SCALE: 15,
-    MAX_SCALE: 1.5
+    MAX_SCALE: 1.5,
+    UPDATE_THROTTLE: 16 // Min ms between DOM updates (~60fps)
   }
 };
 
@@ -254,19 +257,22 @@ class SekaiRenderer {
     canvas.height = height * dpr;
     canvas.className = 'sekai-audio-oscilloscope';
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', {
+      alpha: true,
+      desynchronized: true // Performance hint for animations
+    });
     ctx.scale(dpr, dpr);
 
-    // Initial State
-    ctx.fillStyle = AUDIO_VIZ_CONFIG.OSCILLOSCOPE.BG_COLOR_IDLE;
-    ctx.fillRect(0, 0, width, height);
-
-    // Initial gradient line
+    // Cache gradient (created once, reused)
     const gradient = ctx.createLinearGradient(0, 0, width, 0);
     gradient.addColorStop(0, 'rgba(167, 139, 250, 0)');
     gradient.addColorStop(0.1, AUDIO_VIZ_CONFIG.OSCILLOSCOPE.LINE_COLOR);
     gradient.addColorStop(0.9, AUDIO_VIZ_CONFIG.OSCILLOSCOPE.LINE_COLOR);
     gradient.addColorStop(1, 'rgba(167, 139, 250, 0)');
+
+    // Initial State
+    ctx.fillStyle = AUDIO_VIZ_CONFIG.OSCILLOSCOPE.BG_COLOR_IDLE;
+    ctx.fillRect(0, 0, width, height);
 
     ctx.strokeStyle = gradient;
     ctx.lineWidth = AUDIO_VIZ_CONFIG.OSCILLOSCOPE.LINE_WIDTH;
@@ -275,7 +281,7 @@ class SekaiRenderer {
     ctx.lineTo(width, height / 2);
     ctx.stroke();
 
-    return { canvas, ctx, width, height };
+    return { canvas, ctx, width, height, gradient };
   }
 
   /**
@@ -1079,7 +1085,7 @@ class SekaiRenderer {
     const infoRow = document.createElement('div');
     infoRow.className = 'sekai-audio-info-row';
 
-    const { canvas: visualizerCanvas, ctx, width, height } = this._createOscilloscope(200, 20);
+    const { canvas: visualizerCanvas, ctx, width, height, gradient } = this._createOscilloscope(200, 20);
     // Add margin to prevent visual clutter
     visualizerCanvas.style.marginRight = '8px';
 
@@ -1109,41 +1115,49 @@ class SekaiRenderer {
 
     let analysisContext = null;
     let animationId = null;
+    let lastDrawTime = 0;
+    let lastIndicatorUpdate = 0;
 
     const setupAudioContext = () => {
       if (analysisContext) return;
       analysisContext = this._setupAudioAnalysis(audio, AUDIO_VIZ_CONFIG.OSCILLOSCOPE.FFT_SIZE);
     };
 
-    const updateVisualizer = () => {
+    const updateVisualizer = (timestamp = 0) => {
       if (!analysisContext) return;
-      
+
       const { analyser, dataArray } = analysisContext;
-      
-      // Get Time Domain Data (Waveform) - 128 is center
+      const cfg = AUDIO_VIZ_CONFIG.OSCILLOSCOPE;
+      const drawInterval = 1000 / cfg.DRAW_FPS;
+
+      // Throttle drawing to target FPS
+      if (timestamp - lastDrawTime < drawInterval) {
+        if (!audio.paused) {
+          animationId = requestAnimationFrame(updateVisualizer);
+        }
+        return;
+      }
+      lastDrawTime = timestamp;
+
+      // Get Time Domain Data (Waveform)
       analyser.getByteTimeDomainData(dataArray);
 
       // Clear with transparency for "Afterglow" effect
-      ctx.fillStyle = AUDIO_VIZ_CONFIG.OSCILLOSCOPE.BG_COLOR_PLAYING;
+      ctx.fillStyle = cfg.BG_COLOR_PLAYING;
       ctx.fillRect(0, 0, width, height);
 
-      // Create gradient mask
-      const cfg = AUDIO_VIZ_CONFIG.OSCILLOSCOPE;
-      const gradient = ctx.createLinearGradient(0, 0, width, 0);
-      gradient.addColorStop(0, 'rgba(167, 139, 250, 0)');
-      gradient.addColorStop(0.1, cfg.LINE_COLOR);
-      gradient.addColorStop(0.9, cfg.LINE_COLOR);
-      gradient.addColorStop(1, 'rgba(167, 139, 250, 0)');
-
+      // Use cached gradient
       ctx.lineWidth = cfg.LINE_WIDTH;
       ctx.strokeStyle = gradient;
       ctx.beginPath();
 
       const sliceWidth = width / dataArray.length;
       let x = 0;
-      
-      // For RMS calculation
+
+      // RMS calculation with sampling for performance
       let sumSquares = 0;
+      let sampleCount = 0;
+      const sampleRate = cfg.RMS_SAMPLE_RATE;
 
       for(let i = 0; i < dataArray.length; i++) {
         const v = dataArray[i] / 128.0;
@@ -1157,27 +1171,38 @@ class SekaiRenderer {
 
         x += sliceWidth;
 
-        // Calculate RMS
-        const amplitude = (dataArray[i] - 128) / 128;
-        sumSquares += amplitude * amplitude;
+        // Sample every Nth point for RMS
+        if (i % sampleRate === 0) {
+          const amplitude = (dataArray[i] - 128) / 128;
+          sumSquares += amplitude * amplitude;
+          sampleCount++;
+        }
       }
 
       ctx.lineTo(width, height / 2);
       ctx.stroke();
 
-      // RMS-based indicator pulsing
-      const rms = Math.sqrt(sumSquares / dataArray.length);
-      const indicatorCfg = AUDIO_VIZ_CONFIG.INDICATOR;
+      // RMS-based indicator pulsing (throttled DOM updates)
+      if (timestamp - lastIndicatorUpdate > AUDIO_VIZ_CONFIG.INDICATOR.UPDATE_THROTTLE) {
+        const rms = Math.sqrt(sumSquares / sampleCount);
+        const indicatorCfg = AUDIO_VIZ_CONFIG.INDICATOR;
 
-      // Scale for visibility
-      const pulseScale = 1 + (rms * indicatorCfg.RMS_SCALE);
-      const pulseOpacity = indicatorCfg.BASE_OPACITY + (rms * 2);
-      const glowSpread = indicatorCfg.GLOW_BASE + (rms * indicatorCfg.GLOW_SCALE);
+        // Skip update if audio is silent
+        if (rms > 0.005) {
+          const pulseScale = 1 + (rms * indicatorCfg.RMS_SCALE);
+          const pulseOpacity = indicatorCfg.BASE_OPACITY + (rms * 2);
+          const glowSpread = indicatorCfg.GLOW_BASE + (rms * indicatorCfg.GLOW_SCALE);
 
-      // Apply to indicator
-      indicator.style.transform = `scale(${Math.min(indicatorCfg.MAX_SCALE, pulseScale)})`;
-      indicator.style.opacity = Math.min(1, pulseOpacity);
-      indicator.style.boxShadow = `0 0 ${glowSpread}px ${indicatorCfg.ACCENT_COLOR}`;
+          // Batch DOM updates with cssText
+          indicator.style.cssText = `
+            transform: scale(${Math.min(indicatorCfg.MAX_SCALE, pulseScale)});
+            opacity: ${Math.min(1, pulseOpacity)};
+            box-shadow: 0 0 ${glowSpread}px ${indicatorCfg.ACCENT_COLOR};
+          `;
+        }
+
+        lastIndicatorUpdate = timestamp;
+      }
 
       if (!audio.paused) {
         animationId = requestAnimationFrame(updateVisualizer);

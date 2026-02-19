@@ -1462,134 +1462,240 @@ body {
   font-style: italic;
 }
 
-/* --- Audio Player (Custom Geometric) --- */
+/* --- Audio Player (Nightcord Modern - Subtle Depth) --- */
 
 .sekai-audio-player {
+  /* Concept: A specialized DAW track embedded in a modern chat interface.
+     Refined to blend seamlessy with Nightcord's flat-but-deep aesthetic. */
+     
+  --player-bg: #2f273f; /* Slightly lighter than chat bg (#50476a is chat, #3f355b is sidebar) */
+  --player-border: rgba(255, 255, 255, 0.08);
+  --control-hover: rgba(255, 255, 255, 0.05);
+  --primary-accent: #a78bfa;
+  --track-bg: rgba(0, 0, 0, 0.2);
+  
   display: flex;
-  align-items: center;
-  gap: 16px;
-  background: linear-gradient(100deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)); /* Gradient for depth without greyness */
-  padding: 12px 16px;
-  border-radius: 12px;
-  margin: 6px 0;
+  align-items: stretch;
+  gap: 0;
+  background-color: var(--player-bg);
+  
+  /* Modern soft rounding, not too round (toy-like) nor too sharp (brutalism) */
+  border-radius: 8px; 
+  margin: 8px 0;
   width: fit-content;
   min-width: 320px;
-  max-width: 480px;
-  border: 1px solid rgba(255,255,255,0.1);
-  transition: all 0.2s ease;
-  backdrop-filter: blur(4px);
+  max-width: 440px;
+  height: 52px;
+  
+  /* Subtle depth separation from message background */
+  border: 1px solid var(--player-border);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s;
+  user-select: none;
 }
 
 .sekai-audio-player:hover {
-  background: linear-gradient(100deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
-  border-color: rgba(124, 111, 172, 0.6);
+  border-color: rgba(167, 139, 250, 0.3); /* Subtle purple hint */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
 }
 
+.sekai-audio-player.playing {
+  border-color: rgba(167, 139, 250, 0.5);
+  background-color: #352e46; /* Slightly brighter when active */
+}
+
+/* --- Left: Control Area --- */
+
 .sekai-audio-control {
-  background: #ec4899; /* Pink as per design */
+  /* Minimalist Flat-ish Button */
+  width: 52px;
+  height: 100%;
+  border-radius: 8px 0 0 8px;
+  background: transparent;
   border: none;
-  min-width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  color: #fff;
+  border-right: 1px solid rgba(255, 255, 255, 0.05); /* Very subtle divider */
+  
+  color: #bbb;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.1s, background 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.3);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .sekai-audio-control:hover {
-  transform: scale(1.05);
-  background: #f472b6;
+  background: var(--control-hover);
+  color: #fff;
 }
 
 .sekai-audio-control:active {
-  transform: scale(0.95);
+  background: rgba(0, 0, 0, 0.1);
+  transform: translateY(0);
 }
 
-/* 进度条容器 */
-.sekai-audio-progress-container {
+/* Playing state overrides */
+.sekai-audio-player.playing .sekai-audio-control {
+  color: var(--primary-accent);
+}
+
+.sekai-audio-control svg {
+  width: 16px; /* Standard icon size */
+  height: 16px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 0;
+}
+
+/* Loading Spinner */
+.sekai-audio-control.loading::after {
+  width: 16px;
+  height: 16px;
+  border-color: rgba(255,255,255,0.1);
+  border-top-color: var(--primary-accent);
+}
+
+/* --- Right: Information Display --- */
+
+.sekai-audio-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  justify-content: center;
+  padding: 0 14px;
+  position: relative;
+  /* Visual depth: slight inner shadow to suggest a recessed screen/track area */
+  box-shadow: inset 4px 0 8px -4px rgba(0,0,0,0.1); 
+  height: 100%;
+  gap: 0;
 }
 
-/* 音频可视化器 */
+/* Scanline/Grid - Removed for cleaner Nightcord modern look */
+.sekai-audio-content::before {
+  display: none;
+}
+
+/* Info Row */
+.sekai-audio-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 14px;
+  margin-bottom: 6px; /* Spacing between visualizer and timeline */
+}
+
+/* Visualizer */
 .sekai-audio-visualizer {
-  height: 32px;
   display: flex;
   align-items: flex-end;
   gap: 2px;
-  opacity: 0.6;
+  height: 100%;
+  flex: 1;
+  margin-right: 10px;
+  opacity: 0.3; /* Subtle when idle */
   transition: opacity 0.3s;
 }
 
 .sekai-audio-player.playing .sekai-audio-visualizer {
-  opacity: 1;
+  opacity: 0.8;
 }
 
 .sekai-audio-visualizer-bar {
   flex: 1;
-  background: linear-gradient(180deg, #a78bfa, #ec4899);
-  border-radius: 2px 2px 0 0;
+  background: var(--primary-accent);
   min-width: 2px;
-  height: 2px;
-  transition: height 0.05s ease-out;
+  border-radius: 1px 1px 0 0; /* Modern soft top */
+  margin-top: auto;
+  box-shadow: none; /* Removed glow for cleaner look */
+  max-width: 3px;
 }
 
-.sekai-audio-progress-bar {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  cursor: pointer;
+/* Time */
+.sekai-audio-time {
+  font-family: var(--sekai-font-mono, monospace);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5); /* Dim text */
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: right;
+  text-shadow: none;
+  background: transparent;
+}
+
+/* Progress Area - Modern Timeline */
+.sekai-audio-progress-container {
+  height: 12px; /* Touch target size */
+  width: 100%;
   position: relative;
-  overflow: hidden;
-  transition: height 0.2s;
+  cursor: pointer;
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
 }
 
-.sekai-audio-progress-bar:hover {
-  height: 8px;
+.sekai-audio-track {
+  width: 100%;
+  height: 4px; /* Visible track height */
+  background: var(--track-bg);
+  position: relative;
+  border-radius: 2px;
+  overflow: hidden; /* Contain fill */
+  transition: height 0.2s ease;
+}
+
+.sekai-audio-progress-container:hover .sekai-audio-track {
+  height: 6px; /* Interactive feedback */
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.sekai-audio-buffer {
+  position: absolute; /* Add absolute positioning */
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  width: 0%; /* Start at 0 width */
+  transition: width 0.2s; /* Smooth buffer updates */
 }
 
 .sekai-audio-progress-fill {
+  position: absolute; /* Add absolute positioning */
+  left: 0;
+  top: 0;
   height: 100%;
-  background: linear-gradient(90deg, #ec4899, #a78bfa);
-  border-radius: 3px;
-  width: 0%;
-  transition: width 0.1s linear;
-  position: relative;
+  background: var(--primary-accent);
+  box-shadow: none;
+  border-radius: 0 2px 2px 0;
+  width: 0%; /* Start at 0 width */
+  z-index: 1; /* Ensure it's above buffer */
 }
 
-.sekai-audio-progress-fill::after {
-  content: '';
+/* Thumb - Only visible on hover/drag */
+.sekai-audio-thumb {
   position: absolute;
-  right: 0;
   top: 50%;
-  transform: translate(50%, -50%); /* 居中对齐播放头 */
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: #fff;
+  transform: translate(-50%, -50%) scale(0); /* Hidden */
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.sekai-audio-progress-bar:hover .sekai-audio-progress-fill::after {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  pointer-events: none;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 3;
   opacity: 1;
 }
 
-.sekai-audio-time {
-  font-family: var(--sekai-font-mono);
-  font-size: 0.8em;
-  color: var(--sekai-text-dim);
-  min-width: 90px;
-  text-align: right;
-  font-weight: 500;
-  white-space: nowrap;
+.sekai-audio-progress-container:hover .sekai-audio-thumb,
+.sekai-audio-progress-container.dragging .sekai-audio-thumb {
+  transform: translate(-50%, -50%) scale(1); /* Pop in */
 }
 
 /* --- File Card --- */

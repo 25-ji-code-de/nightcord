@@ -473,232 +473,242 @@ class SekaiRenderer {
     const container = document.createElement('div');
     const playerId = 'audio_' + Math.random().toString(36).substr(2, 9);
     container.className = 'sekai-audio-player';
-    
+
     const audio = document.createElement('audio');
     audio.src = url;
     audio.preload = 'metadata';
-    audio.crossOrigin = 'anonymous'; // 允许 Web Audio API 访问
+    audio.crossOrigin = 'anonymous'; 
     audio.id = playerId;
 
-    // Define icons constants for reuse and consistency - Redesigned by Top Tier UI/UX
+    // --- Icons ---
     const ICONS = {
-      PLAY: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
-        <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"></polygon>
-      </svg>`,
-      PAUSE: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
-        <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"></rect>
-        <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"></rect>
-      </svg>`
+      PLAY: `<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
+      PAUSE: `<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>`
     };
 
+    // --- Controls ---
     const playBtn = document.createElement('button');
     playBtn.className = 'sekai-audio-control';
     playBtn.innerHTML = ICONS.PLAY;
     playBtn.setAttribute('aria-label', 'Play');
 
-    // 创建进度条容器
+    // --- Content Wrapper ---
+    const content = document.createElement('div');
+    content.className = 'sekai-audio-content';
+
+    // --- Info Row (Visualizer & Time) ---
+    const infoRow = document.createElement('div');
+    infoRow.className = 'sekai-audio-info-row';
+
+    const visualizer = document.createElement('div');
+    visualizer.className = 'sekai-audio-visualizer';
+    
+    // Create bars for visualizer
+    const barCount = 32;
+    const bars = [];
+    for (let i = 0; i < barCount; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'sekai-audio-visualizer-bar';
+        // Random initial height for aesthetic before play
+        bar.style.height = (10 + Math.random() * 20) + '%'; 
+        visualizer.appendChild(bar);
+        bars.push(bar);
+    }
+
+    const timeDisplay = document.createElement('div');
+    timeDisplay.className = 'sekai-audio-time';
+    timeDisplay.textContent = '0:00 / ' + (duration || '-:--');
+
+    infoRow.appendChild(visualizer);
+    infoRow.appendChild(timeDisplay);
+
+    // --- Progress Bar (Interactive) ---
     const progressContainer = document.createElement('div');
     progressContainer.className = 'sekai-audio-progress-container';
 
-    // Web Audio API 可视化器
-    const visualizer = document.createElement('div');
-    visualizer.className = 'sekai-audio-visualizer';
+    // Track background
+    const track = document.createElement('div');
+    track.className = 'sekai-audio-track';
+    
+    // Fill
+    const progressFill = document.createElement('div');
+    progressFill.className = 'sekai-audio-progress-fill';
+    
+    // Buffer
+    const bufferBar = document.createElement('div');
+    bufferBar.className = 'sekai-audio-buffer';
 
-    const barCount = 40;
-    const bars = [];
-    for (let i = 0; i < barCount; i++) {
-      const bar = document.createElement('div');
-      bar.className = 'sekai-audio-visualizer-bar';
-      visualizer.appendChild(bar);
-      bars.push(bar);
-    }
+    // Thumb
+    const thumb = document.createElement('div');
+    thumb.className = 'sekai-audio-thumb';
 
-    // Web Audio API 设置（使用共享的全局 AudioContext）
-    let analyser = null;
-    let source = null;
-    let dataArray = null;
-    let animationId = null;
+    // Assemble structure
+    track.appendChild(bufferBar);
+    track.appendChild(progressFill);
+    progressContainer.appendChild(track);
+    progressContainer.appendChild(thumb);
 
-    const setupAudioContext = () => {
-      if (source) return; // 已经设置过
+    content.appendChild(infoRow);
+    content.appendChild(progressContainer);
 
-      const audioContext = this._getAudioContext();
-      if (!audioContext) return;
+    container.appendChild(playBtn);
+    container.appendChild(content);
+    container.appendChild(audio);
 
-      try {
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 128;
-        analyser.smoothingTimeConstant = 0.8;
+    // --- Logic ---
+    let isDragging = false;
+    let analyser, source, dataArray, animationId;
 
-        source = audioContext.createMediaElementSource(audio);
-        source.connect(analyser);
-        analyser.connect(audioContext.destination);
-
-        const bufferLength = analyser.frequencyBinCount;
-        dataArray = new Uint8Array(bufferLength);
-      } catch (e) {
-        console.warn('Failed to setup audio analyzer:', e);
-      }
+    const formatTime = (seconds) => {
+        if (!isFinite(seconds)) return '-:--';
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
     };
 
     const updateVisualizer = () => {
-      if (!analyser || !dataArray) return;
-
-      analyser.getByteFrequencyData(dataArray);
-
-      // 将频谱数据映射到条形
-      const step = Math.floor(dataArray.length / barCount);
-      for (let i = 0; i < barCount; i++) {
-        const index = i * step;
-        const value = dataArray[index] || 0;
-        const height = Math.max(2, (value / 255) * 100);
-        bars[i].style.height = `${height}%`;
-      }
-
-      if (!audio.paused) {
-        animationId = requestAnimationFrame(updateVisualizer);
-      }
+        if (!analyser || !dataArray) return;
+        analyser.getByteFrequencyData(dataArray);
+        
+        const step = Math.floor(dataArray.length / barCount);
+        for (let i = 0; i < barCount; i++) {
+            let sum = 0;
+            for(let j=0; j<step; j++) sum += dataArray[i*step + j];
+            const val = sum / step;
+            const h = Math.max(4, (val / 255) * 100);
+            bars[i].style.height = h + '%';
+        }
+        if (!audio.paused) animationId = requestAnimationFrame(updateVisualizer);
     };
 
-    const progressBar = document.createElement('div');
-    progressBar.className = 'sekai-audio-progress-bar';
-
-    const progressFill = document.createElement('div');
-    progressFill.className = 'sekai-audio-progress-fill';
-    progressBar.appendChild(progressFill);
-
-    progressContainer.appendChild(visualizer);
-    progressContainer.appendChild(progressBar);
-
-    // 时间显示：当前时间 / 总时长
-    const timeDisplay = document.createElement('div');
-    timeDisplay.className = 'sekai-audio-time';
-    timeDisplay.textContent = '0:00 / ' + (duration || '0:00');
-
-    // 格式化时间
-    const formatTime = (seconds) => {
-      const mins = Math.floor(seconds / 60);
-      const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
-      return `${mins}:${secs}`;
-    };
-
-    const updatePlayState = (isPlaying) => {
-        if (isPlaying) {
-            playBtn.innerHTML = ICONS.PAUSE;
-            playBtn.setAttribute('aria-label', 'Pause');
-            container.classList.add('playing');
-
-            // 启动可视化
-            if (!source) {
-              setupAudioContext();
-            }
-            updateVisualizer();
-        } else {
-            playBtn.innerHTML = ICONS.PLAY;
-            playBtn.setAttribute('aria-label', 'Play');
-            container.classList.remove('playing');
-
-            // 停止可视化动画
-            if (animationId) {
-              cancelAnimationFrame(animationId);
-              animationId = null;
-            }
+    const setupAudio = () => {
+        const ctx = this._getAudioContext();
+        if (!ctx) return;
+        
+        // Ensure source only created once per element
+        if (!audio._sourceNode) {
+             try {
+                 analyser = ctx.createAnalyser();
+                 analyser.fftSize = 128;
+                 source = ctx.createMediaElementSource(audio);
+                 source.connect(analyser);
+                 analyser.connect(ctx.destination);
+                 audio._sourceNode = source; // Mark as created
+                 dataArray = new Uint8Array(analyser.frequencyBinCount);
+             } catch(e) { console.warn(e); }
         }
     };
 
+    // Play State
     playBtn.onclick = () => {
         if (audio.paused) {
-            audio.play();
-            updatePlayState(true);
+            setupAudio(); // Ensure context ready
+            const ctx = this._getAudioContext();
+            if (ctx && ctx.state === 'suspended') ctx.resume();
+            
+            playBtn.classList.add('loading');
+            audio.play()
+                .then(() => playBtn.classList.remove('loading'))
+                .catch(e => {
+                    console.error("Play failed", e);
+                    playBtn.classList.remove('loading');
+                });
         } else {
             audio.pause();
-            updatePlayState(false);
         }
     };
 
-    // 更新进度条和时间显示
-    audio.ontimeupdate = () => {
-      const current = audio.currentTime;
-      const total = audio.duration || 0;
-
-      if (total > 0) {
-        const percent = (current / total) * 100;
-        progressFill.style.width = `${percent}%`;
-        timeDisplay.textContent = `${formatTime(current)} / ${formatTime(total)}`;
-      } else {
-        timeDisplay.textContent = `${formatTime(current)} / ${duration || '0:00'}`;
-      }
+    audio.onplay = () => {
+        playBtn.innerHTML = ICONS.PAUSE;
+        container.classList.add('playing');
+        updateVisualizer();
     };
 
-    // 加载元数据后更新总时长
-    audio.onloadedmetadata = () => {
-      if (audio.duration) {
-        timeDisplay.textContent = `0:00 / ${formatTime(audio.duration)}`;
-      }
+    audio.onpause = () => {
+        playBtn.innerHTML = ICONS.PLAY;
+        container.classList.remove('playing');
+        if (animationId) cancelAnimationFrame(animationId);
     };
-
-    // 进度条点击跳转
-    let isDragging = false;
-
-    const seek = (e) => {
-      const rect = progressBar.getBoundingClientRect();
-      const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      if (audio.duration) {
-        audio.currentTime = percent * audio.duration;
-      }
-    };
-
-    progressBar.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      seek(e);
-    });
-
-    document.addEventListener('mousemove', (e) => {
-      if (isDragging) {
-        seek(e);
-      }
-    });
-
-    document.addEventListener('mouseup', () => {
-      isDragging = false;
-    });
-
-    progressBar.addEventListener('click', seek);
-
-    // 触摸设备支持
-    progressBar.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      const rect = progressBar.getBoundingClientRect();
-      const percent = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
-      if (audio.duration) {
-        audio.currentTime = percent * audio.duration;
-      }
-    });
 
     audio.onended = () => {
-        updatePlayState(false);
-        progressFill.style.width = '0%';
         audio.currentTime = 0;
-
-        // 重置可视化条形
-        bars.forEach(bar => {
-          bar.style.height = '2px';
-        });
+        // reset UI
+        progressFill.style.width = '0%';
+        thumb.style.left = '0%';
     };
 
-    // 暂停时也停止可视化
-    audio.onpause = () => {
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
-      }
+    // Buffer Progress
+    audio.onprogress = () => {
+        if (audio.duration && audio.buffered.length > 0) {
+            const bufferedEnd = audio.buffered.end(audio.buffered.length - 1);
+            const duration = audio.duration;
+            bufferBar.style.width = ((bufferedEnd / duration) * 100) + '%';
+        }
     };
 
-    container.appendChild(audio);
-    container.appendChild(playBtn);
-    container.appendChild(progressContainer);
-    container.appendChild(timeDisplay);
+    // Time Update
+    audio.ontimeupdate = () => {
+        if (!isDragging) {
+            const percent = (audio.currentTime / audio.duration) * 100 || 0;
+            progressFill.style.width = percent + '%';
+            thumb.style.left = percent + '%';
+            
+            // Also update buffer if playing
+            if (audio.buffered.length > 0) {
+                 const bufferedEnd = audio.buffered.end(audio.buffered.length - 1);
+                 bufferBar.style.width = ((bufferedEnd / audio.duration) * 100) + '%';
+            }
+            
+            timeDisplay.textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
+        }
+    };
+
+    audio.ondurationchange = () => {
+         timeDisplay.textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
+    };
+
+    // --- Dragging Logic ---
+    const updateDragPosition = (clientX) => {
+        const rect = progressContainer.getBoundingClientRect();
+        const p = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        
+        progressFill.style.width = (p * 100) + '%';
+        thumb.style.left = (p * 100) + '%';
+        
+        // Show temp time during drag
+        if (isFinite(audio.duration)) {
+             timeDisplay.textContent = `${formatTime(p * audio.duration)} / ${formatTime(audio.duration)}`;
+        }
+        return p;
+    };
+
+    progressContainer.onmousedown = (e) => {
+        isDragging = true;
+        progressContainer.classList.add('dragging');
+
+        // 只更新视觉，不立即跳转播放位置
+        const p = updateDragPosition(e.clientX);
+
+        // Global listeners for drag and drop
+        const moveHandler = (ev) => {
+            ev.preventDefault();
+            updateDragPosition(ev.clientX);
+        };
+
+        const upHandler = (ev) => {
+            const finalP = updateDragPosition(ev.clientX); // Final update
+            // 只在 mouseup 时设置一次播放位置
+            if (isFinite(audio.duration)) audio.currentTime = finalP * audio.duration;
+
+            isDragging = false;
+            progressContainer.classList.remove('dragging');
+            document.removeEventListener('mousemove', moveHandler);
+            document.removeEventListener('mouseup', upHandler);
+        };
+
+        document.addEventListener('mousemove', moveHandler);
+        document.addEventListener('mouseup', upHandler);
+    };
 
     return container;
   }
@@ -856,8 +866,6 @@ class SekaiRenderer {
   }
 
   getFileIcon(ext) {
-    // Redesigned by Top Tier UI/UX: Custom designed icons for better recognition
-    
     // Audio Icon: A music note with sound waves
     const audioIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
         <path d="M9 18V5l12-2v13"></path>

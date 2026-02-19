@@ -342,6 +342,7 @@ class SekaiRenderer {
       case 'img': return this.renderImage(data, metadata[0]);
       case 'file': return this.renderFile(data, metadata[0], metadata[1]);
       case 'audio': return this.renderAudio(data, metadata[0]);
+      case 'music': return this.renderMusic(data, metadata[0], metadata[1], metadata[2]);
       case 'link': return this.renderLinkCard(data, metadata[0], metadata[1]);
       case 'color': return this.renderColor(data, metadata[0], false);
       case 'truecolor': return this.renderColor(data, metadata[0], true);
@@ -469,7 +470,7 @@ class SekaiRenderer {
     return card;
   }
 
-  renderAudio(url, duration) {
+  renderMusic(url, title, artist, duration) {
     const container = document.createElement('div');
     const playerId = 'audio_' + Math.random().toString(36).substr(2, 9);
     container.className = 'sekai-audio-player';
@@ -482,257 +483,648 @@ class SekaiRenderer {
 
     // --- Icons ---
     const ICONS = {
-      PLAY: `<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
-      PAUSE: `<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>`
+      PLAY: `<svg viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor"></polygon></svg>`,
+      PAUSE: `<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"></rect><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"></rect></svg>`,
+      STOP: `<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor"></rect></svg>`,
+      RW: `<svg viewBox="0 0 24 24"><polygon points="11 19 2 12 11 5 11 19" fill="currentColor"></polygon><polygon points="22 19 13 12 22 5 22 19" fill="currentColor"></polygon></svg>`,
+      FF: `<svg viewBox="0 0 24 24"><polygon points="13 19 22 12 13 5 13 19" fill="currentColor"></polygon><polygon points="2 19 11 12 2 5 2 19" fill="currentColor"></polygon></svg>`
     };
 
-    // --- Controls ---
+    // --- Container Structure (Hybrid: Walkman x DAW x Console) ---
+    // [ [Fader (Vol)] ] - Left Module (Console Style)
+    // [ [Screen Window (Waveform + Tape + Time)] ] - Center Module (DAW + Reel)
+    // [ [Transport Keys (Mechanical)] ] - Right Module (Walkman Style)
+    
+    // 1. Console Module (Vertical Volume Fader)
+    const auxModule = document.createElement('div');
+    auxModule.className = 'sekai-console-module';
+    
+    // Fader Scale
+    const faderScale = document.createElement('div');
+    faderScale.className = 'sekai-fader-scale';
+    for(let i=0; i<5; i++) {
+       const tick = document.createElement('div');
+       tick.className = 'sekai-fader-tick' + (i%2===0 ? ' major' : '');
+       faderScale.appendChild(tick);
+    }
+    auxModule.appendChild(faderScale);
+
+    const faderTrack = document.createElement('div');
+    faderTrack.className = 'sekai-fader-track';
+    
+    const faderCap = document.createElement('div');
+    faderCap.className = 'sekai-fader-cap';
+    faderCap.title = 'Volume';
+    faderCap.style.top = '20%'; // Default 80% volume
+
+    faderTrack.appendChild(faderCap);
+    auxModule.appendChild(faderTrack);
+
+    // 2. Main Screen Module (DAW + Tape Hybrid)
+    const content = document.createElement('div');
+    content.className = 'sekai-audio-content';
+    
+    // Top Row: Meta Info & Status LEDs
+    const metaRow = document.createElement('div');
+    metaRow.className = 'sekai-screen-meta';
+    
+    const statusBox = document.createElement('div');
+    statusBox.className = 'sekai-status-indicator';
+    statusBox.innerHTML = `
+        <div class="sekai-led"></div>
+        <span class="sekai-status-text">STEREO</span>
+    `;
+
+    const timeDisplay = document.createElement('div');
+    timeDisplay.className = 'sekai-audio-time';
+    timeDisplay.textContent = '0:00 / ' + (duration || '-:--');
+    
+    metaRow.appendChild(statusBox);
+    metaRow.appendChild(timeDisplay);
+
+    // Center: Visualizer Area (Reels + Bars)
+    const vizArea = document.createElement('div');
+    vizArea.className = 'sekai-viz-area';
+
+    // Tape Mechanism (Background)
+    const tapeMech = document.createElement('div');
+    tapeMech.className = 'sekai-tape-mechanism';
+    tapeMech.innerHTML = `<div class="sekai-reel"></div><div class="sekai-reel"></div>`;
+    vizArea.appendChild(tapeMech);
+
+    // Waveform Bars (Foreground)
+    const visualizer = document.createElement('div');
+    visualizer.className = 'sekai-audio-visualizer-bars';
+    // Create bars
+    const barCount = 32;
+    const bars = [];
+    for (let i = 0; i < barCount; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'sekai-viz-bar';
+        // Randomize initial height for "static" look
+        bar.style.transform = `scaleY(${0.1 + Math.random() * 0.2})`;
+        visualizer.appendChild(bar);
+        bars.push(bar);
+    }
+    vizArea.appendChild(visualizer);
+
+    // Bottom: Scrubber
+    const scrubber = document.createElement('div');
+    scrubber.className = 'sekai-tape-scrubber';
+
+    // Buffered progress (background)
+    const bufferedFill = document.createElement('div');
+    bufferedFill.className = 'sekai-scrub-buffered';
+
+    const progressFill = document.createElement('div');
+    progressFill.className = 'sekai-scrub-progress';
+
+    const scrubTime = document.createElement('div');
+    scrubTime.className = 'sekai-scrub-time';
+    scrubTime.textContent = ''; // Only show on hover?
+
+    scrubber.appendChild(bufferedFill);
+    scrubber.appendChild(progressFill);
+    scrubber.appendChild(scrubTime);
+    
+    content.appendChild(metaRow);
+    content.appendChild(vizArea);
+    content.appendChild(scrubber);
+
+    // 3. Transport Control Module (Walkman Mechanical Keys)
+    const transportModule = document.createElement('div');
+    transportModule.className = 'sekai-walkman-transport';
+
+    // Helper for buttons
+    const createBtn = (iconSvg, label) => {
+        const btn = document.createElement('button');
+        btn.className = 'sekai-transport-btn';
+        btn.innerHTML = iconSvg;
+        btn.setAttribute('aria-label', label);
+        return btn;
+    };
+
+    const stopBtn = createBtn(ICONS.STOP, 'Stop');
+    const playBtn = createBtn(ICONS.PLAY, 'Play');
+    // Implement Seek -5s / +10s (Podcast Style)
+    const rwBtn = createBtn(ICONS.RW, 'Rewind 5s');
+    const ffBtn = createBtn(ICONS.FF, 'Fast Forward 10s');
+    
+    // Transport Layout: Play (Big), Stop, RW, FF
+    transportModule.appendChild(playBtn);
+    transportModule.appendChild(stopBtn);
+    transportModule.appendChild(rwBtn);
+    transportModule.appendChild(ffBtn);
+
+    // Assemble
+    container.appendChild(auxModule);
+    container.appendChild(content);
+    container.appendChild(transportModule);
+    container.appendChild(audio);
+
+
+    // --- Logic ---
+    let isDragging = false;
+    let isFaderDragging = false;
+    let animationId;
+
+    // Audio Analysis Setup
+    let analyser = null;
+    let dataArray = null;
+    let audioSource = null;
+
+    const setupAudioAnalysis = () => {
+        const ctx = this._getAudioContext();
+        if (!ctx || audioSource) return; // Already set up or context unavailable
+
+        try {
+            // Create source node from audio element (can only be created once)
+            audioSource = ctx.createMediaElementSource(audio);
+
+            // Create analyser
+            analyser = ctx.createAnalyser();
+            analyser.fftSize = 64; // 32 frequency bins (bars)
+            analyser.smoothingTimeConstant = 0.8; // Smooth animation
+
+            // Connect: source -> analyser -> destination (speakers)
+            audioSource.connect(analyser);
+            analyser.connect(ctx.destination);
+
+            // Prepare data array
+            const bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+        } catch (e) {
+            console.warn('Failed to setup audio analysis:', e);
+            analyser = null;
+        }
+    };
+    
+    // Tape/Progress Update
+    const updateTape = (progress) => {
+        // progress: 0 to 1
+        const pct = progress * 100;
+        progressFill.style.width = `${pct}%`;
+
+        // Update buffered progress
+        if (audio.buffered.length > 0) {
+            const bufferedEnd = audio.buffered.end(audio.buffered.length - 1);
+            const bufferedPct = (bufferedEnd / audio.duration) * 100;
+            bufferedFill.style.width = `${bufferedPct}%`;
+
+            // Hide buffered bar if fully loaded
+            if (bufferedEnd >= audio.duration - 0.1) { // Small tolerance for floating point
+                bufferedFill.style.opacity = '0';
+            } else {
+                bufferedFill.style.opacity = '1';
+            }
+        }
+
+        // Update Time Display with actual duration
+        if (audio.duration && isFinite(audio.duration)) {
+             const current = Math.floor(audio.currentTime);
+             const currentM = Math.floor(current / 60);
+             const currentS = current % 60;
+
+             const total = Math.floor(audio.duration);
+             const totalM = Math.floor(total / 60);
+             const totalS = total % 60;
+
+             timeDisplay.textContent = `${currentM}:${currentS.toString().padStart(2,'0')} / ${totalM}:${totalS.toString().padStart(2,'0')}`;
+        }
+    };
+
+    const togglePlay = () => {
+      if (audio.paused) {
+        // Setup audio analysis on first play
+        if (!audioSource) {
+            setupAudioAnalysis();
+        }
+
+        audio.play().then(() => {
+            playBtn.innerHTML = ICONS.PAUSE;
+            playBtn.classList.add('active'); // Physical latch
+            container.classList.add('playing');
+            statusBox.querySelector('.sekai-led').classList.add('active'); // LED On
+
+            // Start Viz Animation
+            animationId = requestAnimationFrame(animateViz);
+        }).catch(err => {
+            console.error("Audio playback failed:", err);
+            playBtn.classList.remove('active');
+        });
+      } else {
+        audio.pause();
+        playBtn.innerHTML = ICONS.PLAY;
+        playBtn.classList.remove('active');
+        container.classList.remove('playing');
+        statusBox.querySelector('.sekai-led').classList.remove('active'); // LED Off
+        cancelAnimationFrame(animationId);
+      }
+    };
+
+    const animateViz = () => {
+        if (audio.paused) return;
+
+        // Real audio visualization using Web Audio API
+        if (analyser && dataArray) {
+            analyser.getByteFrequencyData(dataArray);
+
+            // Map frequency data to bars (32 bars for 32 frequency bins)
+            bars.forEach((bar, index) => {
+                if (index < dataArray.length) {
+                    // Normalize to 0-1 range
+                    const value = dataArray[index] / 255;
+                    // Add minimum height for visual consistency
+                    const height = 0.1 + value * 0.9;
+                    bar.style.transform = `scaleY(${height})`;
+                } else {
+                    bar.style.transform = `scaleY(0.1)`;
+                }
+            });
+        } else {
+            // Fallback: Fake visualization if analysis failed
+            bars.forEach(bar => {
+                const h = 0.1 + Math.random() * 0.8;
+                bar.style.transform = `scaleY(${h})`;
+            });
+        }
+
+        animationId = requestAnimationFrame(animateViz);
+    }
+
+    playBtn.onclick = (e) => {
+        e.stopPropagation();
+        togglePlay();
+    };
+    
+    stopBtn.onclick = (e) => {
+        e.stopPropagation();
+        audio.pause();
+        audio.currentTime = 0;
+        playBtn.innerHTML = ICONS.PLAY;
+        playBtn.classList.remove('active');
+        container.classList.remove('playing');
+        statusBox.querySelector('.sekai-led').classList.remove('active');
+        updateTape(0);
+        // Reset Viz
+        bars.forEach(b => b.style.transform = `scaleY(0.1)`);
+    };
+
+    // Seek Logic
+    const seekRelative = (seconds) => {
+        if (!audio.duration) return;
+        const newTime = Math.max(0, Math.min(audio.duration, audio.currentTime + seconds));
+        audio.currentTime = newTime;
+        updateTape(newTime / audio.duration);
+    };
+
+    rwBtn.onclick = (e) => {
+        e.stopPropagation();
+        seekRelative(-5);
+        // Visual feedback
+        rwBtn.classList.add('active');
+        setTimeout(() => rwBtn.classList.remove('active'), 150);
+    };
+
+    ffBtn.onclick = (e) => {
+        e.stopPropagation();
+        seekRelative(10);
+        // Visual feedback
+        ffBtn.classList.add('active');
+        setTimeout(() => ffBtn.classList.remove('active'), 150);
+    };
+
+    // Scrubber Seeking (Click and Drag with Preview)
+    let previewPosition = 0;
+
+    const handleScrubPreview = (e) => {
+        e.stopPropagation();
+        if (!audio.duration) return;
+        const rect = scrubber.getBoundingClientRect();
+        const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+
+        // Store preview position
+        previewPosition = pos;
+
+        // Only update visual progress, not actual audio time
+        const pct = pos * 100;
+        progressFill.style.width = `${pct}%`;
+
+        // Update time display to show preview time
+        const previewTime = pos * audio.duration;
+        const currentM = Math.floor(previewTime / 60);
+        const currentS = Math.floor(previewTime % 60);
+        const totalM = Math.floor(audio.duration / 60);
+        const totalS = Math.floor(audio.duration % 60);
+        timeDisplay.textContent = `${currentM}:${currentS.toString().padStart(2,'0')} / ${totalM}:${totalS.toString().padStart(2,'0')}`;
+    };
+
+    scrubber.onmousedown = (e) => {
+        isDragging = true;
+        handleScrubPreview(e);
+
+        const onMouseMove = (moveEvent) => {
+            if (!isDragging) return;
+            handleScrubPreview(moveEvent);
+        };
+
+        const onMouseUp = () => {
+            isDragging = false;
+
+            // On mouse up, actually seek to the position
+            if (audio.duration) {
+                audio.currentTime = previewPosition * audio.duration;
+            }
+
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    };
+
+    // Fader Interaction
+    // Allow clicking on track to jump
+    faderTrack.onmousedown = (e) => {
+        if(e.target === faderCap || faderCap.contains(e.target)) return;
+        const rect = faderTrack.getBoundingClientRect();
+        let y = (e.clientY - rect.top) / rect.height;
+        y = Math.max(0, Math.min(1, y));
+        faderCap.style.top = `${y * 100}%`;
+        audio.volume = 1 - y;
+    };
+
+    faderCap.onmousedown = (e) => {
+        isFaderDragging = true;
+        e.preventDefault(); 
+        e.stopPropagation(); 
+        
+        const startY = e.clientY;
+        const rect = faderTrack.getBoundingClientRect(); // Track dimensions
+        
+        // Calculate initial ratio based on current visual position
+        // Top style is percentage string like "20%"
+        let currentTopPct = parseFloat(faderCap.style.top);
+        if (isNaN(currentTopPct)) currentTopPct = 0;
+        const currentYRatio = currentTopPct / 100;
+        
+        const onMove = (moveEvent) => {
+            const dy = moveEvent.clientY - startY; 
+            const dRatio = dy / rect.height; 
+            
+            let newRatio = currentYRatio + dRatio;
+            newRatio = Math.max(0, Math.min(1, newRatio));
+            
+            faderCap.style.top = `${newRatio * 100}%`;
+            audio.volume = 1 - newRatio;
+        };
+        
+        const onUp = () => {
+             isFaderDragging = false;
+             document.removeEventListener('mousemove', onMove);
+             document.removeEventListener('mouseup', onUp);
+        };
+        
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+
+    audio.ontimeupdate = () => {
+       if (isDragging) return;
+       if (audio.duration) {
+           updateTape(audio.currentTime / audio.duration);
+       }
+    };
+    
+    audio.onended = () => {
+        playBtn.innerHTML = ICONS.PLAY; 
+        playBtn.classList.remove('active');
+        container.classList.remove('playing');
+        statusBox.querySelector('.sekai-led').classList.remove('active');
+        updateTape(1);
+        cancelAnimationFrame(animationId);
+    };
+
+    return container;
+  }
+
+  renderAudio(url, duration) {
+    const container = document.createElement('div');
+    const playerId = 'audio_' + Math.random().toString(36).substr(2, 9);
+    container.className = 'sekai-audio-player-simple';
+
+    const audio = document.createElement('audio');
+    audio.src = url;
+    audio.preload = 'metadata';
+    audio.crossOrigin = 'anonymous';
+    audio.id = playerId;
+
+    const ICONS = {
+      PLAY: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+        <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"></polygon>
+      </svg>`,
+      PAUSE: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true">
+        <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"></rect>
+        <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"></rect>
+      </svg>`
+    };
+
     const playBtn = document.createElement('button');
     playBtn.className = 'sekai-audio-control';
     playBtn.innerHTML = ICONS.PLAY;
     playBtn.setAttribute('aria-label', 'Play');
 
-    // --- Content Wrapper ---
-    const content = document.createElement('div');
-    content.className = 'sekai-audio-content';
+    const contentArea = document.createElement('div');
+    contentArea.className = 'sekai-audio-content-simple';
 
-    // --- Info Row (Visualizer & Time) ---
     const infoRow = document.createElement('div');
     infoRow.className = 'sekai-audio-info-row';
 
     const visualizer = document.createElement('div');
     visualizer.className = 'sekai-audio-visualizer';
-    
-    // Create bars for visualizer
-    const barCount = 32;
+
+    const barCount = 40;
     const bars = [];
     for (let i = 0; i < barCount; i++) {
-        const bar = document.createElement('div');
-        bar.className = 'sekai-audio-visualizer-bar';
-        visualizer.appendChild(bar);
-        bars.push(bar);
+      const bar = document.createElement('div');
+      bar.className = 'sekai-audio-visualizer-bar';
+      visualizer.appendChild(bar);
+      bars.push(bar);
     }
 
     const timeDisplay = document.createElement('div');
     timeDisplay.className = 'sekai-audio-time';
-    timeDisplay.textContent = '0:00 / ' + (duration || '-:--');
+    timeDisplay.textContent = '0:00 / ' + (duration || '0:00');
 
     infoRow.appendChild(visualizer);
     infoRow.appendChild(timeDisplay);
 
-    // --- Progress Bar (Interactive) ---
     const progressContainer = document.createElement('div');
     progressContainer.className = 'sekai-audio-progress-container';
 
-    // Track background
-    const track = document.createElement('div');
-    track.className = 'sekai-audio-track';
-    
-    // Fill
+    const progressBar = document.createElement('div');
+    progressBar.className = 'sekai-audio-progress-bar';
+
     const progressFill = document.createElement('div');
     progressFill.className = 'sekai-audio-progress-fill';
-    
-    // Buffer
-    const bufferBar = document.createElement('div');
-    bufferBar.className = 'sekai-audio-buffer';
+    progressBar.appendChild(progressFill);
 
-    // Thumb
-    const thumb = document.createElement('div');
-    thumb.className = 'sekai-audio-thumb';
+    progressContainer.appendChild(progressBar);
 
-    // Assemble structure
-    track.appendChild(bufferBar);
-    track.appendChild(progressFill);
-    progressContainer.appendChild(track);
-    progressContainer.appendChild(thumb);
+    contentArea.appendChild(infoRow);
+    contentArea.appendChild(progressContainer);
 
-    content.appendChild(infoRow);
-    content.appendChild(progressContainer);
+    let analyser = null;
+    let source = null;
+    let dataArray = null;
+    let animationId = null;
 
-    container.appendChild(playBtn);
-    container.appendChild(content);
-    container.appendChild(audio);
+    const setupAudioContext = () => {
+      if (source) return;
 
-    // --- Logic ---
-    let isDragging = false;
-    let analyser, source, dataArray, animationId;
-    let lastVisualizerUpdate = 0;
-    const VISUALIZER_FPS = 30; // 限制为 30fps 而非 60fps
-    const VISUALIZER_INTERVAL = 1000 / VISUALIZER_FPS;
+      const audioContext = this._getAudioContext();
+      if (!audioContext) return;
+
+      try {
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 128;
+        analyser.smoothingTimeConstant = 0.8;
+
+        source = audioContext.createMediaElementSource(audio);
+        source.connect(analyser);
+        analyser.connect(audioContext.destination);
+
+        const bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+      } catch (e) {
+        console.warn('Failed to setup audio analyzer:', e);
+      }
+    };
+
+    const updateVisualizer = () => {
+      if (!analyser || !dataArray) return;
+
+      analyser.getByteFrequencyData(dataArray);
+
+      const step = Math.floor(dataArray.length / barCount);
+      for (let i = 0; i < barCount; i++) {
+        const index = i * step;
+        const value = dataArray[index] || 0;
+        const height = Math.max(2, (value / 255) * 100);
+        bars[i].style.height = `${height}%`;
+      }
+
+      if (!audio.paused) {
+        animationId = requestAnimationFrame(updateVisualizer);
+      }
+    };
 
     const formatTime = (seconds) => {
-        if (!isFinite(seconds)) return '-:--';
-        const m = Math.floor(seconds / 60);
-        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
-        return `${m}:${s}`;
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+      return `${mins}:${secs}`;
     };
 
-    const updateVisualizer = (timestamp) => {
-        if (!analyser || !dataArray) return;
+    const updatePlayState = (isPlaying) => {
+        if (isPlaying) {
+            playBtn.innerHTML = ICONS.PAUSE;
+            playBtn.setAttribute('aria-label', 'Pause');
+            container.classList.add('playing');
 
-        // 帧率限制：只在距离上次更新超过指定间隔时才更新
-        if (timestamp - lastVisualizerUpdate < VISUALIZER_INTERVAL) {
-            if (!audio.paused) animationId = requestAnimationFrame(updateVisualizer);
-            return;
-        }
-        lastVisualizerUpdate = timestamp;
-
-        // 可见性检测：如果播放器不在视口内，降低更新频率
-        if (!container.offsetParent) {
-            if (!audio.paused) {
-                setTimeout(() => {
-                    animationId = requestAnimationFrame(updateVisualizer);
-                }, 500); // 不可见时降低到 2fps
+            if (!source) {
+              setupAudioContext();
             }
-            return;
-        }
+            updateVisualizer();
+        } else {
+            playBtn.innerHTML = ICONS.PLAY;
+            playBtn.setAttribute('aria-label', 'Play');
+            container.classList.remove('playing');
 
-        analyser.getByteFrequencyData(dataArray);
-
-        const step = Math.floor(dataArray.length / barCount);
-        for (let i = 0; i < barCount; i++) {
-            let sum = 0;
-            const start = i * step;
-            const end = Math.min(start + step, dataArray.length);
-            for(let j = start; j < end; j++) sum += dataArray[j];
-            const val = sum / step;
-            const h = Math.max(4, (val / 255) * 100);
-
-            // 使用 transform 代替 height（GPU 加速）
-            const scaleY = h / 100;
-            bars[i].style.transform = `scaleY(${scaleY})`;
-        }
-        if (!audio.paused) animationId = requestAnimationFrame(updateVisualizer);
-    };
-
-    const setupAudio = () => {
-        const ctx = this._getAudioContext();
-        if (!ctx) return;
-        
-        // Ensure source only created once per element
-        if (!audio._sourceNode) {
-             try {
-                 analyser = ctx.createAnalyser();
-                 analyser.fftSize = 128;
-                 source = ctx.createMediaElementSource(audio);
-                 source.connect(analyser);
-                 analyser.connect(ctx.destination);
-                 audio._sourceNode = source; // Mark as created
-                 dataArray = new Uint8Array(analyser.frequencyBinCount);
-             } catch(e) { console.warn(e); }
+            if (animationId) {
+              cancelAnimationFrame(animationId);
+              animationId = null;
+            }
         }
     };
 
-    // Play State
     playBtn.onclick = () => {
         if (audio.paused) {
-            setupAudio(); // Ensure context ready
-            const ctx = this._getAudioContext();
-            if (ctx && ctx.state === 'suspended') ctx.resume();
-            
-            playBtn.classList.add('loading');
-            audio.play()
-                .then(() => playBtn.classList.remove('loading'))
-                .catch(e => {
-                    console.error("Play failed", e);
-                    playBtn.classList.remove('loading');
-                });
+            audio.play();
+            updatePlayState(true);
         } else {
             audio.pause();
+            updatePlayState(false);
         }
     };
 
-    audio.onplay = () => {
-        playBtn.innerHTML = ICONS.PAUSE;
-        container.classList.add('playing');
-        updateVisualizer();
+    audio.ontimeupdate = () => {
+      const current = audio.currentTime;
+      const total = audio.duration || 0;
+
+      if (total > 0) {
+        progressFill.style.width = `${(current / total) * 100}%`;
+        timeDisplay.textContent = `${formatTime(current)} / ${formatTime(total)}`;
+      }
+    };
+
+    let isDragging = false;
+
+    const seek = (e) => {
+      const rect = progressBar.getBoundingClientRect();
+      const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      if (audio.duration) {
+        audio.currentTime = percent * audio.duration;
+      }
+    };
+
+    progressBar.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      seek(e);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        seek(e);
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    progressBar.addEventListener('click', seek);
+
+    progressBar.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = progressBar.getBoundingClientRect();
+      const percent = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+      if (audio.duration) {
+        audio.currentTime = percent * audio.duration;
+      }
+    });
+
+    audio.onended = () => {
+        updatePlayState(false);
+        progressFill.style.width = '0%';
+        audio.currentTime = 0;
+
+        bars.forEach(bar => {
+          bar.style.height = '2px';
+        });
     };
 
     audio.onpause = () => {
-        playBtn.innerHTML = ICONS.PLAY;
-        container.classList.remove('playing');
-        if (animationId) cancelAnimationFrame(animationId);
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
     };
 
-    audio.onended = () => {
-        audio.currentTime = 0;
-        // reset UI
-        progressFill.style.width = '0%';
-        thumb.style.left = '0%';
-    };
-
-    // Buffer Progress
-    audio.onprogress = () => {
-        if (audio.duration && audio.buffered.length > 0) {
-            const bufferedEnd = audio.buffered.end(audio.buffered.length - 1);
-            const duration = audio.duration;
-            bufferBar.style.width = ((bufferedEnd / duration) * 100) + '%';
-        }
-    };
-
-    // Time Update
-    audio.ontimeupdate = () => {
-        if (!isDragging) {
-            const percent = (audio.currentTime / audio.duration) * 100 || 0;
-            progressFill.style.width = percent + '%';
-            thumb.style.left = percent + '%';
-            
-            // Also update buffer if playing
-            if (audio.buffered.length > 0) {
-                 const bufferedEnd = audio.buffered.end(audio.buffered.length - 1);
-                 bufferBar.style.width = ((bufferedEnd / audio.duration) * 100) + '%';
-            }
-            
-            timeDisplay.textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
-        }
-    };
-
-    audio.ondurationchange = () => {
-         timeDisplay.textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
-    };
-
-    // --- Dragging Logic ---
-    const updateDragPosition = (clientX) => {
-        const rect = progressContainer.getBoundingClientRect();
-        const p = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-        
-        progressFill.style.width = (p * 100) + '%';
-        thumb.style.left = (p * 100) + '%';
-        
-        // Show temp time during drag
-        if (isFinite(audio.duration)) {
-             timeDisplay.textContent = `${formatTime(p * audio.duration)} / ${formatTime(audio.duration)}`;
-        }
-        return p;
-    };
-
-    progressContainer.onmousedown = (e) => {
-        isDragging = true;
-        progressContainer.classList.add('dragging');
-
-        // 只更新视觉，不立即跳转播放位置
-        const p = updateDragPosition(e.clientX);
-
-        // Global listeners for drag and drop
-        const moveHandler = (ev) => {
-            ev.preventDefault();
-            updateDragPosition(ev.clientX);
-        };
-
-        const upHandler = (ev) => {
-            const finalP = updateDragPosition(ev.clientX); // Final update
-            // 只在 mouseup 时设置一次播放位置
-            if (isFinite(audio.duration)) audio.currentTime = finalP * audio.duration;
-
-            isDragging = false;
-            progressContainer.classList.remove('dragging');
-            document.removeEventListener('mousemove', moveHandler);
-            document.removeEventListener('mouseup', upHandler);
-        };
-
-        document.addEventListener('mousemove', moveHandler);
-        document.addEventListener('mouseup', upHandler);
-    };
+    container.appendChild(audio);
+    container.appendChild(playBtn);
+    container.appendChild(contentArea);
 
     return container;
   }

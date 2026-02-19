@@ -70,6 +70,9 @@ class UIManager {
     // Nako AI 相关：跟踪本地显示的消息，用于去重
     this.localNakoMessages = new Map(); // fullContent -> { timestamp, messageId }
 
+    // 文件上传服务
+    this.fileUploadService = new FileUploadService();
+
     // DOM elements
     this.elements = {
       main: document.querySelector(".main"),
@@ -82,6 +85,14 @@ class UIManager {
       chatlog: document.querySelector("#messages"),
       chatInput: document.querySelector("#messageInput"),
       roster: document.querySelector("#voice-users"),
+      attachmentBtn: document.querySelector("#attachmentBtn"),
+      fileUploadMenu: document.querySelector("#fileUploadMenu"),
+      imageInput: document.querySelector("#imageInput"),
+      fileInput: document.querySelector("#fileInput"),
+      uploadProgress: document.querySelector("#fileUploadProgress"),
+      uploadFilename: document.querySelector("#uploadFilename"),
+      uploadPercent: document.querySelector("#uploadPercent"),
+      uploadFill: document.querySelector("#uploadFill"),
     };
 
     this.onSetUser = null;
@@ -1144,6 +1155,243 @@ class UIManager {
         console.warn('绑定表情按钮失败: 未找到表情按钮元素', e);
       } else {
         console.warn('绑定表情按钮失败: 事件监听器绑定异常', e, e && e.stack);
+      }
+    }
+
+    // 附件按钮：显示/隐藏文件上传菜单
+    this.setupFileUpload();
+  }
+
+  /**
+   * 设置文件上传功能
+   */
+  setupFileUpload() {
+    const { attachmentBtn, fileUploadMenu, imageInput, fileInput, chatInput } = this.elements;
+
+    if (!attachmentBtn || !fileUploadMenu) {
+      console.warn('文件上传初始化失败: 未找到必需的元素');
+      return;
+    }
+
+    // 点击附件按钮显示/隐藏菜单
+    attachmentBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fileUploadMenu.classList.toggle('hidden');
+    });
+
+    // 点击其他地方关闭菜单
+    document.addEventListener('click', (e) => {
+      if (!attachmentBtn.contains(e.target) && !fileUploadMenu.contains(e.target)) {
+        fileUploadMenu.classList.add('hidden');
+      }
+    });
+
+    // 菜单项点击
+    const menuItems = fileUploadMenu.querySelectorAll('.file-upload-menu-item');
+    menuItems.forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const type = item.dataset.type;
+        fileUploadMenu.classList.add('hidden');
+
+        if (type === 'image') {
+          imageInput.click();
+        } else if (type === 'file') {
+          fileInput.click();
+        }
+      });
+    });
+
+    // 拖拽上传支持
+    const dropZone = document.body;
+    let dragCounter = 0;
+
+    // 创建拖拽覆盖层
+    const overlay = document.createElement('div');
+    overlay.className = 'drag-overlay hidden';
+    overlay.innerHTML = `
+      <div class="drag-message">
+        <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+        <span>释放文件以上传</span>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    dropZone.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter++;
+      if (dragCounter === 1) {
+        overlay.classList.remove('hidden');
+        // 强制重绘以触发 transition
+        overlay.offsetHeight; 
+        overlay.classList.add('visible');
+      }
+    });
+
+    dropZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter--;
+      if (dragCounter === 0) {
+        overlay.classList.remove('visible');
+        setTimeout(() => overlay.classList.add('hidden'), 200);
+      }
+    });
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter = 0;
+      overlay.classList.remove('visible');
+      setTimeout(() => overlay.classList.add('hidden'), 200);
+
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        const file = files[0];
+        // 简单判断类型
+        const type = file.type.startsWith('image/') ? 'image' : 'file';
+        this.handleFileUpload(file, type);
+      }
+    });
+
+    // 粘贴上传支持
+    if (chatInput) {
+      chatInput.addEventListener('paste', (e) => {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (const item of items) {
+          if (item.kind === 'file') {
+            e.preventDefault();
+            const file = item.getAsFile();
+            const type = file.type.startsWith('image/') ? 'image' : 'file';
+            this.handleFileUpload(file, type);
+            return; // 只处理第一个文件
+          }
+        }
+      });
+    }
+
+    // 文件选择处理
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) this.handleFileUpload(file, 'image');
+      imageInput.value = ''; // 清空以允许重复选择同一文件
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) this.handleFileUpload(file, 'file');
+      fileInput.value = ''; // 清空以允许重复选择同一文件
+    });
+  }
+
+  /**
+   * 处理文件上传
+   * @param {File} file 要上传的文件
+   * @param {string} uploadType 上传类型：'image' 或 'file'
+   */
+  async handleFileUpload(file, uploadType) {
+    const { uploadProgress, uploadFilename, uploadPercent, uploadFill, chatInput } = this.elements;
+
+    // 验证文件大小（50MB）
+    const maxSize = 50 * 1024 * 1024;
+    if (!FileUploadService.validateSize(file, maxSize)) {
+      this.addChatMessage('系统', `文件过大，最大支持 ${FileUploadService.formatSize(maxSize)}`, Date.now(), this.systemIcon, 'bg-red-600');
+      return;
+    }
+
+    // 插入占位符
+    const placeholder = `[上传中: ${file.name}...]`;
+    let placeholderInserted = false;
+    
+    if (chatInput) {
+      const cursorPos = chatInput.selectionStart || chatInput.value.length;
+      const textBefore = chatInput.value.substring(0, cursorPos);
+      const textAfter = chatInput.value.substring(cursorPos);
+      
+      chatInput.value = textBefore + placeholder + textAfter;
+      placeholderInserted = true;
+      
+      // 更新光标位置
+      const newPos = cursorPos + placeholder.length;
+      chatInput.setSelectionRange(newPos, newPos);
+      chatInput.focus();
+      chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    // 显示进度条
+    uploadProgress.classList.remove('hidden');
+    uploadFilename.textContent = file.name;
+    uploadPercent.textContent = '0%';
+    uploadFill.style.width = '0%';
+
+    try {
+      // 上传文件
+      const result = await this.fileUploadService.upload(file, file.name, (percent) => {
+        uploadPercent.textContent = `${percent}%`;
+        uploadFill.style.width = `${percent}%`;
+      });
+
+      // 隐藏进度条
+      uploadProgress.classList.add('hidden');
+
+      // 获取完整 URL
+      const fileUrl = this.fileUploadService.getFileUrl(result.key);
+
+      // 根据上传类型生成 SEKAI 标记
+      let fileMsg;
+      if (uploadType === 'image') {
+        // 图片上传使用 [img:url] 语法
+        fileMsg = `[img:${fileUrl}]`;
+      } else {
+        // 文件上传使用 [file:url|filename|size] 语法
+        const formattedSize = FileUploadService.formatSize(result.size);
+        fileMsg = `[file:${fileUrl}|${file.name}|${formattedSize}]`;
+      }
+
+      if (chatInput) {
+        // 尝试替换占位符
+        if (placeholderInserted && chatInput.value.includes(placeholder)) {
+          const currentPos = chatInput.selectionStart;
+          const placeholderIndex = chatInput.value.indexOf(placeholder);
+          
+          chatInput.value = chatInput.value.replace(placeholder, fileMsg);
+          
+          // 尝试恢复光标相对位置（近似）
+          if (currentPos > placeholderIndex) {
+            const extraChars = fileMsg.length - placeholder.length;
+            const newPos = currentPos + extraChars;
+            chatInput.setSelectionRange(newPos, newPos);
+          } else {
+              // 如果光标在占位符之前，保持原有光标位置
+              chatInput.setSelectionRange(currentPos, currentPos);
+          }
+        } else {
+          // 占位符不见了，追加到末尾
+          const text = chatInput.value;
+          chatInput.value = text + (text.length > 0 && !text.endsWith(' ') ? ' ' : '') + fileMsg;
+          chatInput.scrollTop = chatInput.scrollHeight;
+        }
+
+        chatInput.focus();
+        chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+    } catch (error) {
+      console.error('文件上传失败:', error);
+      uploadProgress.classList.add('hidden');
+      this.addChatMessage('系统', `文件上传失败: ${error.message}`, Date.now(), this.systemIcon, 'bg-red-600');
+      
+      // 移除占位符
+      if (chatInput && placeholderInserted && chatInput.value.includes(placeholder)) {
+        chatInput.value = chatInput.value.replace(placeholder, '');
+        chatInput.dispatchEvent(new Event('input', { bubbles: true }));
       }
     }
   }

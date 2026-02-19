@@ -17,6 +17,7 @@ body {
   display: flex;
   height: 100vh;
   background: #50476a;
+  overflow-x: hidden; /* 防止水平滚动 */
 }
 .sidebar {
   width: 280px;
@@ -123,6 +124,7 @@ body {
   display: flex;
   flex-direction: column;
   background: #50476a;
+  overflow-x: hidden; /* 防止水平滚动 */
 }
 .chat-header {
   height: 48px;
@@ -337,6 +339,8 @@ body {
 .input-area {
   padding: 16px;
   background: none;
+  position: relative;
+  overflow: visible; /* 允许绝对定位的元素显示在外部 */
 }
 .input-box {
   position: relative;
@@ -344,6 +348,7 @@ body {
   border-radius: 12px;
   padding: 12px 16px;
   display: flex;
+  overflow: visible; /* 允许菜单和进度条显示在外部 */
   align-items: center;
   gap: 12px;
 }
@@ -860,6 +865,26 @@ body {
   /* 主聊天区域占满屏幕 */
   .main {
     width: 100%;
+  }
+  
+  /* 移动端上传组件适配 */
+  .file-upload-progress {
+    right: 16px;
+    left: 16px;
+    width: auto;
+    bottom: 70px;
+    transform: translateY(0);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+  }
+  
+  .file-upload-progress.hidden {
+    transform: translateY(120%);
+    opacity: 0;
+  }
+  
+  .file-upload-menu {
+    right: 16px;
+    bottom: 60px;
   }
   
   /* 添加汉堡菜单按钮 */
@@ -2209,4 +2234,181 @@ body {
     max-width: 95vw;
     max-height: 85vh;
   }
+}
+
+/* 文件上传菜单 */
+.file-upload-menu {
+  position: absolute;
+  bottom: 70px;
+  right: 20px;
+  background: rgba(47, 42, 63, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(61, 55, 80, 0.8);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  min-width: 160px;
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+  transform-origin: bottom right;
+  transition: opacity 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+
+.file-upload-menu:not(.hidden) {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  display: block; /* 覆盖 .hidden 的 display: none，但保留 transition */
+}
+
+/* 移除 .file-upload-menu.hidden 的 display: none，通过 opacity 控制显隐来实现动画 */
+.file-upload-menu.hidden {
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+  pointer-events: none;
+  /* display: none; 不要直接隐藏，否则动画无效。改为 pointer-events: none */
+}
+
+.file-upload-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #e0e0e0;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.file-upload-menu-item:hover {
+  background: rgba(187, 134, 252, 0.1);
+  color: #fff;
+  transform: translateX(2px);
+}
+
+.file-upload-menu-item svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+  transition: transform 0.2s;
+}
+
+.file-upload-menu-item:hover svg {
+  transform: scale(1.1);
+  opacity: 1;
+  color: #bb86fc;
+}
+
+/* 文件上传进度 - 胶囊样式 */
+.file-upload-progress {
+  position: absolute;
+  bottom: 80px;
+  right: 20px;
+  left: auto; /* 取消全宽 */
+  width: 300px;
+  background: rgba(47, 42, 63, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(61, 55, 80, 0.8);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  transform: translateX(0);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+}
+
+.file-upload-progress.hidden {
+  display: block; /* 可能会导致布局问题，如果完全隐藏需要 */
+  transform: translateX(120%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.file-upload-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.file-upload-progress-filename {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin-right: 12px;
+}
+
+.file-upload-progress-percent {
+  font-size: 12px;
+  font-feature-settings: "tnum";
+  color: #bb86fc;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.file-upload-progress-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.file-upload-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #bb86fc, #7c4dff);
+  border-radius: 3px;
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 10px rgba(187, 134, 252, 0.5);
+}
+
+/* 拖拽上传覆盖层 */
+.drag-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(80, 71, 106, 0.9);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.drag-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drag-overlay.hidden {
+  display: none;
+}
+
+.drag-message {
+  color: white;
+  font-size: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: bounce 1s infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
 }

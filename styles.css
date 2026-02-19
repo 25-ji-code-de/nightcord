@@ -1608,10 +1608,12 @@ body {
   flex: 1;
   background: var(--primary-accent);
   min-width: 2px;
-  border-radius: 1px 1px 0 0; /* Modern soft top */
-  margin-top: auto;
-  box-shadow: none; /* Removed glow for cleaner look */
+  border-radius: 1px 1px 0 0;
   max-width: 3px;
+  height: 100%; /* 固定高度，通过 scaleY 缩放 */
+  transform-origin: bottom; /* 从底部缩放 */
+  transform: scaleY(0.04); /* 初始最小高度 4% */
+  will-change: transform; /* 提示浏览器优化 */
 }
 
 /* Time */

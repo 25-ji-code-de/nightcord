@@ -509,8 +509,6 @@ class SekaiRenderer {
     for (let i = 0; i < barCount; i++) {
         const bar = document.createElement('div');
         bar.className = 'sekai-audio-visualizer-bar';
-        // Random initial height for aesthetic before play
-        bar.style.height = (10 + Math.random() * 20) + '%'; 
         visualizer.appendChild(bar);
         bars.push(bar);
     }
@@ -558,6 +556,9 @@ class SekaiRenderer {
     // --- Logic ---
     let isDragging = false;
     let analyser, source, dataArray, animationId;
+    let lastVisualizerUpdate = 0;
+    const VISUALIZER_FPS = 30; // 限制为 30fps 而非 60fps
+    const VISUALIZER_INTERVAL = 1000 / VISUALIZER_FPS;
 
     const formatTime = (seconds) => {
         if (!isFinite(seconds)) return '-:--';
@@ -566,17 +567,40 @@ class SekaiRenderer {
         return `${m}:${s}`;
     };
 
-    const updateVisualizer = () => {
+    const updateVisualizer = (timestamp) => {
         if (!analyser || !dataArray) return;
+
+        // 帧率限制：只在距离上次更新超过指定间隔时才更新
+        if (timestamp - lastVisualizerUpdate < VISUALIZER_INTERVAL) {
+            if (!audio.paused) animationId = requestAnimationFrame(updateVisualizer);
+            return;
+        }
+        lastVisualizerUpdate = timestamp;
+
+        // 可见性检测：如果播放器不在视口内，降低更新频率
+        if (!container.offsetParent) {
+            if (!audio.paused) {
+                setTimeout(() => {
+                    animationId = requestAnimationFrame(updateVisualizer);
+                }, 500); // 不可见时降低到 2fps
+            }
+            return;
+        }
+
         analyser.getByteFrequencyData(dataArray);
-        
+
         const step = Math.floor(dataArray.length / barCount);
         for (let i = 0; i < barCount; i++) {
             let sum = 0;
-            for(let j=0; j<step; j++) sum += dataArray[i*step + j];
+            const start = i * step;
+            const end = Math.min(start + step, dataArray.length);
+            for(let j = start; j < end; j++) sum += dataArray[j];
             const val = sum / step;
             const h = Math.max(4, (val / 255) * 100);
-            bars[i].style.height = h + '%';
+
+            // 使用 transform 代替 height（GPU 加速）
+            const scaleY = h / 100;
+            bars[i].style.transform = `scaleY(${scaleY})`;
         }
         if (!audio.paused) animationId = requestAnimationFrame(updateVisualizer);
     };

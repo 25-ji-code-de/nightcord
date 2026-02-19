@@ -44,6 +44,9 @@ class SekaiRenderer {
     this.aiPersonas = options.aiPersonas || [];
     this.imageWidthThreshold = options.imageWidthThreshold || 400;
 
+    // 全局共享的 AudioContext（避免资源泄漏）
+    this.audioContext = null;
+
     // Theme Configuration
     this.theme = {
       imageMaxWidth: 360,
@@ -75,6 +78,28 @@ class SekaiRenderer {
       div: []
     };
     this.poolMaxSize = 20;
+  }
+
+  /**
+   * 获取全局共享的 AudioContext
+   * @private
+   */
+  _getAudioContext() {
+    if (!this.audioContext) {
+      try {
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {
+        console.warn('Web Audio API not supported:', e);
+        return null;
+      }
+    }
+
+    // 恢复被暂停的 AudioContext
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
+    }
+
+    return this.audioContext;
   }
 
   /**
@@ -488,18 +513,19 @@ class SekaiRenderer {
       bars.push(bar);
     }
 
-    // Web Audio API 设置
-    let audioContext = null;
+    // Web Audio API 设置（使用共享的全局 AudioContext）
     let analyser = null;
     let source = null;
     let dataArray = null;
     let animationId = null;
 
     const setupAudioContext = () => {
-      if (audioContext) return;
+      if (source) return; // 已经设置过
+
+      const audioContext = this._getAudioContext();
+      if (!audioContext) return;
 
       try {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 128;
         analyser.smoothingTimeConstant = 0.8;
@@ -511,7 +537,7 @@ class SekaiRenderer {
         const bufferLength = analyser.frequencyBinCount;
         dataArray = new Uint8Array(bufferLength);
       } catch (e) {
-        console.warn('Web Audio API not supported:', e);
+        console.warn('Failed to setup audio analyzer:', e);
       }
     };
 
@@ -563,11 +589,8 @@ class SekaiRenderer {
             container.classList.add('playing');
 
             // 启动可视化
-            if (!audioContext) {
+            if (!source) {
               setupAudioContext();
-            }
-            if (audioContext && audioContext.state === 'suspended') {
-              audioContext.resume();
             }
             updateVisualizer();
         } else {

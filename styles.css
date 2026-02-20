@@ -1184,15 +1184,6 @@ body {
    SEKAI Rich Text & Media (Minimalist Geometric Redesign)
    ============================================ */
 
-:root {
-  --sekai-accent: #7c6fac;
-  --sekai-bg-card: #2b2633;
-  --sekai-bg-hover: #352d42;
-  --sekai-text-dim: #bdbdbd;
-  --sekai-radius: 6px;
-  --sekai-font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-}
-
 /* --- Typography & Inline Elements --- */
 
 .sekai-text-node {
@@ -1315,22 +1306,15 @@ body {
 
 .sekai-spoiler.revealed {
   /* "Dug out" / Contextual feel: Texture vanishes, text remains */
-  background: rgba(124, 111, 172, 0.1); 
+  background: rgba(124, 111, 172, 0.15); /* Highlighted background when revealed */
   background-image: none;
   color: inherit;
+  text-shadow: none; /* Clear blur */
   cursor: text;
   user-select: text;
   border-color: transparent;
   box-shadow: none;
   padding: 0 2px; /* Slight shrink to fit text naturally */
-}
-
-.sekai-spoiler.revealed {
-  background: rgba(124, 111, 172, 0.15); /* Highlighted background when revealed */
-  color: inherit;
-  text-shadow: none; /* Clear blur */
-  cursor: text;
-  user-select: text;
   animation: sekai-spoiler-reveal 0.3s ease-out;
 }
 
@@ -2439,12 +2423,6 @@ body {
 
 /* --- Added Action Container & Refined Dismiss Button --- */
 
-.sekai-update-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .sekai-update-btn-dismiss {
   /* Reset & Layout */
   appearance: none;
@@ -2950,12 +2928,12 @@ body {
   width: auto !important;
   min-width: 200px !important;
   max-width: 320px !important;
-  
+
   /* Flex layout for the bubble */
   display: flex !important;
   align-items: center !important;
   gap: 12px !important;
-  
+
   /* Bubble container styling */
   background-color: rgba(40, 35, 55, 0.6) !important; /* Semi-transparent dark */
   border-radius: 24px !important; /* Fully rounded bubble */
@@ -3108,19 +3086,6 @@ body {
   letter-spacing: -0.5px;
   margin-left: auto; /* Push to right if inside flex */
   white-space: nowrap;
-}
-
-/* Redefine layout to include time on the right side of visualizer or below */
-.sekai-voice-content {
-    flex-direction: row; /* Horizontal layout: Vis | Time */
-    align-items: center;
-    gap: 12px;
-}
-
-.sekai-voice-visualizer {
-    flex: 1;
-    height: 24px;
-    align-items: center;
 }
 
 /* Progress Track (Subtle line below/behind visualizer) */

@@ -78,21 +78,84 @@ class NakoAIService {
    * @fires nako:stream:end
    * @fires nako:error
    */
+  async _prepareAuthHeaders() {
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+
+    if (this.getAccessToken) {
+      try {
+        const accessToken = await this.getAccessToken();
+        if (accessToken) {
+          headers['Authorization'] = `Bearer ${accessToken}`;
+        }
+      } catch (error) {
+        console.warn('Failed to get access token:', error);
+      }
+    }
+
+    return headers;
+  }
+
+  _buildApiUrl(persona) {
+    if (!persona) return this.apiUrl;
+
+    const url = new URL(this.apiUrl);
+    url.searchParams.set('persona', persona);
+    return url.toString();
+  }
+
+  async _processResponse(response, messageId) {
+    const contentType = response.headers.get('content-type');
+    let fullContent = '';
+    let fullReasoning = '';
+    let usage = null;
+
+    if (this.stream && contentType && contentType.includes('text/event-stream')) {
+      const result = await this.processSSEStream(response, messageId);
+      fullContent = result.content;
+      fullReasoning = result.reasoning;
+    } else if (contentType && contentType.includes('application/json')) {
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Nako 返回错误');
+      }
+
+      fullContent = data.response || '';
+      fullReasoning = data.reasoningContent || '';
+      usage = data.usage;
+
+      if (!fullContent.trim()) {
+        throw new Error('Nako 返回了空响应');
+      }
+
+      this.eventBus.emit('nako:stream:chunk', {
+        messageId,
+        chunk: fullContent,
+        timestamp: Date.now()
+      });
+    } else {
+      throw new Error('未知的响应格式');
+    }
+
+    if (!fullContent.trim()) {
+      throw new Error('Nako 返回了空响应');
+    }
+
+    return { fullContent, fullReasoning, usage };
+  }
+
   async ask(prompt, options = {}) {
     if (!prompt || !prompt.trim()) {
       throw new Error('问题不能为空');
     }
 
     const { userId = 'Anonymous', history = [], persona } = options;
-
-    // 根据 persona 确定显示名称
     const displayName = this.getPersonaDisplayName(persona);
-
     const messageId = `nako_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const abortController = new AbortController();
     this.activeRequests.set(messageId, abortController);
 
-    // 发出开始事件
     this.eventBus.emit('nako:stream:start', {
       messageId,
       user: displayName,
@@ -102,37 +165,12 @@ class NakoAIService {
     });
 
     try {
-      // 设置超时
       const timeoutId = setTimeout(() => {
         abortController.abort();
       }, this.timeout);
 
-      // 准备请求头
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-
-      // 如果提供了 getAccessToken 函数，添加 Authorization 头
-      if (this.getAccessToken) {
-        try {
-          const accessToken = await this.getAccessToken();
-          if (accessToken) {
-            headers['Authorization'] = `Bearer ${accessToken}`;
-          }
-        } catch (error) {
-          console.warn('Failed to get access token:', error);
-          // 继续请求，让服务器返回 401 错误
-        }
-      }
-
-      // 调用 API（支持 persona 参数）
-      let apiUrl = this.apiUrl;
-      if (persona) {
-        // 添加 persona 查询参数
-        const url = new URL(this.apiUrl);
-        url.searchParams.set('persona', persona);
-        apiUrl = url.toString();
-      }
+      const headers = await this._prepareAuthHeaders();
+      const apiUrl = this._buildApiUrl(persona);
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -152,67 +190,23 @@ class NakoAIService {
         throw new Error(`API 错误: ${response.status} ${response.statusText}`);
       }
 
-      let fullContent = '';
-      let fullReasoning = ''; // 思考过程
-      let usage = null;
+      const { fullContent, fullReasoning, usage } = await this._processResponse(response, messageId);
 
-      // 检查是否是流式响应
-      const contentType = response.headers.get('content-type');
-      if (this.stream && contentType && contentType.includes('text/event-stream')) {
-        // 真正的 SSE 流式响应
-        const result = await this.processSSEStream(response, messageId);
-        fullContent = result.content;
-        fullReasoning = result.reasoning;
-      } else if (contentType && contentType.includes('application/json')) {
-        // 非流式 JSON 响应
-        const data = await response.json();
-        if (!data.success) {
-          throw new Error(data.error || 'Nako 返回错误');
-        }
-
-        fullContent = data.response || '';
-        fullReasoning = data.reasoningContent || ''; // 提取思考过程
-        usage = data.usage;
-
-        if (!fullContent.trim()) {
-          throw new Error('Nako 返回了空响应');
-        }
-
-        // 不模拟流式输出，直接发送完整内容
-        // 发出开始事件（用于创建消息元素）
-        this.eventBus.emit('nako:stream:chunk', {
-          messageId,
-          chunk: fullContent,
-          timestamp: Date.now()
-        });
-      } else {
-        throw new Error('未知的响应格式');
-      }
-
-      if (!fullContent.trim()) {
-        throw new Error('Nako 返回了空响应');
-      }
-
-      // 发出完成事件
       this.eventBus.emit('nako:stream:end', {
         messageId,
         user: displayName,
         fullContent,
-        reasoning: fullReasoning, // 传递思考过程
+        reasoning: fullReasoning,
         usage,
         timestamp: Date.now()
       });
 
-      // 清理
       this.activeRequests.delete(messageId);
-
       return fullContent;
 
     } catch (error) {
-      // 清理
       this.activeRequests.delete(messageId);
 
-      // 发出错误事件
       this.eventBus.emit('nako:error', {
         messageId,
         error: error.message,

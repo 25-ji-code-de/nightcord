@@ -2920,7 +2920,6 @@ body {
 .sekai-voice-bubble {
   /* Reset/Override base player styles for a cleaner bubble look */
   background: transparent !important;
-  border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
   margin: 4px 0 !important;

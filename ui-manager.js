@@ -1315,6 +1315,75 @@ class UIManager {
    * @param {File} file 要上传的文件
    * @param {string} uploadType 上传类型：'image' 或 'file'
    */
+  _insertPlaceholder(chatInput, placeholder) {
+    if (!chatInput) return false;
+
+    const cursorPos = chatInput.selectionStart || chatInput.value.length;
+    const textBefore = chatInput.value.substring(0, cursorPos);
+    const textAfter = chatInput.value.substring(cursorPos);
+
+    chatInput.value = textBefore + placeholder + textAfter;
+
+    const newPos = cursorPos + placeholder.length;
+    chatInput.setSelectionRange(newPos, newPos);
+    chatInput.focus();
+    chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    return true;
+  }
+
+  _showUploadProgress(uploadProgress, uploadFilename, uploadPercent, uploadFill, filename) {
+    uploadProgress.classList.remove('hidden');
+    uploadFilename.textContent = filename;
+    uploadPercent.textContent = '0%';
+    uploadFill.style.width = '0%';
+  }
+
+  async _generateFileMessage(uploadType, fileUrl, file, result) {
+    if (uploadType === 'image') {
+      return `[img:${fileUrl}]`;
+    } else if (uploadType === 'music') {
+      const metadata = await this.extractAudioMetadata(file);
+      return `[music:${fileUrl}|${metadata.title}|${metadata.artist}|${metadata.duration}]`;
+    } else {
+      const formattedSize = FileUploadService.formatSize(result.size);
+      return `[file:${fileUrl}|${file.name}|${formattedSize}]`;
+    }
+  }
+
+  _replacePlaceholderInInput(chatInput, placeholder, fileMsg, placeholderInserted) {
+    if (!chatInput) return;
+
+    if (placeholderInserted && chatInput.value.includes(placeholder)) {
+      const currentPos = chatInput.selectionStart;
+      const placeholderIndex = chatInput.value.indexOf(placeholder);
+
+      chatInput.value = chatInput.value.replace(placeholder, fileMsg);
+
+      if (currentPos > placeholderIndex) {
+        const extraChars = fileMsg.length - placeholder.length;
+        const newPos = currentPos + extraChars;
+        chatInput.setSelectionRange(newPos, newPos);
+      } else {
+        chatInput.setSelectionRange(currentPos, currentPos);
+      }
+    } else {
+      const text = chatInput.value;
+      chatInput.value = text + (text.length > 0 && !text.endsWith(' ') ? ' ' : '') + fileMsg;
+      chatInput.scrollTop = chatInput.scrollHeight;
+    }
+
+    chatInput.focus();
+    chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  _removePlaceholder(chatInput, placeholder, placeholderInserted) {
+    if (chatInput && placeholderInserted && chatInput.value.includes(placeholder)) {
+      chatInput.value = chatInput.value.replace(placeholder, '');
+      chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+
   async handleFileUpload(file, uploadType) {
     const { uploadProgress, uploadFilename, uploadPercent, uploadFill, chatInput } = this.elements;
 
@@ -1325,97 +1394,28 @@ class UIManager {
       return;
     }
 
-    // 插入占位符
     const placeholder = `[上传中: ${file.name}...]`;
-    let placeholderInserted = false;
-    
-    if (chatInput) {
-      const cursorPos = chatInput.selectionStart || chatInput.value.length;
-      const textBefore = chatInput.value.substring(0, cursorPos);
-      const textAfter = chatInput.value.substring(cursorPos);
-      
-      chatInput.value = textBefore + placeholder + textAfter;
-      placeholderInserted = true;
-      
-      // 更新光标位置
-      const newPos = cursorPos + placeholder.length;
-      chatInput.setSelectionRange(newPos, newPos);
-      chatInput.focus();
-      chatInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-
-    // 显示进度条
-    uploadProgress.classList.remove('hidden');
-    uploadFilename.textContent = file.name;
-    uploadPercent.textContent = '0%';
-    uploadFill.style.width = '0%';
+    const placeholderInserted = this._insertPlaceholder(chatInput, placeholder);
+    this._showUploadProgress(uploadProgress, uploadFilename, uploadPercent, uploadFill, file.name);
 
     try {
-      // 上传文件
       const result = await this.fileUploadService.upload(file, file.name, (percent) => {
         uploadPercent.textContent = `${percent}%`;
         uploadFill.style.width = `${percent}%`;
       });
 
-      // 隐藏进度条
       uploadProgress.classList.add('hidden');
 
-      // 获取完整 URL
       const fileUrl = this.fileUploadService.getFileUrl(result.key);
+      const fileMsg = await this._generateFileMessage(uploadType, fileUrl, file, result);
 
-      // 根据上传类型生成 SEKAI 标记
-      let fileMsg;
-      if (uploadType === 'image') {
-        // 图片上传使用 [img:url] 语法
-        fileMsg = `[img:${fileUrl}]`;
-      } else if (uploadType === 'music') {
-        // 音乐上传使用 [music:url|title|artist|duration] 语法
-        const metadata = await this.extractAudioMetadata(file);
-        fileMsg = `[music:${fileUrl}|${metadata.title}|${metadata.artist}|${metadata.duration}]`;
-      } else {
-        // 文件上传使用 [file:url|filename|size] 语法
-        const formattedSize = FileUploadService.formatSize(result.size);
-        fileMsg = `[file:${fileUrl}|${file.name}|${formattedSize}]`;
-      }
-
-      if (chatInput) {
-        // 尝试替换占位符
-        if (placeholderInserted && chatInput.value.includes(placeholder)) {
-          const currentPos = chatInput.selectionStart;
-          const placeholderIndex = chatInput.value.indexOf(placeholder);
-          
-          chatInput.value = chatInput.value.replace(placeholder, fileMsg);
-          
-          // 尝试恢复光标相对位置（近似）
-          if (currentPos > placeholderIndex) {
-            const extraChars = fileMsg.length - placeholder.length;
-            const newPos = currentPos + extraChars;
-            chatInput.setSelectionRange(newPos, newPos);
-          } else {
-              // 如果光标在占位符之前，保持原有光标位置
-              chatInput.setSelectionRange(currentPos, currentPos);
-          }
-        } else {
-          // 占位符不见了，追加到末尾
-          const text = chatInput.value;
-          chatInput.value = text + (text.length > 0 && !text.endsWith(' ') ? ' ' : '') + fileMsg;
-          chatInput.scrollTop = chatInput.scrollHeight;
-        }
-
-        chatInput.focus();
-        chatInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
+      this._replacePlaceholderInInput(chatInput, placeholder, fileMsg, placeholderInserted);
 
     } catch (error) {
       console.error('文件上传失败:', error);
       uploadProgress.classList.add('hidden');
       this.addChatMessage('系统', `文件上传失败: ${error.message}`, Date.now(), this.systemIcon, 'bg-red-600');
-      
-      // 移除占位符
-      if (chatInput && placeholderInserted && chatInput.value.includes(placeholder)) {
-        chatInput.value = chatInput.value.replace(placeholder, '');
-        chatInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
+      this._removePlaceholder(chatInput, placeholder, placeholderInserted);
     }
   }
 

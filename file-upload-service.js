@@ -28,7 +28,7 @@ class FileUploadService {
    */
   constructor(opts = {}) {
     this.baseUrl = opts.baseUrl || 'https://storage.nightcord.de5.net';
-    this.timeout = opts.timeout || 30000;
+    this.timeout = opts.timeout || 280000;
   }
 
   /**

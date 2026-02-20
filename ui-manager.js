@@ -1318,8 +1318,8 @@ class UIManager {
   async handleFileUpload(file, uploadType) {
     const { uploadProgress, uploadFilename, uploadPercent, uploadFill, chatInput } = this.elements;
 
-    // 验证文件大小（50MB）
-    const maxSize = 50 * 1024 * 1024;
+    // 验证文件大小（95MB）
+    const maxSize = 95 * 1024 * 1024;
     if (!FileUploadService.validateSize(file, maxSize)) {
       this.addChatMessage('系统', `文件过大，最大支持 ${FileUploadService.formatSize(maxSize)}`, Date.now(), this.systemIcon, 'bg-red-600');
       return;

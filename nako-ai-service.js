@@ -270,12 +270,46 @@ class NakoAIService {
    * @param {string} messageId - 消息 ID
    * @returns {Promise<string>} 完整内容
    */
+  _parseSSELine(line) {
+    if (!line.startsWith('data: ')) {
+      return null;
+    }
+
+    const data = line.slice(6).trim();
+
+    if (data === '[DONE]' || !data) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(data);
+    } catch (e) {
+      console.warn('解析 SSE 数据失败:', data, e);
+      return null;
+    }
+  }
+
+  _extractDeltaContent(json) {
+    if (!json.choices || json.choices.length === 0) {
+      return null;
+    }
+
+    const choice = json.choices[0];
+    const delta = choice.delta || {};
+
+    return {
+      reasoning: delta.reasoning_content || '',
+      content: delta.content || '',
+      isFinished: choice.finish_reason === 'stop'
+    };
+  }
+
   async processSSEStream(response, messageId) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let fullContent = '';
-    let fullReasoning = ''; // 收集完整的思考过程
-    let buffer = ''; // 缓冲区，用于处理不完整的数据
+    let fullReasoning = '';
+    let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -284,65 +318,36 @@ class NakoAIService {
       const chunk = decoder.decode(value, { stream: true });
       buffer += chunk;
 
-      // 解析 SSE 格式：按行分割，但保留最后一行（可能不完整）
       const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // 保留最后一行到缓冲区
+      buffer = lines.pop() || '';
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6).trim();
+        const json = this._parseSSELine(line);
+        if (!json) continue;
 
-          // 检查是否结束
-          if (data === '[DONE]') {
-            continue;
-          }
+        const delta = this._extractDeltaContent(json);
+        if (!delta) continue;
 
-          // 跳过空数据
-          if (!data) {
-            continue;
-          }
+        if (delta.reasoning) {
+          fullReasoning += delta.reasoning;
+        }
 
-          try {
-            // 解析 JSON
-            const json = JSON.parse(data);
+        if (delta.content) {
+          fullContent += delta.content;
 
-            // 检查是否有 choices 数组
-            if (json.choices && json.choices.length > 0) {
-              const choice = json.choices[0];
-              const delta = choice.delta || {};
+          this.eventBus.emit('nako:stream:chunk', {
+            messageId,
+            chunk: delta.content,
+            timestamp: Date.now()
+          });
+        }
 
-              // 收集思考过程（reasoning_content）
-              const reasoning = delta.reasoning_content || '';
-              if (reasoning) {
-                fullReasoning += reasoning;
-              }
-
-              // 收集最终输出（content）
-              const text = delta.content || '';
-              if (text) {
-                fullContent += text;
-
-                // 发出片段事件
-                this.eventBus.emit('nako:stream:chunk', {
-                  messageId,
-                  chunk: text,
-                  timestamp: Date.now()
-                });
-              }
-
-              // 检查是否完成
-              if (choice.finish_reason === 'stop') {
-                break;
-              }
-            }
-          } catch (e) {
-            console.warn('解析 SSE 数据失败:', data, e);
-          }
+        if (delta.isFinished) {
+          break;
         }
       }
     }
 
-    // 返回内容和思考过程
     return { content: fullContent, reasoning: fullReasoning };
   }
 

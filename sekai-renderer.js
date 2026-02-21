@@ -19,7 +19,7 @@
  * SEKAI Renderer - Structured Extensible Keyword for Advanced Interactions
  *
  * 负责解析和渲染 SEKAI 富文本语法，包括：
- * - 基础富媒体：[img:URL]、[file:ID|Name|Size]、[audio:ID|Duration]、[stamp:ID]
+ * - 基础富媒体：[img:URL]、[file:ID|Name|Size]、[audio:ID|Duration]、[stamp:ID]、[sticker:URL]
  * - 文本格式化：**粗体**、*斜体*、~~删除线~~、||黑幕||、`代码`、> 引用
  * - 高级交互：[re:timestamp]、[link:URL|Title]、[color:hex|text]
  *
@@ -365,9 +365,9 @@ class SekaiRenderer {
     const fragment = document.createDocumentFragment();
     
     // Check if message is ONLY a single sticker (for specialized display)
-    const isSingleSticker = tokens.length === 1 && 
-                           tokens[0].type === 'sekai' && 
-                           tokens[0].sekaiType === 'stamp';
+    const isSingleSticker = tokens.length === 1 &&
+                           tokens[0].type === 'sekai' &&
+                           (tokens[0].sekaiType === 'stamp' || tokens[0].sekaiType === 'sticker');
 
     tokens.forEach(token => {
       let node;
@@ -542,6 +542,7 @@ class SekaiRenderer {
 
     switch (sekaiType) {
       case 'stamp': return this.renderStamp(data, options.isSingleSticker);
+      case 'sticker': return this.renderSticker(data, options.isSingleSticker);
       case 'img': return this.renderImage(data, metadata[0]);
       case 'file': return this.renderFile(data, metadata[0], metadata[1]);
       case 'audio': return this.renderAudio(data, metadata[0]);
@@ -559,23 +560,41 @@ class SekaiRenderer {
 
   renderStamp(id, isSingle) {
     if (!this.stickerService) return document.createTextNode(`[stamp:${id}]`);
-    
+
     const stampName = `stamp${id}`;
     const cleanName = stampName.toLowerCase();
     const src = `${this.stickerDir}/${encodeURIComponent(cleanName)}.png`;
-    
+
     const img = document.createElement('img');
     img.className = `sekai-sticker ${isSingle ? 'sekai-sticker-single' : 'sekai-sticker-inline'}`;
     img.src = src;
     img.alt = `[${stampName}]`;
     // Add title for hover effect
-    img.title = stampName; 
+    img.title = stampName;
     img.loading = 'lazy';
-    
+
     img.onerror = () => {
         const replacement = document.createElement('span');
         replacement.className = 'sticker-broken';
         replacement.textContent = `[${stampName}]`;
+        img.replaceWith(replacement);
+    }
+
+    return img;
+  }
+
+  renderSticker(url, isSingle) {
+    const img = document.createElement('img');
+    img.className = `sekai-sticker ${isSingle ? 'sekai-sticker-single' : 'sekai-sticker-inline'}`;
+    img.src = url;
+    img.alt = '[sticker]';
+    img.title = 'Custom Sticker';
+    img.loading = 'lazy';
+
+    img.onerror = () => {
+        const replacement = document.createElement('span');
+        replacement.className = 'sticker-broken';
+        replacement.textContent = '[sticker]';
         img.replaceWith(replacement);
     }
 

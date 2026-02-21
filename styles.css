@@ -419,10 +419,15 @@ body {
   vertical-align: middle;
   display: inline-block;
   max-width: 100%; /* 防止超出容器 */
+  transition: transform 0.2s;
 }
 .sticker-fixed {
   height: var(--sticker-size);
   width: auto;
+}
+
+.sticker-fixed:hover {
+  transform: scale(1.02);
 }
 
 .sticker-narrow {

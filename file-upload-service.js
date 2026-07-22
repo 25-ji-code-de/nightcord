@@ -68,20 +68,99 @@ class FileUploadService {
   }
 
   /**
+   * Fake progress that never hits 100% until the server responds.
+   *
+   * xhr.upload only means bytes left the browser; the Worker may still be
+   * writing to R2. Showing a true 100% too early makes users send before the
+   * object is readable — so we lie a little:
+   *   transfer 0–100% → display 0–92%
+   *   bytes sent, waiting for 2xx → crawl 92 → 99%
+   *   successful response → snap to 100%
+   *
+   * UI always shows "N%" (no phase labels).
+   *
+   * @private
+   */
+  _attachProgress(xhr, onProgress) {
+    if (!onProgress || typeof onProgress !== 'function') {
+      return;
+    }
+
+    const TRANSFER_CAP = 92; // reserve headroom for server-side finalize
+    let progress = 0; // fractional 0–100 internal
+    let lastEmitted = -1; // last integer shown to UI
+    let finalizeTimer = null;
+    let finished = false;
+
+    const emit = (pct) => {
+      if (finished) return;
+      progress = Math.max(progress, Math.min(100, pct));
+      const shown = Math.min(100, Math.floor(progress));
+      if (shown === lastEmitted && shown < 100) return;
+      lastEmitted = shown;
+      try {
+        onProgress(shown);
+      } catch (_) { /* UI callback must not break upload */ }
+    };
+
+    const startFinalizeCrawl = () => {
+      if (finalizeTimer || finished) return;
+      if (progress < TRANSFER_CAP) emit(TRANSFER_CAP);
+      // Slow asymptotic crawl 92 → 99 while the server finalizes
+      finalizeTimer = setInterval(() => {
+        if (finished || progress >= 99) return;
+        const step = Math.max(0.25, (99 - progress) * 0.07);
+        emit(Math.min(99, progress + step));
+      }, 300);
+    };
+
+    const dispose = () => {
+      if (finalizeTimer) {
+        clearInterval(finalizeTimer);
+        finalizeTimer = null;
+      }
+    };
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (!e.lengthComputable || e.total <= 0) return;
+      const ratio = e.loaded / e.total;
+      emit(Math.min(TRANSFER_CAP, ratio * TRANSFER_CAP));
+      if (e.loaded >= e.total) startFinalizeCrawl();
+    });
+
+    // Some browsers fire upload 'load' without a final progress at 100%
+    xhr.upload.addEventListener('load', () => startFinalizeCrawl());
+
+    xhr._sekaiProgress = {
+      complete: () => {
+        finished = true;
+        dispose();
+        lastEmitted = -1;
+        progress = 100;
+        try {
+          onProgress(100);
+        } catch (_) { /* ignore */ }
+      },
+      dispose: () => {
+        finished = true;
+        dispose();
+      }
+    };
+  }
+
+  /**
    * SEKAI v2 upload → PUT /v2/upload
    * @private
    */
   _uploadV2(file, name, onProgress, extra) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
+      this._attachProgress(xhr, onProgress);
 
-      if (onProgress && typeof onProgress === 'function') {
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            onProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        });
-      }
+      const fail = (err) => {
+        if (xhr._sekaiProgress) xhr._sekaiProgress.dispose();
+        reject(err instanceof Error ? err : new Error(String(err)));
+      };
 
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -90,24 +169,25 @@ class FileUploadService {
             // Normalize for callers that still expect .key
             if (result.uuid && !result.key) result.key = result.uuid;
             // size in v2 response is kB; keep size_bytes if present
+            if (xhr._sekaiProgress) xhr._sekaiProgress.complete();
             resolve(result);
           } catch (e) {
-            reject(new Error('Invalid server response'));
+            fail(new Error('Invalid server response'));
           }
         } else {
           try {
             const error = JSON.parse(xhr.responseText);
-            reject(new Error(error.error || `Upload failed: ${xhr.status}`));
+            fail(new Error(error.error || `Upload failed: ${xhr.status}`));
           } catch {
-            reject(new Error(`Upload failed: ${xhr.status}`));
+            fail(new Error(`Upload failed: ${xhr.status}`));
           }
         }
       });
 
-      xhr.addEventListener('error', () => reject(new Error('Network error')));
-      xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+      xhr.addEventListener('error', () => fail(new Error('Network error')));
+      xhr.addEventListener('abort', () => fail(new Error('Upload aborted')));
       xhr.timeout = this.timeout;
-      xhr.addEventListener('timeout', () => reject(new Error('Upload timeout')));
+      xhr.addEventListener('timeout', () => fail(new Error('Upload timeout')));
 
       xhr.open('PUT', `${this.baseUrl}/v2/upload`);
       xhr.setRequestHeader('X-Filename', encodeURIComponent(name));
@@ -129,36 +209,36 @@ class FileUploadService {
   _uploadLegacy(file, name, onProgress) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
+      this._attachProgress(xhr, onProgress);
 
-      if (onProgress && typeof onProgress === 'function') {
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            onProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        });
-      }
+      const fail = (err) => {
+        if (xhr._sekaiProgress) xhr._sekaiProgress.dispose();
+        reject(err instanceof Error ? err : new Error(String(err)));
+      };
 
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
-            resolve(JSON.parse(xhr.responseText));
+            const result = JSON.parse(xhr.responseText);
+            if (xhr._sekaiProgress) xhr._sekaiProgress.complete();
+            resolve(result);
           } catch (e) {
-            reject(new Error('Invalid server response'));
+            fail(new Error('Invalid server response'));
           }
         } else {
           try {
             const error = JSON.parse(xhr.responseText);
-            reject(new Error(error.error || `Upload failed: ${xhr.status}`));
+            fail(new Error(error.error || `Upload failed: ${xhr.status}`));
           } catch {
-            reject(new Error(`Upload failed: ${xhr.status}`));
+            fail(new Error(`Upload failed: ${xhr.status}`));
           }
         }
       });
 
-      xhr.addEventListener('error', () => reject(new Error('Network error')));
-      xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+      xhr.addEventListener('error', () => fail(new Error('Network error')));
+      xhr.addEventListener('abort', () => fail(new Error('Upload aborted')));
       xhr.timeout = this.timeout;
-      xhr.addEventListener('timeout', () => reject(new Error('Upload timeout')));
+      xhr.addEventListener('timeout', () => fail(new Error('Upload timeout')));
 
       xhr.open('PUT', this.baseUrl);
       xhr.setRequestHeader('X-Filename', encodeURIComponent(name));

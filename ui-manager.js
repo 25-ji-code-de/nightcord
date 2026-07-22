@@ -1622,12 +1622,16 @@ class UIManager {
         } catch (_) { /* ignore */ }
       }
 
+      // 进度条是「假进度」：传输映射到 ~0–92%，等服务端落盘时缓爬到 99%，
+      // 真正 2xx 后才到 100%。全程只显示百分比，不切换文案。
       const result = await this.fileUploadService.upload(file, file.name, (percent) => {
         uploadPercent.textContent = `${percent}%`;
         uploadFill.style.width = `${percent}%`;
       }, extra);
 
-      uploadProgress.classList.add('hidden');
+      // 服务端已响应；拼 token 期间保持 100%，避免条先消失、输入框还是占位符
+      uploadPercent.textContent = '100%';
+      uploadFill.style.width = '100%';
 
       const id = result.uuid || result.key;
       const kind = result.kind || extra.kind || 'file';
@@ -1635,6 +1639,7 @@ class UIManager {
       const fileMsg = await this._generateFileMessage(uploadType, fileUrl, file, result);
 
       this._replacePlaceholderInInput(chatInput, placeholder, fileMsg, placeholderInserted);
+      uploadProgress.classList.add('hidden');
 
     } catch (error) {
       console.error('文件上传失败:', error);

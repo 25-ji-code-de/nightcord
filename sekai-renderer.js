@@ -1066,14 +1066,18 @@ class SekaiRenderer {
       container.setAttribute('tabindex', '0');
       container.setAttribute('role', 'button');
       container.setAttribute('aria-label', 'Spoiler image');
+      // Capture phase so reveal runs before img.onclick opens the viewer
       const reveal = (e) => {
+        if (container.classList.contains('revealed')) return;
         e.preventDefault();
         e.stopPropagation();
         container.classList.add('revealed');
+        container.removeAttribute('role');
+        container.setAttribute('aria-label', desc.alt || desc.name || 'Image');
       };
-      container.addEventListener('click', reveal, { once: true });
+      container.addEventListener('click', reveal, { capture: true, once: true });
       container.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if ((e.key === 'Enter' || e.key === ' ') && !container.classList.contains('revealed')) {
           reveal(e);
         }
       });
@@ -1333,8 +1337,15 @@ class SekaiRenderer {
         container.classList.remove('loading');
     };
 
-    // Open in full-screen image viewer
-    img.onclick = () => {
+    // Open in full-screen image viewer (blocked while parent spoiler is unrevealed)
+    img.onclick = (e) => {
+      const spoilerHost = img.closest('.sekai-image-spoiler');
+      if (spoilerHost && !spoilerHost.classList.contains('revealed')) {
+        // Let the container's capture-phase handler reveal; do not open viewer yet
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if (window.sekaiImageViewer) {
         window.sekaiImageViewer.open(url, alt || '');
       } else {

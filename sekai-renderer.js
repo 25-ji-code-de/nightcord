@@ -16,17 +16,18 @@
  */
 
 /**
- * SEKAI Renderer - Structured Extensible Keyword for Advanced Interactions
+ * SEKAI Renderer - Structured Extensible Keywords for Advanced Interactions
  *
- * 负责解析和渲染 SEKAI 富文本语法，包括：
- * - 基础富媒体：[img:URL]、[file:ID|Name|Size]、[audio:ID|Duration]、[stamp:ID]、[sticker:URL]
- * - 文本格式化：**粗体**、*斜体*、~~删除线~~、||黑幕||、`代码`、> 引用
- * - 高级交互：[re:timestamp]、[link:URL|Title]、[color:hex|text]
+ * 负责解析和渲染 SEKAI 富文本语法：
+ * - v2: <$SEKAI:Type:Key=Value:Payload> / multi-line with <&SEKAI>
+ * - v1 (legacy): [img:URL]、[file:URL|Name|Size]、[audio:]、[music:]、[stamp:]、[sticker:]、
+ *                [re:]、[link:]、[color:]、[truecolor:]、[code:]
+ * - Markdown on residual text segments only (after SEKAI tokenization)
  *
  * 性能优化：
- * - 使用 DocumentFragment 批量渲染减少重排
- * - DOMPurify XSS 过滤保护
- * - 对象池复用减少 GC 压力
+ * - DocumentFragment 批量渲染
+ * - DOMPurify XSS 过滤
+ * - 对象池复用 / token 缓存
  * - 懒加载图片和音频
  */
 
@@ -56,10 +57,12 @@ const AUDIO_VIZ_CONFIG = {
  * @example
  * const renderer = new SekaiRenderer({
  *   stickerService: stickerService,
- *   aiPersonas: ['Nako', 'Asagi', 'Miku']
+ *   aiPersonas: ['Nako', 'Asagi', 'Miku'],
+ *   resourceBaseUrl: 'https://storage.nightcord.de5.net',
+ *   lookupReply: (ts) => ({ name, preview })
  * });
  *
- * const fragment = renderer.render('这是**粗体**和[img:https://example.com/photo.jpg]');
+ * const fragment = renderer.render('这是**粗体**和<$SEKAI:Stamp::stamp0001>');
  */
 class SekaiRenderer {
   constructor(options = {}) {
@@ -67,6 +70,19 @@ class SekaiRenderer {
     this.stickerDir = options.stickerDir || 'https://sticker.nightcord.de5.net/stickers';
     this.aiPersonas = options.aiPersonas || [];
     this.imageWidthThreshold = options.imageWidthThreshold || 400;
+
+    // Tier-1 resource resolution
+    // - Full URL → as-is
+    // - Pure UUID → {resourceBaseUrl}/{images|files|stickers}/{uuid}
+    // - Legacy key (uid/file.ext) → {resourceBaseUrl}/{key}  (same host often = storage)
+    this.resourceBaseUrl = (options.resourceBaseUrl || options.storageBaseUrl || 'https://storage.nightcord.de5.net').replace(/\/$/, '');
+    this.storageBaseUrl = (options.storageBaseUrl || this.resourceBaseUrl).replace(/\/$/, '');
+    // Optional: (timestamp) => { name?: string, preview?: string } | null
+    this.lookupReply = typeof options.lookupReply === 'function' ? options.lookupReply : null;
+
+    // Spec §8.4 caps
+    this.maxTokensPerMessage = options.maxTokensPerMessage || 50;
+    this.maxPayloadBytes = options.maxPayloadBytes || 64 * 1024;
 
     // 全局共享的 AudioContext（避免资源泄漏）
     this.audioContext = null;
@@ -82,8 +98,8 @@ class SekaiRenderer {
     this.useDOMPurify = typeof DOMPurify !== 'undefined';
     if (this.useDOMPurify) {
       this.purifyConfig = {
-        ALLOWED_TAGS: ['strong', 'em', 'del', 'code', 'blockquote', 'br', 'a', 'span', 'div', 'svg', 'path', 'polyline', 'line', 'rect', 'circle', 'polygon', 'img', 'audio', 'button'],
-        ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style', 'title', 'onclick', 'src', 'alt', 'loading', 'width', 'height', 'viewBox', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'd', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'transform', 'id', 'preload', 'download', 'data-local-nako-message'],
+        ALLOWED_TAGS: ['strong', 'em', 'del', 'code', 'blockquote', 'br', 'a', 'span', 'div', 'svg', 'path', 'polyline', 'line', 'rect', 'circle', 'polygon', 'img', 'audio', 'button', 'pre'],
+        ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style', 'title', 'src', 'alt', 'loading', 'width', 'height', 'viewBox', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'd', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'transform', 'id', 'preload', 'download', 'data-local-nako-message', 'tabindex', 'role', 'aria-label', 'aria-hidden'],
         ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
         KEEP_CONTENT: true,
         RETURN_DOM_FRAGMENT: false,
@@ -355,16 +371,16 @@ class SekaiRenderer {
   render(text) {
     if (!text) return document.createDocumentFragment();
 
-    // 1. Pre-process: Normalize syntax sugar
+    // 1. Pre-process: Normalize v1 stamp syntax sugar
     text = this.normalizeSyntax(text);
 
-    // 2. Tokenize: Split into text and SEKAI tokens
+    // 2. Dual tokenize: v2 first, then v1 on residual text (spec §6.1 / §7.2)
     const tokens = this.tokenize(text);
 
     // 3. Render Loop
     const fragment = document.createDocumentFragment();
-    
-    // Check if message is ONLY a single sticker (for specialized display)
+
+    // Single-sticker large display mode (Stamp / custom sticker only)
     const isSingleSticker = tokens.length === 1 &&
                            tokens[0].type === 'sekai' &&
                            (tokens[0].sekaiType === 'stamp' || tokens[0].sekaiType === 'sticker');
@@ -376,7 +392,7 @@ class SekaiRenderer {
       } else if (token.type === 'sekai') {
         node = this.renderSekaiToken(token, { isSingleSticker });
       }
-      
+
       if (node) fragment.appendChild(node);
     });
 
@@ -384,24 +400,382 @@ class SekaiRenderer {
   }
 
   normalizeSyntax(text) {
-    // [stamp0000] -> [stamp:0000]
+    // [stamp0000] / [stamp_0000] -> [stamp:0000] (v1 sugar only)
     return text.replace(/\[stamp(\d+)\]/gi, '[stamp:$1]')
                .replace(/\[stamp_(\d+)\]/gi, '[stamp:$1]');
   }
 
+  /**
+   * Dual-parser entry (cached).
+   * Pass A: SEKAI v2 (<$SEKAI:…>)
+   * Pass B: SEKAI v1 ([type:data]) on residual text segments
+   */
   tokenize(text) {
-    // Performance: Check cache first
     if (this.tokenCache.has(text)) {
       return this.tokenCache.get(text);
     }
 
+    const tokens = this.tokenizeDual(text);
+
+    if (this.tokenCache.size >= this.tokenCacheMaxSize) {
+      const firstKey = this.tokenCache.keys().next().value;
+      this.tokenCache.delete(firstKey);
+    }
+    this.tokenCache.set(text, tokens);
+    return tokens;
+  }
+
+  /**
+   * @private
+   */
+  tokenizeDual(text) {
+    const v2Tokens = this.tokenizeV2(text);
+    const result = [];
+    let tokenCount = 0;
+
+    for (const part of v2Tokens) {
+      if (part.type === 'sekai') {
+        if (tokenCount >= this.maxTokensPerMessage) {
+          // Cap exceeded — keep remaining as text
+          result.push({ type: 'text', content: part.raw || '' });
+          continue;
+        }
+        result.push(part);
+        tokenCount++;
+      } else {
+        const v1Parts = this.tokenizeV1(part.content);
+        for (const v1 of v1Parts) {
+          if (v1.type === 'sekai') {
+            if (tokenCount >= this.maxTokensPerMessage) {
+              result.push({ type: 'text', content: v1.raw || '' });
+              continue;
+            }
+            result.push(v1);
+            tokenCount++;
+          } else if (v1.content) {
+            result.push(v1);
+          }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * SEKAI v2 tokenizer (spec §3).
+   * Malformed sequences fall back to plain text (spec §10.1).
+   * @private
+   */
+  tokenizeV2(text) {
+    const tokens = [];
+    const OPEN = '<$SEKAI:';
+    const CLOSE_MULTI = '<&SEKAI>';
+    let i = 0;
+
+    while (i < text.length) {
+      const start = text.indexOf(OPEN, i);
+      if (start === -1) {
+        if (i < text.length) {
+          tokens.push({ type: 'text', content: text.slice(i) });
+        }
+        break;
+      }
+
+      // Preceding text
+      if (start > i) {
+        tokens.push({ type: 'text', content: text.slice(i, start) });
+      }
+
+      // Parse header after OPEN: Type:descriptions[:payload]>  OR  Type:descriptions>\n...
+      const headerStart = start + OPEN.length;
+      const parsed = this._parseV2TokenAt(text, headerStart, start, CLOSE_MULTI);
+      if (!parsed) {
+        // Malformed — emit the opening sentinel as text and continue one char past it
+        tokens.push({ type: 'text', content: OPEN });
+        i = headerStart;
+        continue;
+      }
+
+      tokens.push(parsed.token);
+      i = parsed.endIndex;
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Parse a single v2 token starting at `headerStart` (immediately after `<$SEKAI:`).
+   * @returns {{ token: object, endIndex: number } | null}
+   * @private
+   */
+  _parseV2TokenAt(text, headerStart, absoluteStart, closeMulti) {
+    // Type: ALPHA *(ALPHA / DIGIT / "-")  — also allow "X-" vendor prefix
+    const typeMatch = text.slice(headerStart).match(/^([A-Za-z][A-Za-z0-9-]*)/);
+    if (!typeMatch) return null;
+    const rawType = typeMatch[1];
+    let cursor = headerStart + rawType.length;
+
+    if (text[cursor] !== ':') return null;
+    cursor++; // skip ':' after Type
+
+    // Descriptions run until next unencoded ':' (payload sep) or '>' (multi-line open)
+    // Values may contain percent-encoded chars; raw ':' is forbidden in values (must be %3A)
+    // We scan for the next ':' or '>' that ends the descriptions section.
+    let descEnd = cursor;
+    let foundPayloadSep = false;
+    let foundMultiOpen = false;
+
+    while (descEnd < text.length) {
+      const ch = text[descEnd];
+      if (ch === '>') {
+        foundMultiOpen = true;
+        break;
+      }
+      if (ch === ':') {
+        foundPayloadSep = true;
+        break;
+      }
+      if (ch === '\n' || ch === '\r') {
+        // Bare newline inside header — malformed
+        return null;
+      }
+      descEnd++;
+    }
+
+    if (!foundPayloadSep && !foundMultiOpen) return null;
+
+    const descRaw = text.slice(cursor, descEnd);
+    const desc = this.parseDescriptions(descRaw);
+
+    let payload = '';
+    let endIndex;
+    let raw;
+
+    if (foundMultiOpen) {
+      // Multi-line: opening tag ends at '>'; payload until a line that is only <&SEKAI>
+      const openTagEnd = descEnd + 1; // past '>'
+      // Skip the rest of the opening line (should be empty / whitespace only after '>')
+      let lineEnd = text.indexOf('\n', openTagEnd);
+      if (lineEnd === -1) {
+        // No body — treat as empty multi-line without close → malformed
+        return null;
+      }
+      // Content after '>' on same line must be whitespace only
+      if (text.slice(openTagEnd, lineEnd).trim() !== '') {
+        return null;
+      }
+
+      // Find closing tag line
+      let bodyStart = lineEnd + 1;
+      let searchFrom = bodyStart;
+      let closePos = -1;
+      while (searchFrom <= text.length) {
+        const nextNl = text.indexOf('\n', searchFrom);
+        const line = nextNl === -1
+          ? text.slice(searchFrom)
+          : text.slice(searchFrom, nextNl);
+        // Closing tag MUST be sole non-whitespace content of its line
+        if (line.trim() === closeMulti) {
+          closePos = searchFrom;
+          // endIndex after this line (and its trailing newline if any)
+          endIndex = nextNl === -1 ? text.length : nextNl + 1;
+          // payload is everything before the closing line (preserve leading/trailing blanks)
+          payload = text.slice(bodyStart, closePos);
+          // Drop the final newline that precedes the closing tag line (standard: payload between lines)
+          if (payload.endsWith('\n')) payload = payload.slice(0, -1);
+          if (payload.endsWith('\r')) payload = payload.slice(0, -1);
+          break;
+        }
+        if (nextNl === -1) break;
+        searchFrom = nextNl + 1;
+      }
+      if (closePos === -1) return null; // unclosed multi-line
+      raw = text.slice(absoluteStart, endIndex);
+    } else {
+      // Single-line: payload until unescaped '>'
+      const payloadStart = descEnd + 1; // past ':'
+      let payloadEnd = payloadStart;
+      while (payloadEnd < text.length) {
+        if (text[payloadEnd] === '>') break;
+        if (text[payloadEnd] === '\n' || text[payloadEnd] === '\r') {
+          // Newline inside single-line payload — malformed
+          return null;
+        }
+        payloadEnd++;
+      }
+      if (payloadEnd >= text.length || text[payloadEnd] !== '>') return null;
+      payload = text.slice(payloadStart, payloadEnd);
+      endIndex = payloadEnd + 1;
+      raw = text.slice(absoluteStart, endIndex);
+    }
+
+    // Payload size cap
+    if (payload.length > this.maxPayloadBytes) {
+      return null;
+    }
+
+    // Decode payload if enc=base64
+    const decodedPayload = this.decodePayload(payload, desc.enc);
+
+    return {
+      token: {
+        type: 'sekai',
+        version: 2,
+        sekaiType: rawType.toLowerCase(),
+        rawType,
+        data: decodedPayload,
+        payload: decodedPayload,
+        metadata: [],
+        desc,
+        raw
+      },
+      endIndex
+    };
+  }
+
+  /**
+   * Parse description string "k=v;k2=v2" with percent-decoding of values.
+   * @private
+   */
+  parseDescriptions(raw) {
+    const out = {};
+    if (!raw) return out;
+    const pairs = raw.split(';');
+    for (const pair of pairs) {
+      if (!pair) continue;
+      const eq = pair.indexOf('=');
+      if (eq === -1) continue;
+      const key = pair.slice(0, eq).trim();
+      if (!key) continue;
+      const valueRaw = pair.slice(eq + 1);
+      out[key] = this.percentDecode(valueRaw);
+    }
+    return out;
+  }
+
+  /**
+   * Percent-decode (RFC 3986); also accept '+' as space.
+   * @private
+   */
+  percentDecode(str) {
+    if (!str) return '';
+    try {
+      return decodeURIComponent(String(str).replace(/\+/g, '%20'));
+    } catch {
+      // Malformed percent sequence — return as-is
+      return String(str).replace(/\+/g, ' ');
+    }
+  }
+
+  /**
+   * Percent-encode description values (spec §3.4).
+   * Encodes only characters that break the description grammar.
+   */
+  percentEncode(str) {
+    if (str == null) return '';
+    // Must encode: ; = : < > % and whitespace; leave other unreserved/safe chars
+    return String(str).replace(/[^A-Za-z0-9\-._~/@!$&'()*+,]/g, (ch) => {
+      if (ch === ' ') return '%20';
+      const hex = ch.charCodeAt(0).toString(16).toUpperCase();
+      if (ch.charCodeAt(0) < 0x80) {
+        return '%' + hex.padStart(2, '0');
+      }
+      // Multi-byte UTF-8
+      return Array.from(new TextEncoder().encode(ch))
+        .map((b) => '%' + b.toString(16).toUpperCase().padStart(2, '0'))
+        .join('');
+    });
+  }
+
+  /**
+   * Decode payload according to `enc` description.
+   * @private
+   */
+  decodePayload(payload, enc) {
+    if (!enc) return payload;
+    if (String(enc).toLowerCase() === 'base64') {
+      return this.base64DecodeUtf8(payload);
+    }
+    return payload;
+  }
+
+  /**
+   * UTF-8-safe Base64 decode.
+   * @private
+   */
+  base64DecodeUtf8(b64) {
+    try {
+      const bin = atob(b64.replace(/\s+/g, ''));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    } catch (e) {
+      console.warn('SEKAI base64 decode failed:', e);
+      return b64;
+    }
+  }
+
+  /**
+   * UTF-8-safe Base64 encode (construction helper).
+   */
+  base64EncodeUtf8(str) {
+    const bytes = new TextEncoder().encode(String(str));
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  /**
+   * Resolve a Tier-1 resource payload to a fetchable URL.
+   * @param {string} payload uuid | legacy key | absolute URL
+   * @param {'image'|'file'|'sticker'} [kind]
+   */
+  resolveResource(payload, kind) {
+    if (!payload) return '';
+    const p = String(payload).trim();
+    if (/^https?:\/\//i.test(p) || p.startsWith('//') || p.startsWith('data:')) {
+      return p;
+    }
+    const clean = p.replace(/^\//, '');
+
+    // SEKAI v2 pure UUID
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clean)) {
+      const k = (kind || 'file').toLowerCase();
+      const folder = k === 'image' || k === 'images' ? 'images'
+        : k === 'sticker' || k === 'stickers' || k === 'stamp' ? 'stickers'
+        : 'files';
+      return `${this.resourceBaseUrl}/${folder}/${clean}`;
+    }
+
+    // Legacy storage key: prefer storageBaseUrl (may equal resourceBaseUrl)
+    return `${this.storageBaseUrl}/${clean}`;
+  }
+
+  /**
+   * Parse boolean description values (true/false, case-insensitive).
+   * @private
+   */
+  _descBool(desc, key, defaultValue = false) {
+    if (!desc || desc[key] == null || desc[key] === '') return defaultValue;
+    const v = String(desc[key]).toLowerCase();
+    if (v === 'true' || v === '1' || v === 'yes') return true;
+    if (v === 'false' || v === '0' || v === 'no') return false;
+    return defaultValue;
+  }
+
+  /**
+   * SEKAI v1 tokenizer (legacy).
+   * @private
+   */
+  tokenizeV1(text) {
+    if (!text) return [];
     const tokens = [];
     const sekaiRegex = /\[(\w+):([^\]]+)\]/g;
     let lastIndex = 0;
     let match;
 
     while ((match = sekaiRegex.exec(text)) !== null) {
-      // Push preceding text
       if (match.index > lastIndex) {
         tokens.push({
           type: 'text',
@@ -409,35 +783,29 @@ class SekaiRenderer {
         });
       }
 
-      // Parse metadata: [type:data|meta1|meta2]
       const [mainData, ...metadata] = match[2].split('|');
 
       tokens.push({
         type: 'sekai',
+        version: 1,
         sekaiType: match[1].toLowerCase(),
+        rawType: match[1],
         data: mainData,
+        payload: mainData,
         metadata,
+        desc: {},
         raw: match[0]
       });
 
       lastIndex = sekaiRegex.lastIndex;
     }
 
-    // Push remaining text
     if (lastIndex < text.length) {
       tokens.push({
         type: 'text',
         content: text.slice(lastIndex)
       });
     }
-
-    // Cache result (with size limit)
-    if (this.tokenCache.size >= this.tokenCacheMaxSize) {
-      // Remove oldest entry (first key)
-      const firstKey = this.tokenCache.keys().next().value;
-      this.tokenCache.delete(firstKey);
-    }
-    this.tokenCache.set(text, tokens);
 
     return tokens;
   }
@@ -473,8 +841,8 @@ class SekaiRenderer {
     // Strikethrough (~~text~~)
     html = html.replace(/~~(.*?)~~/g, '<del>$1</del>');
 
-    // Spoiler (||text||)
-    html = html.replace(/\|\|(.*?)\|\|/g, '<span class="sekai-spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>');
+    // Spoiler (||text||) — no inline onclick (event delegation below)
+    html = html.replace(/\|\|(.*?)\|\|/g, '<span class="sekai-spoiler" tabindex="0" role="button" aria-label="Spoiler">$1</span>');
 
     // Links (Simple URL detection) - Before processing inline code to avoid linking inside code blocks
     // Use negative lookbehind/lookahead to avoid matching URLs already in href attributes
@@ -498,12 +866,38 @@ class SekaiRenderer {
     span.className = 'sekai-text-node';
     span.innerHTML = html;
 
+    // Wire spoiler interaction without inline handlers
+    this._bindSpoilers(span);
+
     // Process legacy stickers [airi_name] etc.
     if (this.stickerService) {
          this.processStickerInHTML(span);
     }
 
     return span;
+  }
+
+  /**
+   * Bind click / keyboard reveal for .sekai-spoiler nodes.
+   * @private
+   */
+  _bindSpoilers(root) {
+    if (!root) return;
+    root.querySelectorAll('.sekai-spoiler').forEach((el) => {
+      if (el.dataset.sekaiBound === '1') return;
+      el.dataset.sekaiBound = '1';
+      if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+      if (!el.hasAttribute('role')) el.setAttribute('role', 'button');
+      const toggle = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        el.classList.toggle('revealed');
+      };
+      el.addEventListener('click', toggle);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') toggle(e);
+      });
+    });
   }
 
   processStickerInHTML(element) {
@@ -538,15 +932,26 @@ class SekaiRenderer {
   }
 
   renderSekaiToken(token, options) {
+    if (token.version === 2) {
+      return this.renderSekaiTokenV2(token, options);
+    }
+    return this.renderSekaiTokenV1(token, options);
+  }
+
+  /**
+   * v1 type dispatch (legacy wire format).
+   * @private
+   */
+  renderSekaiTokenV1(token, options) {
     const { sekaiType, data, metadata } = token;
 
     switch (sekaiType) {
       case 'stamp': return this.renderStamp(data, options.isSingleSticker);
-      case 'sticker': return this.renderSticker(data, options.isSingleSticker);
-      case 'img': return this.renderImage(data, metadata[0]);
-      case 'file': return this.renderFile(data, metadata[0], metadata[1]);
-      case 'audio': return this.renderAudio(data, metadata[0]);
-      case 'music': return this.renderMusic(data, metadata[0], metadata[1], metadata[2]);
+      case 'sticker': return this.renderSticker(this.resolveResource(data, 'sticker'), options.isSingleSticker);
+      case 'img': return this.renderImage(this.resolveResource(data, 'image'), metadata[0]);
+      case 'file': return this.renderFile(this.resolveResource(data, 'file'), metadata[0], metadata[1]);
+      case 'audio': return this.renderAudio(this.resolveResource(data, 'file'), metadata[0]);
+      case 'music': return this.renderMusic(this.resolveResource(data, 'file'), metadata[0], metadata[1], metadata[2]);
       case 'link': return this.renderLinkCard(data, metadata[0], metadata[1]);
       case 'color': return this.renderColor(data, metadata[0], false);
       case 'truecolor': return this.renderColor(data, metadata[0], true);
@@ -556,12 +961,308 @@ class SekaiRenderer {
     }
   }
 
+  /**
+   * v2 type dispatch (spec §4).
+   * @private
+   */
+  renderSekaiTokenV2(token, options) {
+    const type = token.sekaiType;
+    const desc = token.desc || {};
+    const payload = token.payload != null ? token.payload : token.data;
+
+    switch (type) {
+      case 'format':
+        return this.renderFormat(desc, payload);
+      case 'image':
+        return this.renderImageV2(desc, payload);
+      case 'stamp':
+        return this.renderStampV2(desc, payload, options.isSingleSticker);
+      case 'files':
+        return this.renderFilesV2(desc, payload);
+      case 'reply':
+        return this.renderReplyV2(payload);
+      case 'embed':
+        return this.renderEmbedV2(desc, payload);
+      case 'mention':
+        return this.renderMention(desc, payload);
+      case 'code':
+        return this.renderCodeV2(desc, payload);
+      case 'signal':
+        // Reserved — do not implement; show raw for forward-compat
+        return document.createTextNode(token.raw);
+      default:
+        // Unknown / X-* vendor: render raw (spec §10.2)
+        return document.createTextNode(token.raw);
+    }
+  }
+
+  // --- v2 adapters ---
+
+  /**
+   * Format: spoiler / color / preserve (truecolor).
+   * Payload is already decoded (base64 handled in tokenizer).
+   */
+  renderFormat(desc, text) {
+    const spoiler = this._descBool(desc, 'spoiler', false);
+    const color = desc.color || null;
+    const preserve = this._descBool(desc, 'preserve', false);
+    const content = text == null ? '' : String(text);
+
+    let node;
+    if (color) {
+      node = this.renderColor(color, content, preserve);
+    } else {
+      node = document.createElement('span');
+      node.className = 'sekai-format-text';
+      node.textContent = content;
+    }
+
+    if (spoiler) {
+      const wrap = document.createElement('span');
+      wrap.className = 'sekai-spoiler';
+      wrap.setAttribute('tabindex', '0');
+      wrap.setAttribute('role', 'button');
+      wrap.setAttribute('aria-label', 'Spoiler');
+      wrap.appendChild(node);
+      // Bind on wrap itself (querySelectorAll would miss the root)
+      wrap.dataset.sekaiBound = '1';
+      const toggle = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        wrap.classList.toggle('revealed');
+      };
+      wrap.addEventListener('click', toggle);
+      wrap.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') toggle(e);
+      });
+      return wrap;
+    }
+
+    return node;
+  }
+
+  /**
+   * Image with optional w/h aspect-ratio, alt, name, spoiler.
+   */
+  renderImageV2(desc, payload) {
+    const url = this.resolveResource(payload, 'image');
+    const alt = desc.alt || desc.name || 'Image';
+    const container = this.renderImage(url, alt);
+
+    // Pre-reserve aspect ratio when w/h known (spec §9.1)
+    const w = parseInt(desc.w, 10);
+    const h = parseInt(desc.h, 10);
+    if (w > 0 && h > 0 && container && container.style) {
+      container.style.aspectRatio = `${w} / ${h}`;
+      if (w > this.imageWidthThreshold) {
+        container.classList.add('sekai-image-large');
+      } else {
+        container.classList.add('sekai-image-small');
+      }
+    }
+
+    if (this._descBool(desc, 'spoiler', false) && container) {
+      container.classList.add('sekai-image-spoiler');
+      container.setAttribute('tabindex', '0');
+      container.setAttribute('role', 'button');
+      container.setAttribute('aria-label', 'Spoiler image');
+      const reveal = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        container.classList.add('revealed');
+      };
+      container.addEventListener('click', reveal, { once: true });
+      container.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          reveal(e);
+        }
+      });
+    }
+
+    return container;
+  }
+
+  /**
+   * Stamp: library name or custom=true UUID.
+   */
+  renderStampV2(desc, payload, isSingle) {
+    if (this._descBool(desc, 'custom', false)) {
+      const url = this.resolveResource(payload, 'sticker');
+      return this.renderSticker(url, isSingle);
+    }
+    return this.renderStamp(payload, isSingle);
+  }
+
+  /**
+   * Files: MIME-driven renderer (audio+title → music, audio → simple, else file card).
+   */
+  renderFilesV2(desc, payload) {
+    const url = this.resolveResource(payload, 'file');
+    const mime = (desc.type || 'application/octet-stream').toLowerCase();
+    const name = desc.name || 'file';
+    const sizeKb = desc.size != null && desc.size !== '' ? Number(desc.size) : null;
+    const sizeLabel = sizeKb != null && !Number.isNaN(sizeKb)
+      ? (sizeKb >= 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} kB`)
+      : '';
+
+    if (mime.startsWith('audio/')) {
+      const durationSec = desc.duration != null && desc.duration !== '' ? Number(desc.duration) : null;
+      const durationLabel = durationSec != null && !Number.isNaN(durationSec)
+        ? this._formatTime(durationSec)
+        : '';
+
+      if (desc.title) {
+        return this.renderMusic(
+          url,
+          desc.title,
+          desc.artist || '',
+          durationLabel
+        );
+      }
+      return this.renderAudio(url, durationLabel);
+    }
+
+    return this.renderFile(url, name, sizeLabel);
+  }
+
+  /**
+   * Reply: payload is timestamp; preview derived client-side.
+   */
+  renderReplyV2(payload) {
+    const ts = String(payload || '').trim();
+    let preview = '回复消息';
+    if (this.lookupReply) {
+      try {
+        const info = this.lookupReply(Number(ts) || ts);
+        if (info) {
+          const name = info.name || info.user || '';
+          const text = info.preview || info.text || '';
+          if (name && text) preview = `${name}: ${text}`;
+          else if (text) preview = text;
+          else if (name) preview = name;
+        }
+      } catch (e) {
+        console.warn('lookupReply failed:', e);
+      }
+    }
+    return this.renderReply(ts, preview);
+  }
+
+  /**
+   * Embed: rich link card (title/desc/domain/color from descriptions).
+   */
+  renderEmbedV2(desc, payload) {
+    const url = payload || '';
+    const title = desc.title || undefined;
+    const cardDesc = desc.desc || undefined;
+    const card = this.renderLinkCard(url, title, cardDesc);
+
+    // Override domain display if provided
+    if (desc.domain && card) {
+      const site = card.querySelector('.sekai-link-site');
+      if (site) site.textContent = desc.domain;
+    }
+    if (desc.color && card) {
+      const accent = card.querySelector('.sekai-link-accent');
+      if (accent) {
+        let hex = desc.color.startsWith('#') ? desc.color : '#' + desc.color;
+        if (/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(hex)) {
+          accent.style.background = hex;
+        }
+      }
+    }
+    return card;
+  }
+
+  /**
+   * Mention chip (render-only this phase).
+   */
+  renderMention(desc, payload) {
+    const mType = (desc.type || 'user').toLowerCase();
+    const display = desc.display || payload || mType;
+    const span = document.createElement('span');
+    span.className = `sekai-mention sekai-mention-${mType}`;
+    span.setAttribute('role', 'link');
+    span.setAttribute('tabindex', '0');
+    span.dataset.mentionType = mType;
+    span.dataset.mentionId = payload || '';
+    span.textContent = mType === 'all' ? '@everyone' : `@${display}`;
+    span.title = mType === 'ai' ? `AI: ${display}` : `Mention: ${display}`;
+    return span;
+  }
+
+  /**
+   * Code block with optional lang / name / collapse.
+   */
+  renderCodeV2(desc, payload) {
+    const lang = desc.lang || 'plain';
+    const name = desc.name || '';
+    const collapse = this._descBool(desc, 'collapse', false);
+    const codeText = payload == null ? '' : String(payload);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'sekai-code-wrapper';
+    if (collapse) wrapper.classList.add('collapsed');
+
+    if (name || lang) {
+      const header = document.createElement('div');
+      header.className = 'sekai-code-header';
+      if (name) {
+        const nameEl = document.createElement('span');
+        nameEl.className = 'sekai-code-name';
+        nameEl.textContent = name;
+        header.appendChild(nameEl);
+      }
+      if (lang && lang !== 'plain') {
+        const langEl = document.createElement('span');
+        langEl.className = 'sekai-code-lang';
+        langEl.textContent = lang;
+        header.appendChild(langEl);
+      }
+      if (collapse) {
+        const toggle = document.createElement('button');
+        toggle.className = 'sekai-code-toggle';
+        toggle.type = 'button';
+        toggle.setAttribute('aria-label', 'Expand code');
+        toggle.textContent = 'Expand';
+        toggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          wrapper.classList.toggle('collapsed');
+          toggle.textContent = wrapper.classList.contains('collapsed') ? 'Expand' : 'Collapse';
+        });
+        header.appendChild(toggle);
+      }
+      wrapper.appendChild(header);
+    }
+
+    const code = document.createElement('code');
+    code.className = 'sekai-code-block';
+    if (lang) code.dataset.lang = lang;
+    code.textContent = codeText;
+    wrapper.appendChild(code);
+    return wrapper;
+  }
+
   // --- Renderers ---
 
-  renderStamp(id, isSingle) {
-    if (!this.stickerService) return document.createTextNode(`[stamp:${id}]`);
+  /**
+   * Library stamp. Accepts bare digits ("0042") or full name ("stamp0042").
+   */
+  renderStamp(idOrName, isSingle) {
+    const raw = String(idOrName || '').trim();
+    if (!raw) return document.createTextNode('[stamp]');
 
-    const stampName = `stamp${id}`;
+    // Normalize: "0042" / "stamp0042" / "stamp_0042" → stamp name for CDN
+    let stampName;
+    if (/^stamp[_-]?\d+$/i.test(raw)) {
+      stampName = 'stamp' + raw.replace(/^stamp[_-]?/i, '');
+    } else if (/^\d+$/.test(raw)) {
+      stampName = 'stamp' + raw;
+    } else {
+      // Non-numeric library codes (legacy category_label) — try as-is
+      stampName = raw;
+    }
+
     const cleanName = stampName.toLowerCase();
     const src = `${this.stickerDir}/${encodeURIComponent(cleanName)}.png`;
 
@@ -569,7 +1270,6 @@ class SekaiRenderer {
     img.className = `sekai-sticker ${isSingle ? 'sekai-sticker-single' : 'sekai-sticker-inline'}`;
     img.src = src;
     img.alt = `[${stampName}]`;
-    // Add title for hover effect
     img.title = stampName;
     img.loading = 'lazy';
 
@@ -578,7 +1278,7 @@ class SekaiRenderer {
         replacement.className = 'sticker-broken';
         replacement.textContent = `[${stampName}]`;
         img.replaceWith(replacement);
-    }
+    };
 
     return img;
   }
@@ -596,7 +1296,7 @@ class SekaiRenderer {
         replacement.className = 'sticker-broken';
         replacement.textContent = '[sticker]';
         img.replaceWith(replacement);
-    }
+    };
 
     return img;
   }
@@ -1477,10 +2177,11 @@ class SekaiRenderer {
   }
   
   renderCodeBlock(lang, content) {
-      const code = document.createElement('code');
-      code.className = 'sekai-code-block';
-      code.textContent = content || lang; // simplified
-      return code;
+      // v1: [code:lang|content] — if no content, lang field may actually be the body
+      const body = content != null && content !== '' ? content : '';
+      const language = body ? (lang || 'plain') : 'plain';
+      const text = body || lang || '';
+      return this.renderCodeV2({ lang: language }, text);
   }
 
   escapeHtml(str) {

@@ -70,8 +70,12 @@ class UIManager {
     // Nako AI 相关：跟踪本地显示的消息，用于去重
     this.localNakoMessages = new Map(); // fullContent -> { timestamp, messageId }
 
-    // 文件上传服务
-    this.fileUploadService = new FileUploadService();
+    // 文件上传服务：上传走 storage，公开资源解析走 r2 门面（SEKAI v2）
+    this.fileUploadService = new FileUploadService({
+      baseUrl: 'https://storage.nightcord.de5.net',
+      resourceBaseUrl: 'https://r2.nightcord.de5.net',
+      useSekaiV2: true
+    });
 
     // DOM elements
     this.elements = {
@@ -147,24 +151,52 @@ class UIManager {
       this.autocomplete = null;
     }
 
-    // 初始化 SEKAI Renderer
+    // 消息索引：timestamp → message element (for reply jumps)
+    // 必须在 SekaiRenderer 初始化前创建，供 lookupReply 闭包使用
+    this.messageIndex = new Map();
+    // 消息元数据：timestamp → { user, text }（v2 Reply 客户端派生预览）
+    this.messageMeta = new Map();
+
+    // 初始化 SEKAI Renderer（v1 + v2 双解析）
     if (typeof SekaiRenderer !== 'undefined') {
+      const fus = this.fileUploadService;
       this.sekaiRenderer = new SekaiRenderer({
         stickerService: this.stickerService,
         stickerDir: this.stickerDir,
         aiPersonas: window.AIConfig ? window.AIConfig.getAllDisplayNames() : [],
-        imageWidthThreshold: 400
+        imageWidthThreshold: 400,
+        // v2 typed paths (images|files|stickers/{uuid}) — may be r2.* host later
+        resourceBaseUrl: fus
+          ? (fus.resourceBaseUrl || fus.baseUrl)
+          : 'https://storage.nightcord.de5.net',
+        // legacy keys still live on storage host
+        storageBaseUrl: fus ? fus.baseUrl : 'https://storage.nightcord.de5.net',
+        lookupReply: (ts) => this.lookupReplyMeta(ts)
       });
     } else {
       console.warn('SekaiRenderer not available, falling back to basic text rendering');
       this.sekaiRenderer = null;
     }
 
-    // 消息索引：timestamp → message element (for reply jumps)
-    this.messageIndex = new Map();
-
     // 监听回复跳转事件
     this.setupReplyJumpListener();
+  }
+
+  /**
+   * 查找被回复消息的预览信息（SEKAI v2 Reply）
+   * @param {number|string} ts
+   * @returns {{ name?: string, preview?: string } | null}
+   */
+  lookupReplyMeta(ts) {
+    const key = Number(ts) || ts;
+    const meta = this.messageMeta.get(key) || this.messageMeta.get(String(ts));
+    if (!meta) return null;
+    const plain = this.extractPlainTextForReply(meta.text || '');
+    const preview = plain.length > 50 ? plain.substring(0, 50) + '...' : plain;
+    return {
+      name: meta.user || '',
+      preview: preview.replace(/\n/g, ' ')
+    };
   }
 
   /**
@@ -948,66 +980,44 @@ class UIManager {
         // 普通消息处理
         if (message && onSendMessage) {
           if (pangu) {
-            // 保护 SEKAI 语法不被 pangu 处理
+            // 保护 SEKAI / Markdown 语法不被 pangu 插入空格
             const placeholders = [];
-
-            // 保护所有 SEKAI 格式标记
-            // 1. 保护 [type:data] 格式
-            message = message.replace(/\[([^\]]+)\]/g, (match) => {
+            const protect = (match) => {
               const index = placeholders.length;
               placeholders.push(match);
               return `__SEKAI_${index}__`;
-            });
+            };
 
-            // 2. 保护 markdown 格式标记
-            // 保护 **粗体**
-            message = message.replace(/\*\*([^*]+)\*\*/g, (match) => {
-              const index = placeholders.length;
-              placeholders.push(match);
-              return `__SEKAI_${index}__`;
-            });
+            // 0. 保护 SEKAI v2 multi-line blocks (<$SEKAI:…>\n…\n<&SEKAI>)
+            message = message.replace(/<\$SEKAI:[^\n>]*>\r?\n[\s\S]*?^<&SEKAI>\s*$/gm, protect);
 
-            // 保护 *斜体*
-            message = message.replace(/\*([^*\s][^*]*[^*\s])\*/g, (match) => {
-              const index = placeholders.length;
-              placeholders.push(match);
-              return `__SEKAI_${index}__`;
-            });
+            // 1. 保护 SEKAI v2 single-line tokens
+            message = message.replace(/<\$SEKAI:[^>\n]*>/g, protect);
 
-            // 保护 ~~删除线~~
-            message = message.replace(/~~([^~]+)~~/g, (match) => {
-              const index = placeholders.length;
-              placeholders.push(match);
-              return `__SEKAI_${index}__`;
-            });
+            // 2. 保护 SEKAI v1 [type:data] 与 legacy stickers
+            message = message.replace(/\[([^\]]+)\]/g, protect);
 
-            // 保护 ||黑幕||
-            message = message.replace(/\|\|([^|]+)\|\|/g, (match) => {
-              const index = placeholders.length;
-              placeholders.push(match);
-              return `__SEKAI_${index}__`;
-            });
+            // 3. 保护 markdown 格式标记
+            message = message.replace(/\*\*([^*]+)\*\*/g, protect);
+            message = message.replace(/\*([^*\s][^*]*[^*\s])\*/g, protect);
+            message = message.replace(/~~([^~]+)~~/g, protect);
+            message = message.replace(/\|\|([^|]+)\|\|/g, protect);
+            message = message.replace(/`([^`]+)`/g, protect);
 
-            // 保护 `代码`
-            message = message.replace(/`([^`]+)`/g, (match) => {
-              const index = placeholders.length;
-              placeholders.push(match);
-              return `__SEKAI_${index}__`;
-            });
-
-            // 应用 pangu 处理
             message = pangu.spacingText(message);
 
-            // 恢复所有被保护的格式
             placeholders.forEach((original, index) => {
               message = message.replace(`__SEKAI_${index}__`, original);
             });
           }
-          // Normalize stamp emoji format: replace [stamp_0806] with [stamp0806] to unify sticker rendering
-          // 规范化 stamp 表情格式：将 [stamp_0806] 替换为 [stamp0806]，以统一处理 sticker 渲染
-          message = message.replace(/\[stamp_(\d+)\]/g, (_, p1) => `[stamp${p1}]`);
+
+          // 发送侧 stamp 保持 v1 短语法（256 预算 + autocomplete 生态）
+          // [stamp_0806] / [stamp0806] → [stamp:0806]；不改写成 v2
+          message = message
+            .replace(/\[stamp_(\d+)\]/gi, (_, n) => `[stamp:${n}]`)
+            .replace(/\[stamp(\d+)\]/gi, (_, n) => `[stamp:${n}]`);
+
           // 用户主动发送消息，重置交互时间并标记在底部
-          // 发送消息后标记在底部，确保下次渲染会自动滚动
           this.isAtBottom = true;
           this.updateUserActivityTime();
           onSendMessage(message);
@@ -1015,13 +1025,20 @@ class UIManager {
       }
     });
 
-    // Limit message length
+    // Limit message length — must match server-side cap (currently 256)
+    // Do not raise client-side alone: users would compose messages the server rejects/truncates.
+    const MAX_MESSAGE_LENGTH = 256;
     chatInput.addEventListener("input", (event) => {
       const input = event.currentTarget;
 
-      // 1. 字符限制（保持现有逻辑）
-      if (input.value.length > 256) {
-        input.value = input.value.slice(0, 256);
+      // 1. 字符限制（与服务端一致）
+      if (input.value.length > MAX_MESSAGE_LENGTH) {
+        input.value = input.value.slice(0, MAX_MESSAGE_LENGTH);
+        if (!input.dataset.lengthToast) {
+          input.dataset.lengthToast = '1';
+          this.addChatMessage('系统', `消息过长，已截断至 ${MAX_MESSAGE_LENGTH} 字符（服务端限制）`, Date.now(), this.systemIcon, 'bg-red-600');
+          setTimeout(() => { delete input.dataset.lengthToast; }, 2000);
+        }
       }
 
       // 2. 自适应高度调整
@@ -1339,16 +1356,210 @@ class UIManager {
     uploadFill.style.width = '0%';
   }
 
+  /**
+   * 构造上传完成后插入输入框的 SEKAI token。
+   *
+   * 发送策略（服务端 256 字硬顶；渲染侧 v1+v2 全量支持）：
+   * - Image / File / Music → v2（payload = uuid 或 legacy key）
+   * - descriptions 按优先级塞入，保证整 token ≤ 256（编码后长度）
+   * - Music：只发 title（不与 name 双写）；Unknown artist 省略
+   * - Stamp 保持 v1 短语法
+   *
+   * @private
+   */
   async _generateFileMessage(uploadType, fileUrl, file, result) {
-    if (uploadType === 'image') {
-      return `[img:${fileUrl}]`;
-    } else if (uploadType === 'music') {
-      const metadata = await this.extractAudioMetadata(file);
-      return `[music:${fileUrl}|${metadata.title}|${metadata.artist}|${metadata.duration}]`;
-    } else {
-      const formattedSize = FileUploadService.formatSize(result.size);
-      return `[file:${fileUrl}|${file.name}|${formattedSize}]`;
+    // Prefer SEKAI v2 uuid; fall back to legacy key; then full URL
+    const id = (result && (result.uuid || result.key) != null)
+      ? String(result.uuid || result.key).replace(/^\//, '')
+      : (fileUrl || '');
+
+    // v2 upload returns size already in kB; legacy returns bytes
+    let sizeKb = '';
+    if (result) {
+      if (result.uuid != null && result.size != null) {
+        sizeKb = +Number(result.size).toFixed(1);
+      } else if (result.size_bytes != null) {
+        sizeKb = +(Number(result.size_bytes) / 1024).toFixed(1);
+      } else if (result.size != null) {
+        // Heuristic: values > 100000 are almost certainly bytes
+        const n = Number(result.size);
+        sizeKb = n > 100000 ? +(n / 1024).toFixed(1) : +n.toFixed(1);
+      }
+    } else if (file && file.size != null) {
+      sizeKb = +(file.size / 1024).toFixed(1);
     }
+
+    const mime = (result && result.type) || (file && file.type) || 'application/octet-stream';
+    const name = (result && result.name) || (file && file.name) || 'file';
+    const baseName = name.replace(/\.[^/.]+$/, '');
+
+    if (uploadType === 'image') {
+      let w = result && result.w;
+      let h = result && result.h;
+      if (!(w > 0 && h > 0)) {
+        try {
+          const wh = await this._readImageDimensions(file);
+          if (wh) {
+            w = wh.w;
+            h = wh.h;
+          }
+        } catch (_) { /* ignore */ }
+      }
+      // Priority: w/h (layout) > name (optional label)
+      const fields = [];
+      if (w > 0 && h > 0) {
+        fields.push({ key: 'w', value: String(w), encode: false });
+        fields.push({ key: 'h', value: String(h), encode: false });
+      }
+      fields.push({ key: 'name', value: name, encode: true });
+      return this._buildSekaiV2Token('Image', fields, id);
+    }
+
+    if (uploadType === 'music') {
+      const metadata = await this.extractAudioMetadata(file);
+      const title = (metadata.title || baseName || 'track').trim();
+      const artist = (metadata.artist || '').trim();
+      // Priority: type (audio→music routing) → duration (compact) → title → artist.
+      // Do NOT emit name alongside title — they were the same filename and
+      // percent-encoding CJK twice blew past the 256-char hard cap.
+      const fields = [
+        { key: 'type', value: mime || 'audio/mpeg', encode: true }
+      ];
+      if (metadata.durationSec != null && !Number.isNaN(metadata.durationSec) && metadata.durationSec > 0) {
+        fields.push({ key: 'duration', value: String(metadata.durationSec), encode: false });
+      }
+      fields.push({ key: 'title', value: title, encode: true });
+      // Skip placeholder artists; only keep a real one when budget allows
+      const artistPlaceholder = /^(unknown(\s+artist)?|未知|未知艺术家)$/i;
+      if (artist && !artistPlaceholder.test(artist)) {
+        fields.push({ key: 'artist', value: artist, encode: true });
+      }
+      return this._buildSekaiV2Token('Files', fields, id);
+    }
+
+    // Generic file card
+    const fields = [
+      { key: 'type', value: mime, encode: true },
+      { key: 'name', value: name, encode: true }
+    ];
+    if (sizeKb !== '') {
+      fields.push({ key: 'size', value: String(sizeKb), encode: false });
+    }
+    return this._buildSekaiV2Token('Files', fields, id);
+  }
+
+  /**
+   * Percent-encode a description value (SEKAI §3.4), matching the renderer.
+   * @private
+   */
+  _sekaiEncode(str) {
+    if (this.sekaiRenderer && typeof this.sekaiRenderer.percentEncode === 'function') {
+      return this.sekaiRenderer.percentEncode(str);
+    }
+    return encodeURIComponent(String(str == null ? '' : str));
+  }
+
+  /**
+   * Clip a string so its percent-encoded form fits in `maxEncoded` chars.
+   * @private
+   * @returns {string}
+   */
+  _clipToEncodedBudget(str, maxEncoded) {
+    const s = String(str == null ? '' : str);
+    if (maxEncoded <= 0) return '';
+    if (this._sekaiEncode(s).length <= maxEncoded) return s;
+
+    let lo = 0;
+    let hi = s.length;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (this._sekaiEncode(s.slice(0, mid)).length <= maxEncoded) lo = mid;
+      else hi = mid - 1;
+    }
+    return s.slice(0, lo);
+  }
+
+  /**
+   * Build a single-line SEKAI v2 token that never exceeds maxLen.
+   * Fields are packed in priority order; oversize encoded values are clipped;
+   * remaining fields that still don't fit are dropped.
+   *
+   * Wire form: <$SEKAI:Type:k=v;k2=v2:payload>
+   *
+   * @private
+   * @param {string} type
+   * @param {Array<{key:string,value:string,encode?:boolean}>} fields
+   * @param {string} payload
+   * @param {number} [maxLen=256]
+   * @returns {string}
+   */
+  _buildSekaiV2Token(type, fields, payload, maxLen = 256) {
+    const payloadStr = String(payload || '');
+    const prefix = `<$SEKAI:${type}:`;
+    const suffix = `:${payloadStr}>`;
+    let budget = maxLen - prefix.length - suffix.length;
+
+    // Payload alone already over budget (legacy full URL etc.) — strip descs
+    if (budget < 0) {
+      // Last resort: keep a valid-looking shell truncated by the input cap
+      return (prefix + suffix).slice(0, maxLen);
+    }
+
+    const included = [];
+    for (const f of fields) {
+      if (f == null || f.value == null || f.value === '') continue;
+
+      const sep = included.length ? 1 : 0; // ';'
+      const keyPart = `${f.key}=`;
+      const overhead = sep + keyPart.length;
+      if (overhead >= budget) continue;
+
+      let raw = String(f.value);
+      let encoded = f.encode === false ? raw : this._sekaiEncode(raw);
+
+      if (encoded.length + overhead > budget) {
+        if (f.encode === false) {
+          // Numeric / fixed fields can't be partially useful — skip
+          continue;
+        }
+        const avail = budget - overhead;
+        if (avail < 1) continue;
+        raw = this._clipToEncodedBudget(raw, avail);
+        if (!raw) continue;
+        encoded = this._sekaiEncode(raw);
+        // Defensive: binary-search should fit, but re-check
+        if (encoded.length + overhead > budget) continue;
+      }
+
+      included.push(keyPart + encoded);
+      budget -= overhead + encoded.length;
+    }
+
+    return prefix + included.join(';') + suffix;
+  }
+
+  /**
+   * 读取图片宽高（用于 SEKAI v2 Image w/h 描述）
+   * @private
+   * @returns {Promise<{w:number,h:number}|null>}
+   */
+  _readImageDimensions(file) {
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+      return Promise.resolve(null);
+    }
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      const done = (val) => {
+        URL.revokeObjectURL(url);
+        resolve(val);
+      };
+      img.onload = () => done({ w: img.naturalWidth, h: img.naturalHeight });
+      img.onerror = () => done(null);
+      // 超时保护
+      setTimeout(() => done(null), 2000);
+      img.src = url;
+    });
   }
 
   _replacePlaceholderInInput(chatInput, placeholder, fileMsg, placeholderInserted) {
@@ -1399,14 +1610,28 @@ class UIManager {
     this._showUploadProgress(uploadProgress, uploadFilename, uploadPercent, uploadFill, file.name);
 
     try {
+      // Pre-read image dimensions so v2 upload can store w/h in meta
+      let extra = { kind: uploadType === 'image' ? 'image' : 'file' };
+      if (uploadType === 'image') {
+        try {
+          const wh = await this._readImageDimensions(file);
+          if (wh) {
+            extra.w = wh.w;
+            extra.h = wh.h;
+          }
+        } catch (_) { /* ignore */ }
+      }
+
       const result = await this.fileUploadService.upload(file, file.name, (percent) => {
         uploadPercent.textContent = `${percent}%`;
         uploadFill.style.width = `${percent}%`;
-      });
+      }, extra);
 
       uploadProgress.classList.add('hidden');
 
-      const fileUrl = this.fileUploadService.getFileUrl(result.key);
+      const id = result.uuid || result.key;
+      const kind = result.kind || extra.kind || 'file';
+      const fileUrl = this.fileUploadService.getFileUrl(id, kind);
       const fileMsg = await this._generateFileMessage(uploadType, fileUrl, file, result);
 
       this._replacePlaceholderInInput(chatInput, placeholder, fileMsg, placeholderInserted);
@@ -1428,33 +1653,33 @@ class UIManager {
     return new Promise((resolve) => {
       const audio = new Audio();
       const objectUrl = URL.createObjectURL(file);
+      const title = (file.name || 'track').replace(/\.[^/.]+$/, '');
 
       audio.addEventListener('loadedmetadata', () => {
-        // 格式化时长为 MM:SS
-        const duration = audio.duration;
-        const minutes = Math.floor(duration / 60);
-        const seconds = Math.floor(duration % 60).toString().padStart(2, '0');
-        const formattedDuration = `${minutes}:${seconds}`;
-
-        // 从文件名提取标题（移除扩展名）
-        const title = file.name.replace(/\.[^/.]+$/, '');
+        // v2: duration as seconds (float); keep formatted for any legacy consumers
+        const durationSec = Number.isFinite(audio.duration)
+          ? Math.round(audio.duration * 10) / 10
+          : 0;
+        const minutes = Math.floor(durationSec / 60);
+        const seconds = Math.floor(durationSec % 60).toString().padStart(2, '0');
 
         URL.revokeObjectURL(objectUrl);
 
         resolve({
-          title: title,
+          title,
           artist: 'Unknown Artist',
-          duration: formattedDuration
+          duration: `${minutes}:${seconds}`,
+          durationSec
         });
       });
 
       audio.addEventListener('error', () => {
         URL.revokeObjectURL(objectUrl);
-        // 失败时使用默认值
         resolve({
-          title: file.name.replace(/\.[^/.]+$/, ''),
+          title,
           artist: 'Unknown Artist',
-          duration: '0:00'
+          duration: '0:00',
+          durationSec: 0
         });
       });
 
@@ -1748,11 +1973,13 @@ class UIManager {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message';
 
-    // 存储 timestamp 用于回复跳转
+    // 存储 timestamp 用于回复跳转 + v2 Reply 预览元数据
     if (msg.timestamp) {
       msgDiv.dataset.timestamp = msg.timestamp;
-      // 注册到消息索引
       this.messageIndex.set(msg.timestamp, msgDiv);
+      this.messageIndex.set(Number(msg.timestamp), msgDiv);
+      this.messageMeta.set(msg.timestamp, { user: msg.user, text: msg.text || '' });
+      this.messageMeta.set(Number(msg.timestamp), { user: msg.user, text: msg.text || '' });
     }
 
     // 检查是否被提及
@@ -1839,6 +2066,7 @@ class UIManager {
 
   /**
    * 在输入框插入回复引用
+   * 发送策略：Reply 使用 SEKAI v2（无 wire preview，通常比 v1 更短；预览渲染时客户端派生）
    * @param {Object} msg - 要引用的消息对象
    * @private
    */
@@ -1846,19 +2074,8 @@ class UIManager {
     const input = this.elements.chatInput;
     if (!input) return;
 
-    // 从消息文本中提取纯文本（移除嵌套引用和 SEKAI 标记）
-    const plainText = this.extractPlainTextForReply(msg.text);
-
-    // 生成预览文本（截取前30个字符）
-    const preview = plainText.length > 30
-      ? plainText.substring(0, 30) + '...'
-      : plainText;
-
-    // 移除可能的换行符
-    const cleanPreview = preview.replace(/\n/g, ' ');
-
-    // 构造引用语法
-    const reference = `[re:${msg.timestamp}|${cleanPreview}] `;
+    // SEKAI v2 Reply：payload = timestamp only
+    const reference = `<$SEKAI:Reply::${msg.timestamp}> `;
 
     // 插入到当前光标位置
     const start = input.selectionStart || 0;
@@ -1892,29 +2109,52 @@ class UIManager {
 
     let plainText = text;
 
+    // --- SEKAI v2 ---
+    // Multi-line blocks: drop entirely (code etc.)
+    plainText = plainText.replace(/<\$SEKAI:[^\n>]*>\r?\n[\s\S]*?^<&SEKAI>\s*$/gm, '');
+
+    // Format: try to keep decoded payload text
+    plainText = plainText.replace(/<\$SEKAI:Format:([^>]*):([^>]*)>/gi, (_, desc, payload) => {
+      if (/enc=base64/i.test(desc) && this.sekaiRenderer) {
+        try {
+          return this.sekaiRenderer.base64DecodeUtf8(payload);
+        } catch (_) { /* fall through */ }
+      }
+      return payload || '';
+    });
+
+    // Mention: keep display name if present
+    plainText = plainText.replace(/<\$SEKAI:Mention:([^>]*):([^>]*)>/gi, (_, desc, payload) => {
+      const m = /(?:^|;)display=([^;]*)/.exec(desc);
+      if (m) {
+        try { return '@' + decodeURIComponent(m[1].replace(/\+/g, '%20')); }
+        catch { return '@' + m[1]; }
+      }
+      return payload ? '@' + payload : '';
+    });
+
+    // Other single-line v2 tokens — remove
+    plainText = plainText.replace(/<\$SEKAI:[^>\n]*>/g, '');
+
+    // --- SEKAI v1 ---
     // 1. 移除嵌套回复标记 [re:timestamp|preview]
     plainText = plainText.replace(/\[re:[^\]]+\]/g, '');
 
     // 2. 处理有文本内容的 SEKAI 标记
-    // [color:hex|text] 和 [truecolor:hex|text] - 保留文本部分
     plainText = plainText.replace(/\[(color|truecolor):([^|\]]+)\|([^\]]+)\]/g, '$3');
-
-    // [img:url|alt] - 保留 alt 文本
     plainText = plainText.replace(/\[img:[^|\]]+\|([^\]]+)\]/g, '$1');
-
-    // [link:url|title] - 保留标题
     plainText = plainText.replace(/\[link:[^|\]]+\|([^\]]+)\]/g, '$1');
 
     // 3. 移除其他 SEKAI 标记（stamp, file, audio, code 等）
     plainText = plainText.replace(/\[(\w+):([^\]]+)\]/g, '');
 
     // 4. 移除 Markdown 格式标记
-    plainText = plainText.replace(/\*\*(.+?)\*\*/g, '$1'); // 粗体
-    plainText = plainText.replace(/\*(.+?)\*/g, '$1'); // 斜体
-    plainText = plainText.replace(/~~(.+?)~~/g, '$1'); // 删除线
-    plainText = plainText.replace(/\|\|(.+?)\|\|/g, '$1'); // 黑幕
-    plainText = plainText.replace(/`(.+?)`/g, '$1'); // 代码
-    plainText = plainText.replace(/^>\s+/gm, ''); // 引用
+    plainText = plainText.replace(/\*\*(.+?)\*\*/g, '$1');
+    plainText = plainText.replace(/\*(.+?)\*/g, '$1');
+    plainText = plainText.replace(/~~(.+?)~~/g, '$1');
+    plainText = plainText.replace(/\|\|(.+?)\|\|/g, '$1');
+    plainText = plainText.replace(/`(.+?)`/g, '$1');
+    plainText = plainText.replace(/^>\s+/gm, '');
 
     // 5. 清理多余空白
     plainText = plainText.trim();

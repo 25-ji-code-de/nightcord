@@ -17,42 +17,68 @@
 
 /**
  * FileUploadService - 文件上传服务客户端
- * 与部署在 storage.nightcord.de5.net 的 OSS 代理交互
- * 支持文件上传、下载和删除
+ *
+ * 默认走 SEKAI v2 门面：PUT {baseUrl}/v2/upload → { uuid, type, size(kB), name, kind, w?, h? }
+ * 资源解析：{resourceBaseUrl}/images|files|stickers/{uuid}
+ *
+ * 仍兼容 legacy：PUT {baseUrl}/ → { key, url, size(bytes) }
  */
 class FileUploadService {
   /**
    * @param {Object} [opts]
-   * @param {string} [opts.baseUrl] OSS 代理服务地址
-   * @param {number} [opts.timeout] 上传超时时间（毫秒）
+   * @param {string} [opts.baseUrl] 存储网关（上传）
+   * @param {string} [opts.resourceBaseUrl] 资源解析基址（默认同 baseUrl；可绑 r2. 域名）
+   * @param {boolean} [opts.useSekaiV2] 是否使用 /v2/upload（默认 true）
+   * @param {number} [opts.timeout] 上传超时（毫秒）
    */
   constructor(opts = {}) {
-    this.baseUrl = opts.baseUrl || 'https://storage.nightcord.de5.net';
+    // Upload host (legacy + /v2/upload). Resource GET prefers r2 facade when bound.
+    this.baseUrl = (opts.baseUrl || 'https://storage.nightcord.de5.net').replace(/\/$/, '');
+    this.resourceBaseUrl = (opts.resourceBaseUrl || 'https://r2.nightcord.de5.net').replace(/\/$/, '');
+    this.useSekaiV2 = opts.useSekaiV2 !== false;
     this.timeout = opts.timeout || 280000;
   }
 
   /**
    * 上传文件
-   * @param {File|Blob} file 要上传的文件对象
-   * @param {string} [filename] 自定义文件名（可选，默认使用 file.name）
-   * @param {Function} [onProgress] 上传进度回调 (percent) => void
-   * @returns {Promise<{key: string, url: string, size: number}>} 上传结果
+   * @param {File|Blob} file
+   * @param {string} [filename]
+   * @param {Function} [onProgress]
+   * @param {Object} [extra]
+   * @param {'image'|'file'|'sticker'} [extra.kind]
+   * @param {number} [extra.w]
+   * @param {number} [extra.h]
+   * @returns {Promise<Object>}
    */
-  upload(file, filename, onProgress) {
+  upload(file, filename, onProgress, extra = {}) {
     if (!file || !(file instanceof Blob)) {
       return Promise.reject(new Error('Invalid file object'));
     }
 
     const name = filename || file.name || 'file';
 
+    if (this.useSekaiV2) {
+      return this._uploadV2(file, name, onProgress, extra).catch((err) => {
+        // Worker 尚未部署 /v2 时回退 legacy，避免整站上传瘫痪
+        console.warn('SEKAI v2 upload failed, falling back to legacy:', err && err.message);
+        return this._uploadLegacy(file, name, onProgress);
+      });
+    }
+    return this._uploadLegacy(file, name, onProgress);
+  }
+
+  /**
+   * SEKAI v2 upload → PUT /v2/upload
+   * @private
+   */
+  _uploadV2(file, name, onProgress, extra) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
 
       if (onProgress && typeof onProgress === 'function') {
         xhr.upload.addEventListener('progress', (e) => {
           if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            onProgress(percent);
+            onProgress(Math.round((e.loaded / e.total) * 100));
           }
         });
       }
@@ -61,6 +87,9 @@ class FileUploadService {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const result = JSON.parse(xhr.responseText);
+            // Normalize for callers that still expect .key
+            if (result.uuid && !result.key) result.key = result.uuid;
+            // size in v2 response is kB; keep size_bytes if present
             resolve(result);
           } catch (e) {
             reject(new Error('Invalid server response'));
@@ -77,70 +106,134 @@ class FileUploadService {
 
       xhr.addEventListener('error', () => reject(new Error('Network error')));
       xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
-
       xhr.timeout = this.timeout;
       xhr.addEventListener('timeout', () => reject(new Error('Upload timeout')));
 
-      xhr.open('PUT', this.baseUrl);
-      // 编码文件名以支持 Unicode 字符（中文等）
+      xhr.open('PUT', `${this.baseUrl}/v2/upload`);
       xhr.setRequestHeader('X-Filename', encodeURIComponent(name));
       if (file.type) xhr.setRequestHeader('Content-Type', file.type);
+
+      const kind = extra.kind || this._inferKind(file);
+      if (kind) xhr.setRequestHeader('X-Sekai-Kind', kind);
+      if (extra.w > 0) xhr.setRequestHeader('X-Image-Width', String(extra.w));
+      if (extra.h > 0) xhr.setRequestHeader('X-Image-Height', String(extra.h));
 
       xhr.send(file);
     });
   }
 
   /**
-   * 获取文件的完整 URL
-   * @param {string} key 文件的 key（从上传结果中获取）
-   * @returns {string} 文件的完整 URL
+   * Legacy PUT /
+   * @private
    */
-  getFileUrl(key) {
-    const cleanKey = key.startsWith('/') ? key.slice(1) : key;
-    return `${this.baseUrl}/${cleanKey}`;
+  _uploadLegacy(file, name, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      if (onProgress && typeof onProgress === 'function') {
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            onProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        });
+      }
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch (e) {
+            reject(new Error('Invalid server response'));
+          }
+        } else {
+          try {
+            const error = JSON.parse(xhr.responseText);
+            reject(new Error(error.error || `Upload failed: ${xhr.status}`));
+          } catch {
+            reject(new Error(`Upload failed: ${xhr.status}`));
+          }
+        }
+      });
+
+      xhr.addEventListener('error', () => reject(new Error('Network error')));
+      xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+      xhr.timeout = this.timeout;
+      xhr.addEventListener('timeout', () => reject(new Error('Upload timeout')));
+
+      xhr.open('PUT', this.baseUrl);
+      xhr.setRequestHeader('X-Filename', encodeURIComponent(name));
+      if (file.type) xhr.setRequestHeader('Content-Type', file.type);
+      xhr.send(file);
+    });
   }
 
   /**
-   * 检查文件是否存在
-   * @param {string} key 文件的 key
-   * @returns {Promise<boolean>} 文件是否存在
+   * @private
    */
-  exists(key) {
-    const url = this.getFileUrl(key);
+  _inferKind(file) {
+    const t = (file && file.type) || '';
+    if (t.startsWith('image/')) return 'image';
+    return 'file';
+  }
+
+  /**
+   * Resolve a storage key / SEKAI uuid to a fetchable URL.
+   * @param {string} keyOrUuid
+   * @param {'image'|'file'|'sticker'} [kind]
+   * @returns {string}
+   */
+  getFileUrl(keyOrUuid, kind) {
+    if (!keyOrUuid) return '';
+    const raw = String(keyOrUuid).replace(/^\//, '');
+    if (/^https?:\/\//i.test(raw) || raw.startsWith('//') || raw.startsWith('data:')) {
+      return raw;
+    }
+
+    // Pure UUID → typed SEKAI path
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) {
+      const k = (kind || 'files').toLowerCase();
+      const folder = k === 'image' || k === 'images' ? 'images'
+        : k === 'sticker' || k === 'stickers' ? 'stickers'
+        : 'files';
+      return `${this.resourceBaseUrl}/${folder}/${raw}`;
+    }
+
+    // Legacy key: uid/file.ext
+    return `${this.baseUrl}/${raw}`;
+  }
+
+  /**
+   * @param {string} key
+   * @param {'image'|'file'|'sticker'} [kind]
+   */
+  exists(key, kind) {
+    const url = this.getFileUrl(key, kind);
     return fetch(url, { method: 'HEAD' })
-      .then(res => res.ok)
+      .then((res) => res.ok)
       .catch(() => false);
   }
 
-  /**
-   * 删除文件
-   * @param {string} key 文件的 key
-   * @returns {Promise<{ok: boolean}>} 删除结果
-   */
   delete(key) {
-    const cleanKey = key.startsWith('/') ? key.slice(1) : key;
+    const cleanKey = String(key).replace(/^\//, '');
+    // v2 objects are not exposed via legacy DELETE path by uuid alone;
+    // prefer full legacy key when known. Best-effort against typed path is not supported.
     const url = `${this.baseUrl}/${cleanKey}`;
 
-    return fetch(url, { method: 'DELETE' })
-      .then(res => {
-        if (!res.ok) {
-          return res.json()
-            .catch(() => ({}))
-            .then(error => {
-              throw new Error(error.error || `Delete failed: ${res.status}`);
-            });
-        }
-        return res.json();
-      });
+    return fetch(url, { method: 'DELETE' }).then((res) => {
+      if (!res.ok) {
+        return res
+          .json()
+          .catch(() => ({}))
+          .then((error) => {
+            throw new Error(error.error || `Delete failed: ${res.status}`);
+          });
+      }
+      return res.json();
+    });
   }
 
-  /**
-   * 下载文件（触发浏览器下载）
-   * @param {string} key 文件的 key
-   * @param {string} [saveAs] 保存的文件名（可选）
-   */
-  download(key, saveAs) {
-    const url = this.getFileUrl(key);
+  download(key, saveAs, kind) {
+    const url = this.getFileUrl(key, kind);
     const a = document.createElement('a');
     a.href = url;
     if (saveAs) a.download = saveAs;
@@ -149,39 +242,21 @@ class FileUploadService {
     document.body.removeChild(a);
   }
 
-  /**
-   * 获取文件的 Blob 对象
-   * @param {string} key 文件的 key
-   * @returns {Promise<Blob>} 文件的 Blob 对象
-   */
-  getBlob(key) {
-    const url = this.getFileUrl(key);
-    return fetch(url)
-      .then(res => {
-        if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
-        return res.blob();
-      });
+  getBlob(key, kind) {
+    const url = this.getFileUrl(key, kind);
+    return fetch(url).then((res) => {
+      if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
+      return res.blob();
+    });
   }
 
-  /**
-   * 验证文件大小
-   * @param {File|Blob} file 文件对象
-   * @param {number} maxSize 最大大小（字节）
-   * @returns {boolean} 是否在限制内
-   */
   static validateSize(file, maxSize) {
     return file.size <= maxSize;
   }
 
-  /**
-   * 验证文件类型
-   * @param {File|Blob} file 文件对象
-   * @param {string[]} allowedTypes 允许的 MIME 类型列表
-   * @returns {boolean} 是否允许
-   */
   static validateType(file, allowedTypes) {
     if (!file.type) return false;
-    return allowedTypes.some(type => {
+    return allowedTypes.some((type) => {
       if (type.endsWith('/*')) {
         const prefix = type.slice(0, -2);
         return file.type.startsWith(prefix);
@@ -190,11 +265,6 @@ class FileUploadService {
     });
   }
 
-  /**
-   * 格式化文件大小
-   * @param {number} bytes 字节数
-   * @returns {string} 格式化后的大小字符串
-   */
   static formatSize(bytes) {
     if (bytes === 0) return '0 B';
     const k = 1024;

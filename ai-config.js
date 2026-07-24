@@ -87,12 +87,16 @@ function detectAITrigger(message) {
     }
 
     // 3. 检测句中提及模式: any text @mentionName any text
-    const mentionRegex = new RegExp(`@${ai.mentionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+    // Escape regex metacharacters in mentionName (e.g. 汤川唯 is fine; keep general)
+    const escapedMention = ai.mentionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const mentionRegex = new RegExp(`@${escapedMention}\\b|@${escapedMention}(?=\\s|$|[，。！？、,.!?])`, 'i');
     if (mentionRegex.test(message)) {
+      // Prefer strip the mention so the model sees cleaner prompt when possible
+      const prompt = message.replace(new RegExp(`@${escapedMention}`, 'ig'), '').trim() || message;
       return {
         persona: ai.persona,
         displayName: ai.displayName,
-        prompt: message,
+        prompt,
         triggerType: 'mention_inline'
       };
     }

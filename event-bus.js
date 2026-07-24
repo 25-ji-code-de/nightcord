@@ -17,19 +17,11 @@
 
 /**
  * EventBus - 事件总线
- * 
+ *
  * @example
  * const eventBus = new EventBus();
- * 
- * // 订阅事件
- * eventBus.on('message', (data) => {
- *   console.log('Received:', data);
- * });
- * 
- * // 发布事件
+ * eventBus.on('message', (data) => console.log('Received:', data));
  * eventBus.emit('message', { text: 'Hello' });
- * 
- * // 取消订阅
  * eventBus.off('message', callback);
  */
 class EventBus {
@@ -38,19 +30,42 @@ class EventBus {
      * 存储事件监听器的对象
      * @type {Object.<string, Function[]>}
      */
-    this.listeners = {};
+    this.listeners = Object.create(null);
   }
 
   /**
    * 订阅事件
    * @param {string} event - 事件名称
    * @param {Function} callback - 回调函数
+   * @returns {Function} unsubscribe helper
    */
   on(event, callback) {
+    if (typeof callback !== 'function') {
+      throw new TypeError('EventBus.on: callback must be a function');
+    }
     if (!this.listeners[event]) {
       this.listeners[event] = [];
     }
     this.listeners[event].push(callback);
+    return () => this.off(event, callback);
+  }
+
+  /**
+   * 订阅一次：触发后自动取消
+   * @param {string} event
+   * @param {Function} callback
+   * @returns {Function} unsubscribe
+   */
+  once(event, callback) {
+    if (typeof callback !== 'function') {
+      throw new TypeError('EventBus.once: callback must be a function');
+    }
+    const wrapper = (data) => {
+      this.off(event, wrapper);
+      callback(data);
+    };
+    // Preserve identity for off via wrapper only
+    return this.on(event, wrapper);
   }
 
   /**
@@ -60,24 +75,36 @@ class EventBus {
    */
   off(event, callback) {
     if (!this.listeners[event]) return;
-    this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+    this.listeners[event] = this.listeners[event].filter((cb) => cb !== callback);
+    if (this.listeners[event].length === 0) {
+      delete this.listeners[event];
+    }
   }
 
   /**
-   * 发布事件
+   * 发布事件（单个监听器异常不影响其他监听器）
    * @param {string} event - 事件名称
    * @param {*} data - 传递给监听器的数据
    */
   emit(event, data) {
-    if (!this.listeners[event]) return;
-    this.listeners[event].forEach(callback => callback(data));
+    const list = this.listeners[event];
+    if (!list || list.length === 0) return;
+    // Snapshot so on/off during emit is stable
+    const snapshot = list.slice();
+    for (const callback of snapshot) {
+      try {
+        callback(data);
+      } catch (err) {
+        console.error(`EventBus: listener for "${event}" threw`, err);
+      }
+    }
   }
 
   /**
    * 清空所有事件监听器
    */
   clear() {
-    this.listeners = {};
+    this.listeners = Object.create(null);
   }
 
   /**

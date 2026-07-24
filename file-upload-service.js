@@ -36,7 +36,8 @@ class FileUploadService {
     this.baseUrl = (opts.baseUrl || 'https://storage.nightcord.de5.net').replace(/\/$/, '');
     this.resourceBaseUrl = (opts.resourceBaseUrl || 'https://r2.nightcord.de5.net').replace(/\/$/, '');
     this.useSekaiV2 = opts.useSekaiV2 !== false;
-    this.timeout = opts.timeout || 280000;
+    // CF edge → OSS can be slow; allow large files (e.g. ~67MB) without false timeouts.
+    this.timeout = opts.timeout || 900000;
   }
 
   /**
@@ -53,6 +54,12 @@ class FileUploadService {
   upload(file, filename, onProgress, extra = {}) {
     if (!file || !(file instanceof Blob)) {
       return Promise.reject(new Error('Invalid file object'));
+    }
+
+    // Soft client-side cap aligned with storage-worker MAX_UPLOAD_BYTES (~1GB)
+    const MAX = 1048576000;
+    if (typeof file.size === 'number' && file.size > MAX) {
+      return Promise.reject(new Error('File too large (max ~1GB)'));
     }
 
     const name = filename || file.name || 'file';

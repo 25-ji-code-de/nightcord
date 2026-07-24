@@ -50,7 +50,20 @@ class StorageManager {
   }
 
   saveMessages(room, msgs) {
-    try { localStorage.setItem(this.storageKeyMessages(room), JSON.stringify(msgs)); } catch (e) {}
+    try {
+      localStorage.setItem(this.storageKeyMessages(room), JSON.stringify(msgs));
+    } catch (e) {
+      // QuotaExceeded: drop older half and retry once
+      if (e && (e.name === 'QuotaExceededError' || e.code === 22) && Array.isArray(msgs) && msgs.length > 50) {
+        try {
+          const trimmed = msgs.slice(Math.floor(msgs.length / 2));
+          localStorage.setItem(this.storageKeyMessages(room), JSON.stringify(trimmed));
+          console.warn('StorageManager: quota exceeded, trimmed messages for', room);
+        } catch (e2) {
+          console.warn('StorageManager: saveMessages failed after trim', e2);
+        }
+      }
+    }
   }
 
   getLastMsgTimestamp(room) {

@@ -31,32 +31,45 @@
     }
 
     loadAutocompleteData(url) {
-      const targetUrl = url || 'https://sticker.nightcord.de5.net/autocomplete.json';
-      return this.fetcher(targetUrl)
-        .then(res => res.json())
-        .then(data => {
-          const stickers = [];
-          for (const [category, items] of Object.entries(data)) {
-            for (const [label, pinyin] of Object.entries(items)) {
-              stickers.push({
-                label,
-                pinyin,
-                category,
-                // Search in both label and filename (pinyin)
-                searchKey: (label + pinyin).toLowerCase(),
-                code: `${category}_${String(label)}`,
-                url: `${this.stickerDir}/${category}/${encodeURIComponent(String(label))}.png`
-              });
+      const primary = url || 'https://sticker.nightcord.de5.net/autocomplete.json';
+      // Gateway proxy as fallback (CDN / origin issues)
+      const fallback = 'https://api.nightcord.de5.net/sekai/stickers/autocomplete.json';
+
+      const load = (targetUrl) =>
+        this.fetcher(targetUrl)
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
+          .then((data) => {
+            const stickers = [];
+            if (!data || typeof data !== 'object') return stickers;
+            for (const [category, items] of Object.entries(data)) {
+              if (!items || typeof items !== 'object') continue;
+              for (const [label, pinyin] of Object.entries(items)) {
+                stickers.push({
+                  label,
+                  pinyin,
+                  category,
+                  // Search in both label and filename (pinyin)
+                  searchKey: (label + pinyin).toLowerCase(),
+                  code: `${category}_${String(label)}`,
+                  url: `${this.stickerDir}/${category}/${encodeURIComponent(String(label))}.png`,
+                });
+              }
             }
-          }
-          this.stickers = stickers;
-          return stickers;
-        })
-        .catch(e => {
-          console.error('Failed to load sticker autocomplete data', e);
+            this.stickers = stickers;
+            return stickers;
+          });
+
+      return load(primary).catch((e) => {
+        console.warn('Sticker autocomplete primary failed, trying gateway:', e);
+        return load(fallback).catch((e2) => {
+          console.error('Failed to load sticker autocomplete data', e2);
           this.stickers = [];
           return [];
         });
+      });
     }
 
     getStickers() {

@@ -18,7 +18,7 @@
 /**
  * WebSocketManager - WebSocket 连接管理器
  * 负责管理 WebSocket 连接的生命周期，包括连接、断开、重连等
- * 
+ *
  * @example
  * const wsManager = new WebSocketManager({
  *   hostname: 'example.com',
@@ -26,7 +26,7 @@
  *   onOpen: () => console.log('Connected'),
  *   onClose: () => console.log('Disconnected')
  * });
- * 
+ *
  * wsManager.connect('nightcord-default', 'K');
  * wsManager.send({ message: 'As always, at 25:00.' });
  * wsManager.disconnect();
@@ -44,7 +44,7 @@ class WebSocketManager {
    * @param {Function} [config.onReconnect] - 重连时的回调
    */
   constructor(config = {}) {
-    this.hostname = config.hostname || "edge-chat-demo.cloudflareworkers.com";
+    this.hostname = config.hostname || 'edge-chat-demo.cloudflareworkers.com';
     this.reconnectDelay = config.reconnectDelay || 10000;
     this.ws = null;
     this.rejoined = false;
@@ -54,7 +54,11 @@ class WebSocketManager {
     this.startTime = null;
     this.roomname = null;
     this.username = null;
-    
+    /** @type {ReturnType<typeof setTimeout>|null} */
+    this._reconnectTimer = null;
+    /** Generation token so stale sockets/timers cannot rejoin after a new connect */
+    this._gen = 0;
+
     // Callbacks
     this.onOpen = config.onOpen || (() => {});
     this.onMessage = config.onMessage || (() => {});
@@ -72,34 +76,70 @@ class WebSocketManager {
     this.roomname = roomname;
     this.username = username;
     this.rejoined = false;
-    // Ensure auto-reconnect is enabled when initiating a fresh connect
     this.shouldReconnect = true;
     this.startTime = Date.now();
+    this._gen += 1;
+    const gen = this._gen;
+
+    // Drop previous socket without triggering a parallel reconnect loop
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    if (this.ws) {
+      try {
+        this.ws.onopen = null;
+        this.ws.onmessage = null;
+        this.ws.onclose = null;
+        this.ws.onerror = null;
+        this.ws.close();
+      } catch (e) {
+        /* ignore */
+      }
+      this.ws = null;
+    }
 
     const wss = 'wss://';
-    this.ws = new WebSocket(wss + this.hostname + "/api/room/" + roomname + "/websocket");
+    const ws = new WebSocket(wss + this.hostname + '/api/room/' + encodeURIComponent(roomname) + '/websocket');
+    this.ws = ws;
 
-    this.ws.addEventListener("open", (event) => {
-      this.ws.send(JSON.stringify({name: username}));
+    ws.addEventListener('open', (event) => {
+      if (gen !== this._gen || this.ws !== ws) return;
+      try {
+        ws.send(JSON.stringify({ name: username }));
+      } catch (e) {
+        console.warn('WebSocketManager: failed to send join name', e);
+      }
       this.onOpen(event);
     });
 
-    this.ws.addEventListener("message", (event) => {
-      const data = JSON.parse(event.data);
+    ws.addEventListener('message', (event) => {
+      if (gen !== this._gen || this.ws !== ws) return;
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch (e) {
+        console.warn('WebSocketManager: invalid JSON message', e);
+        return;
+      }
       this.onMessage(data);
     });
 
-    this.ws.addEventListener("close", (event) => {
-      console.log("WebSocket closed, reconnecting:", event.code, event.reason);
+    ws.addEventListener('close', (event) => {
+      if (gen !== this._gen) return;
+      console.log('WebSocket closed, reconnecting:', event.code, event.reason);
       this.onClose(event);
-      // Only attempt to rejoin when the close wasn't intentional
       if (this.shouldReconnect) this.rejoin();
     });
 
-    this.ws.addEventListener("error", (event) => {
-      console.log("WebSocket error, reconnecting:", event);
+    ws.addEventListener('error', (event) => {
+      if (gen !== this._gen) return;
+      console.log('WebSocket error:', event);
       this.onError(event);
-      if (this.shouldReconnect) this.rejoin();
+      // close event will usually follow; only rejoin here if socket already closed
+      if (this.shouldReconnect && (!this.ws || this.ws.readyState === WebSocket.CLOSED)) {
+        this.rejoin();
+      }
     });
   }
 
@@ -108,19 +148,26 @@ class WebSocketManager {
    * @private
    */
   async rejoin() {
-    if (this.rejoined) return;
-    
+    if (this.rejoined || !this.shouldReconnect) return;
+    if (!this.roomname || !this.username) return;
+
     this.rejoined = true;
     this.ws = null;
     this.onReconnect();
 
-    // Don't try to reconnect too rapidly.
-    const timeSinceLastJoin = Date.now() - this.startTime;
-    if (timeSinceLastJoin < this.reconnectDelay) {
-      await new Promise(resolve => setTimeout(resolve, this.reconnectDelay - timeSinceLastJoin));
+    const timeSinceLastJoin = Date.now() - (this.startTime || 0);
+    const wait = Math.max(0, this.reconnectDelay - timeSinceLastJoin);
+
+    if (wait > 0) {
+      await new Promise((resolve) => {
+        this._reconnectTimer = setTimeout(() => {
+          this._reconnectTimer = null;
+          resolve();
+        }, wait);
+      });
     }
 
-    // Reconnect
+    if (!this.shouldReconnect) return;
     this.connect(this.roomname, this.username);
   }
 
@@ -131,8 +178,13 @@ class WebSocketManager {
    */
   send(message) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
-      return true;
+      try {
+        this.ws.send(JSON.stringify(message));
+        return true;
+      } catch (e) {
+        console.warn('WebSocketManager: send failed', e);
+        return false;
+      }
     }
     return false;
   }
@@ -141,11 +193,17 @@ class WebSocketManager {
    * 断开连接
    */
   disconnect() {
-    // Close the socket. Do not assume whether auto-reconnect should be
-    // enabled/disabled here — callers may explicitly pause auto-reconnect
-    // via pauseAutoReconnect(). We'll just close the socket.
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    this._gen += 1;
     if (this.ws) {
-      try { this.ws.close(); } catch (e) {}
+      try {
+        this.ws.close();
+      } catch (e) {
+        /* ignore */
+      }
       this.ws = null;
     }
   }
@@ -156,6 +214,10 @@ class WebSocketManager {
    */
   pauseAutoReconnect() {
     this.shouldReconnect = false;
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
   }
 
   /**
@@ -170,7 +232,7 @@ class WebSocketManager {
    * @returns {boolean} 是否已连接
    */
   isConnected() {
-    return this.ws && this.ws.readyState === WebSocket.OPEN;
+    return !!(this.ws && this.ws.readyState === WebSocket.OPEN);
   }
 
   /**
@@ -191,7 +253,7 @@ class WebSocketManager {
       roomname: this.roomname,
       username: this.username,
       connected: this.isConnected(),
-      readyState: this.getReadyState()
+      readyState: this.getReadyState(),
     };
   }
 }

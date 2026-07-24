@@ -30,6 +30,8 @@
       this.onAuthExpired = onAuthExpired; // 授权过期回调
 
       this.storagePrefix = 'sekai_pass_';
+      /** @type {Promise<string>|null} single-flight refresh */
+      this._refreshPromise = null;
     }
 
     /**
@@ -167,7 +169,8 @@
         // 保存 tokens 到 localStorage
         localStorage.setItem(`${this.storagePrefix}access_token`, tokens.access_token);
         localStorage.setItem(`${this.storagePrefix}refresh_token`, tokens.refresh_token);
-        localStorage.setItem(`${this.storagePrefix}expires_at`, Date.now() + tokens.expires_in * 1000);
+        const expiresIn = Number(tokens.expires_in) || 3600;
+        localStorage.setItem(`${this.storagePrefix}expires_at`, String(Date.now() + expiresIn * 1000));
 
         // 清理 sessionStorage
         sessionStorage.removeItem(`${this.storagePrefix}code_verifier`);
@@ -184,9 +187,20 @@
     }
 
     /**
-     * 刷新 access token
+     * 刷新 access token（并发调用共享同一 Promise，避免多路 refresh）
      */
     async refreshToken() {
+      if (this._refreshPromise) {
+        return this._refreshPromise;
+      }
+
+      this._refreshPromise = this._doRefreshToken().finally(() => {
+        this._refreshPromise = null;
+      });
+      return this._refreshPromise;
+    }
+
+    async _doRefreshToken() {
       const refreshToken = localStorage.getItem(`${this.storagePrefix}refresh_token`);
       if (!refreshToken) {
         throw new Error('No refresh token available');
@@ -206,9 +220,14 @@
         });
 
         if (!tokenResponse.ok) {
-          const errorData = await tokenResponse.json();
+          let errorData = {};
+          try {
+            errorData = await tokenResponse.json();
+          } catch (_) {
+            /* ignore */
+          }
           // 如果 refresh token 也失效了，清理所有数据并触发重新登录
-          if (errorData.error === 'invalid_grant') {
+          if (errorData.error === 'invalid_grant' || tokenResponse.status === 401) {
             console.log('Refresh token expired, triggering re-authentication...');
             this.logout();
 
@@ -217,7 +236,7 @@
               this.onAuthExpired();
             }
           }
-          throw new Error(`Token refresh failed: ${errorData.error}`);
+          throw new Error(`Token refresh failed: ${errorData.error || tokenResponse.status}`);
         }
 
         const tokens = await tokenResponse.json();
@@ -228,7 +247,8 @@
           // OAuth 2.1 支持 refresh token 轮换
           localStorage.setItem(`${this.storagePrefix}refresh_token`, tokens.refresh_token);
         }
-        localStorage.setItem(`${this.storagePrefix}expires_at`, Date.now() + tokens.expires_in * 1000);
+        const expiresIn = Number(tokens.expires_in) || 3600;
+        localStorage.setItem(`${this.storagePrefix}expires_at`, String(Date.now() + expiresIn * 1000));
 
         return tokens.access_token;
       } catch (error) {
@@ -250,10 +270,10 @@
 
       // 如果 token 已过期或即将过期（5 分钟内），自动刷新
       const now = Date.now();
-      const expiresAtTime = parseInt(expiresAt);
+      const expiresAtTime = parseInt(expiresAt, 10);
       const fiveMinutes = 5 * 60 * 1000;
 
-      if (now >= expiresAtTime || (expiresAtTime - now) < fiveMinutes) {
+      if (!Number.isFinite(expiresAtTime) || now >= expiresAtTime || (expiresAtTime - now) < fiveMinutes) {
         console.log('Access token expired or expiring soon, refreshing...');
         return await this.refreshToken();
       }
@@ -292,17 +312,16 @@
 
     /**
      * 检查是否已登录
+     * 有 refresh token 时视为已登录（access 可静默刷新）— 与 hub/25ji 一致
      */
     isAuthenticated() {
       const accessToken = localStorage.getItem(`${this.storagePrefix}access_token`);
+      if (!accessToken) return false;
+      if (localStorage.getItem(`${this.storagePrefix}refresh_token`)) return true;
       const expiresAt = localStorage.getItem(`${this.storagePrefix}expires_at`);
-
-      if (!accessToken || !expiresAt) {
-        return false;
-      }
-
-      // 检查是否过期
-      return Date.now() < parseInt(expiresAt);
+      if (!expiresAt) return false;
+      const exp = parseInt(expiresAt, 10);
+      return Number.isFinite(exp) && Date.now() < exp;
     }
 
     /**
@@ -310,13 +329,42 @@
      */
     getCurrentUser() {
       const userJson = localStorage.getItem(`${this.storagePrefix}user`);
-      return userJson ? JSON.parse(userJson) : null;
+      if (!userJson) return null;
+      try {
+        return JSON.parse(userJson);
+      } catch {
+        return null;
+      }
     }
 
     /**
-     * 登出
+     * 登出：尽力撤销服务端 token，再清理本地
      */
     logout() {
+      const accessToken = localStorage.getItem(`${this.storagePrefix}access_token`);
+      const refreshToken = localStorage.getItem(`${this.storagePrefix}refresh_token`);
+
+      // Best-effort RFC 7009 revoke (fire-and-forget)
+      const revoke = (token, hint) => {
+        if (!token) return;
+        try {
+          void fetch(this.tokenEndpoint.replace(/\/token$/, '/revoke'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              token,
+              token_type_hint: hint,
+              client_id: this.clientId,
+            }),
+            keepalive: true,
+          }).catch(() => {});
+        } catch (_) {
+          /* ignore */
+        }
+      };
+      revoke(refreshToken, 'refresh_token');
+      revoke(accessToken, 'access_token');
+
       // 清理所有存储的数据
       localStorage.removeItem(`${this.storagePrefix}access_token`);
       localStorage.removeItem(`${this.storagePrefix}refresh_token`);

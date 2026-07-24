@@ -63,7 +63,11 @@
 
       // 页面卸载时上报最后的在线时长
       window.addEventListener('beforeunload', () => {
-        this.stopOnlineTracking();
+        this.flushOnlineTimeBeacon();
+      });
+      // pagehide is more reliable on mobile
+      window.addEventListener('pagehide', () => {
+        this.flushOnlineTimeBeacon();
       });
     }
 
@@ -95,6 +99,48 @@
       if (this.onlineReportInterval) {
         clearInterval(this.onlineReportInterval);
         this.onlineReportInterval = null;
+      }
+    }
+
+    /**
+     * Best-effort online time report on page unload (sendBeacon when possible).
+     */
+    flushOnlineTimeBeacon() {
+      if (!this.onlineStartTime) return;
+      const now = Date.now();
+      const minutes = Math.floor((now - this.onlineStartTime) / 60000);
+      this.onlineStartTime = null;
+      if (this.onlineReportInterval) {
+        clearInterval(this.onlineReportInterval);
+        this.onlineReportInterval = null;
+      }
+      if (minutes <= 0 || !this.sekaiPassAuth) return;
+
+      const event = {
+        project: 'nightcord',
+        event_type: 'online_time',
+        metadata: { minutes },
+      };
+
+      try {
+        const token = localStorage.getItem('sekai_pass_access_token');
+        if (!token || typeof navigator.sendBeacon !== 'function') {
+          // Fire-and-forget; may be cancelled by unload
+          void this.reportEvent('online_time', { minutes });
+          return;
+        }
+        // sendBeacon cannot set Authorization; fall back to async fetch keepalive
+        void fetch(`${this.apiUrl}/user/events`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(event),
+          keepalive: true,
+        }).catch(() => {});
+      } catch (_) {
+        /* ignore */
       }
     }
 
@@ -171,11 +217,16 @@
     async retryQueuedEvents() {
       if (this.eventQueue.length === 0) return;
 
-      const events = [...this.eventQueue];
-      this.eventQueue = [];
-
-      for (const event of events) {
+      const events = this.eventQueue.splice(0, this.eventQueue.length);
+      // Cap retry burst to avoid hammering API after reconnect
+      const batch = events.slice(0, 10);
+      const rest = events.slice(10);
+      for (const event of batch) {
         await this.reportEvent(event.event_type, event.metadata);
+      }
+      // Put untried events back at the front of the queue
+      if (rest.length) {
+        this.eventQueue = rest.concat(this.eventQueue).slice(0, this.maxQueueSize);
       }
     }
 

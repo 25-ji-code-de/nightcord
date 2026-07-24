@@ -169,51 +169,64 @@ class NakoAIService {
         abortController.abort();
       }, this.timeout);
 
-      const headers = await this._prepareAuthHeaders();
-      const apiUrl = this._buildApiUrl(persona);
+      try {
+        const headers = await this._prepareAuthHeaders();
+        const apiUrl = this._buildApiUrl(persona);
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({
-          userId: userId,
-          message: prompt.trim(),
-          history: history,
-          stream: this.stream
-        }),
-        signal: abortController.signal
-      });
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            userId: userId,
+            message: prompt.trim(),
+            history: history,
+            stream: this.stream
+          }),
+          signal: abortController.signal
+        });
 
-      clearTimeout(timeoutId);
+        if (!response.ok) {
+          let detail = `${response.status} ${response.statusText}`;
+          try {
+            const errBody = await response.json();
+            if (errBody?.error?.message) detail = errBody.error.message;
+            else if (errBody?.error) detail = String(errBody.error);
+          } catch (_) {
+            /* ignore */
+          }
+          throw new Error(`API 错误: ${detail}`);
+        }
 
-      if (!response.ok) {
-        throw new Error(`API 错误: ${response.status} ${response.statusText}`);
+        const { fullContent, fullReasoning, usage } = await this._processResponse(response, messageId);
+
+        this.eventBus.emit('nako:stream:end', {
+          messageId,
+          user: displayName,
+          fullContent,
+          reasoning: fullReasoning,
+          usage,
+          timestamp: Date.now()
+        });
+
+        return fullContent;
+      } finally {
+        clearTimeout(timeoutId);
+        this.activeRequests.delete(messageId);
       }
-
-      const { fullContent, fullReasoning, usage } = await this._processResponse(response, messageId);
-
-      this.eventBus.emit('nako:stream:end', {
-        messageId,
-        user: displayName,
-        fullContent,
-        reasoning: fullReasoning,
-        usage,
-        timestamp: Date.now()
-      });
-
-      this.activeRequests.delete(messageId);
-      return fullContent;
 
     } catch (error) {
       this.activeRequests.delete(messageId);
 
+      const message =
+        error?.name === 'AbortError' ? '请求超时或已取消' : (error?.message || String(error));
+
       this.eventBus.emit('nako:error', {
         messageId,
-        error: error.message,
+        error: message,
         timestamp: Date.now()
       });
 
-      throw error;
+      throw error?.name === 'AbortError' ? new Error(message) : error;
     }
   }
 

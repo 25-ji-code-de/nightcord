@@ -177,10 +177,15 @@
           return a.name.localeCompare(b.name);
         });
 
+      /*
+       * u.name 是别人起的名字（roster 与历史消息的发送者）。
+       * 不转义时 `"><img src=x onerror=alert(1)>` 会闭合 data-name="，
+       * 直接逃出属性上下文 —— 这一处比成员列表那处还危险。
+       */
       this.renderItems(matches, (u) => `
-        <div class="mention-item" data-name="${u.name}">
-          <span class="avatar ${u.color}" style="width:24px;height:24px;font-size:12px;line-height:24px;">${u.avatar}</span>
-          <span>${u.name}</span>
+        <div class="mention-item" data-name="${escapeHtml(u.name)}">
+          <span class="avatar ${escapeHtml(u.color)}" style="width:24px;height:24px;font-size:12px;line-height:24px;">${escapeHtml(u.avatar)}</span>
+          <span>${escapeHtml(u.name)}</span>
           <div class="status-indicator" title="${u.status === 'online' ? '在线' : '离线'}"></div>
         </div>
       `, (item) => this.completeMention(item.dataset.name));
@@ -213,12 +218,17 @@
       const maxResults = underscoreIndex !== -1 ? 500 : 100;
       matches = matches.slice(0, maxResults);
 
+      /*
+       * 贴纸数据来自远端 JSON（sticker.nightcord.de5.net/autocomplete.json）。
+       * 是我们自己的基础设施，但仍然是**跨网络来的数据** —— 它不该有能力
+       * 决定这一页的标记。
+       */
       this.renderItems(matches, (s) => `
-        <div class="mention-item sticker-autocomplete-item" data-code="${s.code}">
-          <img src="${s.url}" class="sticker-preview" loading="lazy" />
+        <div class="mention-item sticker-autocomplete-item" data-code="${escapeHtml(s.code)}">
+          <img src="${escapeHtml(s.url)}" class="sticker-preview" loading="lazy" />
           <div class="sticker-info">
-             <div class="sticker-label">${s.label}</div>
-             <div class="sticker-desc">${s.category}</div>
+             <div class="sticker-label">${escapeHtml(s.label)}</div>
+             <div class="sticker-desc">${escapeHtml(s.category)}</div>
           </div>
         </div>
       `, (item) => this.completeSticker(item.dataset.code));

@@ -1,9 +1,14 @@
+# CSP 分两条：强制生效的四条零风险指令，加一条 Report-Only 的完整策略。
+# 本站渲染用户投稿内容（经 DOMPurify），是四个静态站里最需要 CSP 的一个。
+# connect-src 里的 wss: 是聊天室 WebSocket —— websocket-mgr.js 用当前 hostname 拼。
 /*
   Cache-Control: no-cache
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://r2.nightcord.de5.net https://sticker.nightcord.de5.net https://storage.nightcord.de5.net; media-src 'self' blob: https://r2.nightcord.de5.net https://storage.nightcord.de5.net; connect-src 'self' wss: https://api.nightcord.de5.net https://nako.nightcord.de5.net https://storage.nightcord.de5.net https://r2.nightcord.de5.net https://sticker.nightcord.de5.net; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
 
 # 音效为内容固定的二进制资源，改名即换版本
 /se_cord.opus

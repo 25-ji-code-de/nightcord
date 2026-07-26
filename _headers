@@ -1,9 +1,19 @@
 /*
   Cache-Control: no-cache
-*/
-/*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-*/
+
+# 音效为内容固定的二进制资源，改名即换版本
+/se_cord.opus
+  Cache-Control: public, max-age=31536000, immutable
+
+/se_cord.mp3
+  Cache-Control: public, max-age=31536000, immutable
+
+/se_dcord.opus
+  Cache-Control: public, max-age=31536000, immutable
+
+/se_dcord.mp3
+  Cache-Control: public, max-age=31536000, immutable

@@ -1,14 +1,33 @@
-# CSP 分两条：强制生效的四条零风险指令，加一条 Report-Only 的完整策略。
+# CSP 分两条：强制生效的一组，加一条 Report-Only 的完整策略。
 # 本站渲染用户投稿内容（经 DOMPurify），是四个静态站里最需要 CSP 的一个。
 # connect-src 里的 wss: 是聊天室 WebSocket —— websocket-mgr.js 用当前 hostname 拼。
+#
+# ── script-src 'self' 已进入强制生效那一条 ─────────────────────────
+#
+# 它挡的是**内联事件处理器**：`<img src=x onerror=…>` 这种注入进 innerHTML
+# 的东西，在带 'unsafe-inline' 时照样执行，去掉之后浏览器直接拒绝。
+#
+# 这是针对用户名 XSS（见 sekai-escape.js）的第二道防线 —— 转义是第一道。
+# 只有一道的话，下次谁在某个模板里漏了转义，就又是全通。
+#
+# 前提是全站零内联 script：
+#   - 内联事件处理器：本来就是 0 处
+#   - 内联 <script> 块：最后一个（启动那几行）已挪到 /boot.js
+#   - 没有 eval / new Function / setTimeout('字符串') / 动态建 script 标签
+#   - 全部 <script src> 都是同源 /xxx.js
+# 以上四条由 test/csp-no-inline.test.mjs 逐条钉住 —— 谁哪天加回一个内联
+# script，测试会红，而不是等到线上白屏。
+#
+# style-src 的 'unsafe-inline' **留着**：style="" 属性还有 6 处，
+# 且样式注入的危害远小于脚本注入。它仍在 Report-Only 里。
 /*
   Cache-Control: no-cache
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Content-Security-Policy: object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://r2.nightcord.de5.net https://sticker.nightcord.de5.net https://storage.nightcord.de5.net; media-src 'self' blob: https://r2.nightcord.de5.net https://storage.nightcord.de5.net; connect-src 'self' wss: https://api.nightcord.de5.net https://nako.nightcord.de5.net https://storage.nightcord.de5.net https://r2.nightcord.de5.net https://sticker.nightcord.de5.net; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://r2.nightcord.de5.net https://sticker.nightcord.de5.net https://storage.nightcord.de5.net; media-src 'self' blob: https://r2.nightcord.de5.net https://storage.nightcord.de5.net; connect-src 'self' wss: https://api.nightcord.de5.net https://nako.nightcord.de5.net https://storage.nightcord.de5.net https://r2.nightcord.de5.net https://sticker.nightcord.de5.net; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
 
 # 音效为内容固定的二进制资源，改名即换版本
 /se_cord.opus

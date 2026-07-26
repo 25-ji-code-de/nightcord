@@ -11,9 +11,6 @@ jobs:
   check:
     uses: 25-ji-code-de/.github/.github/workflows/static-check.yml@main
 
-  # 本仓此前零测试。第一批盯的是「同一段文本在两条路径上被判成不同的东西」——
-  # 渲染器按规范判畸形 token 为纯文本，ui-manager 的正则却把它当 token，
-  # 于是屏幕上看得见、复制不出来（见 issue #2）。
   test:
     runs-on: ubuntu-latest
     steps:
@@ -21,6 +18,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      # 无依赖：测试自己搭最小的 window 壳把浏览器脚本跑起来
+      # 无依赖：测试用 vm 搭最小 window 环境后按加载顺序求值
       - name: Test
         run: node --test "test/*.test.mjs"

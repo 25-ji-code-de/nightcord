@@ -227,7 +227,9 @@
             /* ignore */
           }
           // 如果 refresh token 也失效了，清理所有数据并触发重新登录
-          if (errorData.error === 'invalid_grant' || tokenResponse.status === 401) {
+          // 按 error code 判断，而非 HTTP status —— 服务端对 invalid_client 返回 400
+          // （RFC 6749 §5.2），按 status 码判断会漏掉这种情况
+          if (errorData.error === 'invalid_grant' || errorData.error === 'invalid_client') {
             console.log('Refresh token expired, triggering re-authentication...');
             this.logout();
 

@@ -662,10 +662,19 @@ class UIManager {
     this.roster.forEach(user => {
       const div = document.createElement('div');
       div.className = 'voice-user';
+      /*
+       * user.name 来自别的用户 —— SEKAI Pass 的 name / preferred_username
+       * claim，那边只校验长度（≤ 50 字符）。不转义的话，
+       * `"><img src=x onerror=alert(1)>` 这样的昵称会在每个看到成员列表的
+       * 人的浏览器里执行。
+       *
+       * color 与 avatar 本来是由 generateAvatar 生成的（固定色板 + 名字首字符），
+       * 但它们跟名字来自同一个对象，一并转义，省得以后有人改了来源还要重新论证。
+       */
       div.innerHTML = `
           <div class="voice-user-info">
-            <span class="avatar ${user.color}">${user.avatar}</span>
-            <span style="font-size:14px;">${user.name}</span>
+            <span class="avatar ${escapeHtml(user.color)}">${escapeHtml(user.avatar)}</span>
+            <span style="font-size:14px;">${escapeHtml(user.name)}</span>
           </div>
         `;
       // 只有是自己才可点击

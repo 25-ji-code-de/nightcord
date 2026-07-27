@@ -64,6 +64,26 @@ const AUDIO_VIZ_CONFIG = {
  *
  * const fragment = renderer.render('这是**粗体**和<$SEKAI:Stamp::stamp0001>');
  */
+
+/**
+ * SEKAI v2 的 Type 形状，规范 §3.3：`ALPHA *(ALPHA / DIGIT / "-")`。
+ *
+ * **这是唯一来源。** ui-manager 的 markdown 保护与 getPlainText
+ * 也从这里取（`SekaiRenderer.V2_TYPE_SOURCE`）。
+ *
+ * 此前那两处各写各的正则 `<\$SEKAI:[^>\n]*>` —— 不校验 Type，
+ * 于是同一段文本在两条路径上被判成不同的东西：
+ *
+ *   <$SEKAI:123:x>    渲染器：Type 不以字母开头 → 畸形 → 按 §10.1 当纯文本显示
+ *                     ui-manager：形状对上了 → 当作 token → 复制/引用时整段删掉
+ *
+ * 结果就是**屏幕上看得见，复制不出来**。见 issue #2。
+ */
+const V2_TYPE_SOURCE = '[A-Za-z][A-Za-z0-9-]*';
+
+/** 预编译：`_parseV2TokenAt` 每个 token 都要用一次，别在热路径上现建。 */
+const V2_TYPE_ANCHORED = new RegExp(`^(${V2_TYPE_SOURCE})`);
+
 class SekaiRenderer {
   constructor(options = {}) {
     this.stickerService = options.stickerService;
@@ -511,7 +531,7 @@ class SekaiRenderer {
    */
   _parseV2TokenAt(text, headerStart, absoluteStart, closeMulti) {
     // Type: ALPHA *(ALPHA / DIGIT / "-")  — also allow "X-" vendor prefix
-    const typeMatch = text.slice(headerStart).match(/^([A-Za-z][A-Za-z0-9-]*)/);
+    const typeMatch = text.slice(headerStart).match(V2_TYPE_ANCHORED);
     if (!typeMatch) return null;
     const rawType = typeMatch[1];
     let cursor = headerStart + rawType.length;
@@ -2319,5 +2339,14 @@ class SekaiRenderer {
     };
   }
 }
+
+/**
+ * 对外暴露 Type 的形状，供 ui-manager 构造它自己的正则。
+ *
+ * 只暴露**源字符串**而不是编好的正则：调用方需要的 flag 各不相同
+ * （`g` / `gm` / `gi`），共用一个带 `g` 的正则对象会因为 lastIndex
+ * 互相干扰。
+ */
+SekaiRenderer.V2_TYPE_SOURCE = V2_TYPE_SOURCE;
 
 window.SekaiRenderer = SekaiRenderer;

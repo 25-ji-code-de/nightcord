@@ -989,10 +989,10 @@ class UIManager {
             };
 
             // 0. 保护 SEKAI v2 multi-line blocks (<$SEKAI:…>\n…\n<&SEKAI>)
-            message = message.replace(/<\$SEKAI:[^\n>]*>\r?\n[\s\S]*?^<&SEKAI>\s*$/gm, protect);
+            message = message.replace(this._v2BlockRe(), protect);
 
             // 1. 保护 SEKAI v2 single-line tokens
-            message = message.replace(/<\$SEKAI:[^>\n]*>/g, protect);
+            message = message.replace(this._v2TokenRe('g'), protect);
 
             // 2. 保护 SEKAI v1 [type:data] 与 legacy stickers
             message = message.replace(/\[([^\]]+)\]/g, protect);
@@ -2109,6 +2109,30 @@ class UIManager {
    * @returns {string} 纯文本内容
    * @private
    */
+
+  /**
+   * 按 SEKAI v2 规范构造匹配 token 的正则。
+   *
+   * Type 的形状取自 SekaiRenderer.V2_TYPE_SOURCE（规范 §3.3），
+   * **不要在这里另写一份**。此前这几处用的是 `<\$SEKAI:[^>\n]*>`，
+   * 不校验 Type，于是 `<$SEKAI:123:x>` 这类畸形 token 在渲染器眼里是
+   * 纯文本、在这里却是 token —— 屏幕上看得见，复制/引用时整段消失。
+   *
+   * 渲染器不可用时回落到宽松形状：宁可沿用旧行为，也不要因为脚本
+   * 加载顺序变了就把所有 token 都漏掉。
+   * @private
+   */
+  _v2TokenRe(flags) {
+    const type = (typeof SekaiRenderer !== 'undefined' && SekaiRenderer.V2_TYPE_SOURCE) || '[^>\\n]*';
+    return new RegExp(`<\\$SEKAI:${type}:[^>\\n]*>`, flags);
+  }
+
+  /** 多行块：`<$SEKAI:Type:desc>` + 换行 + 内容 + `<&SEKAI>`。 */
+  _v2BlockRe() {
+    const type = (typeof SekaiRenderer !== 'undefined' && SekaiRenderer.V2_TYPE_SOURCE) || '[^\\n>]*';
+    return new RegExp(`<\\$SEKAI:${type}:[^\\n>]*>\\r?\\n[\\s\\S]*?^<&SEKAI>\\s*$`, 'gm');
+  }
+
   extractPlainTextForReply(text) {
     if (!text) return '';
 
@@ -2116,7 +2140,7 @@ class UIManager {
 
     // --- SEKAI v2 ---
     // Multi-line blocks: drop entirely (code etc.)
-    plainText = plainText.replace(/<\$SEKAI:[^\n>]*>\r?\n[\s\S]*?^<&SEKAI>\s*$/gm, '');
+    plainText = plainText.replace(this._v2BlockRe(), '');
 
     // Format: try to keep decoded payload text
     plainText = plainText.replace(/<\$SEKAI:Format:([^>]*):([^>]*)>/gi, (_, desc, payload) => {
@@ -2139,7 +2163,7 @@ class UIManager {
     });
 
     // Other single-line v2 tokens — remove
-    plainText = plainText.replace(/<\$SEKAI:[^>\n]*>/g, '');
+    plainText = plainText.replace(this._v2TokenRe('g'), '');
 
     // --- SEKAI v1 ---
     // 1. 移除嵌套回复标记 [re:timestamp|preview]

@@ -42,6 +42,23 @@ class Nightcord {
       }
     });
 
+    // 大文件上传（> 512 MiB）需 SEKAI Pass token。给上传服务注入与 Nako 同形的
+    // provider：未登录或取 token 失败时返回 null，绝不向上抛。
+    if (this.ui && this.ui.fileUploadService &&
+        typeof this.ui.fileUploadService.setGetAccessToken === 'function') {
+      this.ui.fileUploadService.setGetAccessToken(async () => {
+        if (this.sekaiPassAuth.isAuthenticated()) {
+          try {
+            return await this.sekaiPassAuth.getAccessToken();
+          } catch (error) {
+            console.warn('Failed to get access token for upload:', error);
+            return null;
+          }
+        }
+        return null;
+      });
+    }
+
     // 初始化 Nako AI 服务
     this.nakoService = new NakoAIService({
       eventBus: this.eventBus,

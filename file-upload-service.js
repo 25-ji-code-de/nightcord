@@ -30,6 +30,7 @@ class FileUploadService {
    * @param {string} [opts.resourceBaseUrl] 资源解析基址（默认同 baseUrl；可绑 r2. 域名）
    * @param {boolean} [opts.useSekaiV2] 是否使用 /v2/upload（默认 true）
    * @param {number} [opts.timeout] 上传超时（毫秒）
+   * @param {() => Promise<string|null>} [opts.getAccessToken] 取 SEKAI Pass token（可选；> 512 MiB 时用）
    */
   constructor(opts = {}) {
     // Upload host (legacy + /v2/upload). Resource GET prefers r2 facade when bound.
@@ -38,6 +39,17 @@ class FileUploadService {
     this.useSekaiV2 = opts.useSekaiV2 !== false;
     // CF edge → OSS can be slow; allow large files (e.g. ~67MB) without false timeouts.
     this.timeout = opts.timeout || 900000;
+    // Optional SEKAI Pass token provider — must resolve null (not throw) when unauthenticated,
+    // like NakoAIService. Only used when a file exceeds the anonymous cap.
+    this.getAccessToken = typeof opts.getAccessToken === 'function' ? opts.getAccessToken : null;
+  }
+
+  /**
+   * 运行时注入 SEKAI Pass token provider（构造后接线用）。
+   * @param {() => Promise<string|null>} fn
+   */
+  setGetAccessToken(fn) {
+    this.getAccessToken = typeof fn === 'function' ? fn : null;
   }
 
   /**
@@ -51,27 +63,46 @@ class FileUploadService {
    * @param {number} [extra.h]
    * @returns {Promise<Object>}
    */
-  upload(file, filename, onProgress, extra = {}) {
+  async upload(file, filename, onProgress, extra = {}) {
     if (!file || !(file instanceof Blob)) {
-      return Promise.reject(new Error('Invalid file object'));
+      throw new Error('Invalid file object');
     }
 
-    // Soft client-side cap aligned with storage-worker MAX_UPLOAD_BYTES (~1GB)
-    const MAX = 1048576000;
-    if (typeof file.size === 'number' && file.size > MAX) {
-      return Promise.reject(new Error('File too large (max ~1GB)'));
+    // 客户端软上限，与 storage-worker 对齐：
+    //   匿名 ≤ 512 MiB（ANON_MAX，对齐 Cloudflare 缓存对象上限）
+    //   持 SEKAI Pass token 可到绝对硬顶 ~1GB（ABS_MAX）
+    const ANON_MAX = 536870912;   // 512 MiB
+    const ABS_MAX = 1048576000;   // ~1GB
+    const size = typeof file.size === 'number' ? file.size : 0;
+    if (size > ABS_MAX) {
+      throw new Error('File too large (max ~1GB)');
+    }
+
+    // 超过匿名档才需要 token；未登录时明确报错而不是发一个注定 401 的请求
+    let token = null;
+    if (size > ANON_MAX) {
+      if (this.getAccessToken) {
+        try {
+          token = await this.getAccessToken();
+        } catch (_) {
+          token = null;
+        }
+      }
+      if (!token) {
+        throw new Error('文件超过 512 MiB，需登录 SEKAI Pass 后才能上传');
+      }
     }
 
     const name = filename || file.name || 'file';
 
     if (this.useSekaiV2) {
-      return this._uploadV2(file, name, onProgress, extra).catch((err) => {
+      return this._uploadV2(file, name, onProgress, extra, token).catch((err) => {
         // Worker 尚未部署 /v2 时回退 legacy，避免整站上传瘫痪
         console.warn('SEKAI v2 upload failed, falling back to legacy:', err && err.message);
-        return this._uploadLegacy(file, name, onProgress);
+        return this._uploadLegacy(file, name, onProgress, token);
       });
     }
-    return this._uploadLegacy(file, name, onProgress);
+    return this._uploadLegacy(file, name, onProgress, token);
   }
 
   /**
@@ -159,7 +190,7 @@ class FileUploadService {
    * SEKAI v2 upload → PUT /v2/upload
    * @private
    */
-  _uploadV2(file, name, onProgress, extra) {
+  _uploadV2(file, name, onProgress, extra, token) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       this._attachProgress(xhr, onProgress);
@@ -199,6 +230,7 @@ class FileUploadService {
       xhr.open('PUT', `${this.baseUrl}/v2/upload`);
       xhr.setRequestHeader('X-Filename', encodeURIComponent(name));
       if (file.type) xhr.setRequestHeader('Content-Type', file.type);
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
       const kind = extra.kind || this._inferKind(file);
       if (kind) xhr.setRequestHeader('X-Sekai-Kind', kind);
@@ -213,7 +245,7 @@ class FileUploadService {
    * Legacy PUT /
    * @private
    */
-  _uploadLegacy(file, name, onProgress) {
+  _uploadLegacy(file, name, onProgress, token) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       this._attachProgress(xhr, onProgress);
@@ -250,6 +282,7 @@ class FileUploadService {
       xhr.open('PUT', this.baseUrl);
       xhr.setRequestHeader('X-Filename', encodeURIComponent(name));
       if (file.type) xhr.setRequestHeader('Content-Type', file.type);
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.send(file);
     });
   }

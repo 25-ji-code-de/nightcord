@@ -55,7 +55,7 @@
       this._auth = new SekaiAuth({
         clientId: this.clientId,
         redirectUri: this.redirectUri,
-        scope: 'openid profile email',
+        scope: 'openid profile',
         endpoints: {
           authorize: options.authEndpoint || SEKAI_PASS_ENDPOINTS.authorize,
           token: options.tokenEndpoint || SEKAI_PASS_ENDPOINTS.token,

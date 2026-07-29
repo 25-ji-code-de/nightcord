@@ -1,0 +1,332 @@
+/* @sekai-vendor @sekai/design@v0.1.0 css/layout/chat.css */
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 The 25-ji-code-de Team */
+
+/* ============================================================
+   Chat — bar, message list, message row, composer
+   ============================================================ */
+
+/* ---------- Top bar ---------- */
+.sekai-bar {
+  height: var(--sekai-bar-height);
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sekai-space-sm);
+  padding: 0 var(--sekai-space-lg);
+  background: rgb(var(--sekai-surface) / 0.8);
+  border-bottom: var(--sekai-hairline-divider);
+}
+
+.sekai-bar__title {
+  font-size: var(--sekai-text-md);
+  font-weight: var(--sekai-weight-semibold);
+}
+
+/* Decorative traffic lights. Purely ornamental — they are not
+   window controls and must never be the only way to do anything. */
+.sekai-window-dots {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sekai-space-sm);
+}
+
+.sekai-window-dots > i {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--sekai-radius-full);
+  display: inline-block;
+}
+
+.sekai-window-dots > i:nth-child(1) {
+  background: #62c4ed;
+}
+.sekai-window-dots > i:nth-child(2) {
+  background: #f5c03b;
+}
+.sekai-window-dots > i:nth-child(3) {
+  background: #f25a64;
+}
+
+/* ---------- Message list ---------- */
+.sekai-messages {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sekai-space-lg) 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ---------- Message row ---------- */
+.sekai-message {
+  position: relative;
+  display: flex;
+  gap: var(--sekai-space-md);
+  padding: var(--sekai-space-sm) var(--sekai-space-lg);
+  transition: background var(--sekai-dur-instant);
+}
+
+/* Darken rather than lighten: on both worlds' canvases a dark wash
+   reads as "under the cursor" without competing with the accent. */
+.sekai-message:hover {
+  background: rgb(4 4 5 / 0.07);
+}
+
+.sekai-message__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.sekai-message__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sekai-space-sm);
+  margin-bottom: var(--sekai-space-2xs);
+}
+
+.sekai-message__author {
+  font-size: var(--sekai-text-lg);
+  font-weight: var(--sekai-weight-semibold);
+}
+
+.sekai-message__time {
+  font-family: var(--sekai-font-mono);
+  font-size: var(--sekai-text-label);
+  color: rgb(var(--sekai-fg-muted));
+}
+
+.sekai-message__text {
+  margin: 0;
+  font-size: var(--sekai-text-lg);
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Being mentioned is the one row-level state that gets a colour.
+   Warning amber, strip on the left, padding compensated so the text
+   does not shift. */
+.sekai-message.is-mentioned {
+  background: rgb(var(--sekai-warning) / 0.1);
+  border-left: 2px solid rgb(var(--sekai-warning));
+  padding-left: 14px;
+}
+
+.sekai-message.is-mentioned:hover {
+  background: rgb(var(--sekai-warning) / 0.15);
+}
+
+/* Jump-to-reply target: pulses once, then holds a tint long enough
+   to find with your eyes. */
+.sekai-message.is-highlighted {
+  background: rgb(var(--sekai-accent-deep) / 0.2);
+  animation: sekai-message-pulse 2s ease-out;
+}
+
+@keyframes sekai-message-pulse {
+  0% {
+    background: rgb(var(--sekai-accent-deep) / 0.4);
+  }
+  100% {
+    background: rgb(var(--sekai-accent-deep) / 0.2);
+  }
+}
+
+/* ---------- Hover action ----------
+   Hidden by default, rises into place on row hover. pointer-events
+   is off while hidden so it can never eat a click it isn't showing
+   an affordance for. */
+.sekai-message__action {
+  position: absolute;
+  top: -12px;
+  right: var(--sekai-space-md);
+  z-index: var(--sekai-z-raised);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgb(var(--sekai-surface));
+  border: var(--sekai-hairline-divider);
+  border-radius: var(--sekai-radius-xs);
+  /* Off-ladder on purpose, one alpha step darker than elev-1. At 32px
+     this chip has almost no area to cast with, so it needs a tighter,
+     darker shadow than a card does to read as detached at all. */
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.3);
+  color: rgb(var(--sekai-fg-muted));
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(4px) scale(0.95);
+  pointer-events: none;
+  transition:
+    opacity var(--sekai-dur-fast) ease-out,
+    transform var(--sekai-dur-fast) ease-out,
+    background var(--sekai-dur-instant);
+}
+
+.sekai-message:hover .sekai-message__action {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.sekai-message__action:hover {
+  background: rgb(var(--sekai-canvas));
+  border-color: rgb(var(--sekai-line-strong) / var(--sekai-line-strong-a));
+  color: rgb(var(--sekai-fg));
+  /* Likewise: 8px spread, not elev-2's 12px. The chip lifts, it does
+     not bloom. */
+  box-shadow: 0 4px 8px rgb(0 0 0 / 0.4);
+  transform: translateY(0) scale(1.05);
+}
+
+.sekai-message__action:active {
+  transform: translateY(0) scale(0.95);
+}
+
+.sekai-message__action svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* ---------- Composer ---------- */
+.sekai-composer {
+  position: relative;
+  padding: var(--sekai-space-lg);
+  overflow: visible; /* upload menus and progress escape upward */
+}
+
+.sekai-composer__actions {
+  display: flex;
+  align-self: flex-start;
+  gap: var(--sekai-space-sm);
+  margin-top: 5px;
+}
+
+/* ---------- Suggestion list ----------
+   Mentions and sticker autocomplete. Anchored above the composer. */
+.sekai-suggest {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  z-index: var(--sekai-z-modal);
+  width: 240px;
+  max-height: 240px;
+  margin-bottom: var(--sekai-space-sm);
+  background: rgb(var(--sekai-surface-raised));
+  border: var(--sekai-hairline);
+  border-radius: var(--sekai-radius-xs);
+  box-shadow: 0 -4px 12px rgb(0 0 0 / 0.3);
+  overflow-y: auto;
+}
+
+.sekai-suggest[hidden],
+.sekai-suggest.is-hidden {
+  display: none;
+}
+
+.sekai-suggest__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sekai-space-sm);
+  padding: var(--sekai-space-sm) var(--sekai-space-md);
+  color: rgb(var(--sekai-fg-muted));
+  font-size: var(--sekai-text-md);
+  cursor: pointer;
+}
+
+.sekai-suggest__item:hover,
+.sekai-suggest__item.is-active {
+  background: rgb(var(--sekai-surface-hover));
+  color: rgb(var(--sekai-fg));
+}
+
+.sekai-suggest__preview {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  object-fit: contain;
+  margin-right: var(--sekai-space-2xs);
+  background: rgb(0 0 0 / 0.1);
+  border-radius: var(--sekai-radius-xs);
+}
+
+.sekai-suggest__label {
+  font-weight: var(--sekai-weight-semibold);
+  color: rgb(var(--sekai-fg));
+  font-size: var(--sekai-text-md);
+}
+
+.sekai-suggest__desc {
+  font-size: var(--sekai-text-label);
+  color: rgb(var(--sekai-fg-muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Responsive ---------- */
+@media screen and (max-width: 768px) {
+  .sekai-messages {
+    padding: var(--sekai-space-md) 0;
+  }
+
+  .sekai-message {
+    padding: var(--sekai-space-sm) var(--sekai-space-md);
+  }
+
+  .sekai-window-dots {
+    display: none;
+  }
+
+  .sekai-composer {
+    padding: var(--sekai-space-md);
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .sekai-message__author,
+  .sekai-message__text {
+    font-size: var(--sekai-text-md);
+  }
+
+  .sekai-message__time {
+    font-size: var(--sekai-text-meta);
+  }
+
+  /* Opaque and safe-area padded: the composer must cover whatever
+     scrolls under it and clear the iPhone home indicator. */
+  .sekai-composer {
+    padding: var(--sekai-space-sm);
+    padding-bottom: max(var(--sekai-space-sm), env(safe-area-inset-bottom));
+    background: rgb(var(--sekai-canvas));
+  }
+
+  .sekai-composer .sekai-input-shell {
+    min-height: 44px;
+    padding: var(--sekai-space-xs) 10px;
+    gap: var(--sekai-space-sm);
+  }
+
+  .sekai-composer__actions {
+    gap: 2px;
+  }
+
+  .sekai-suggest {
+    width: calc(100vw - 48px);
+    max-width: 280px;
+  }
+}
+
+@media screen and (max-width: 768px) and (orientation: landscape) {
+  .sekai-bar {
+    height: 40px;
+  }
+
+  .sekai-composer {
+    padding: var(--sekai-space-sm) var(--sekai-space-md);
+  }
+}

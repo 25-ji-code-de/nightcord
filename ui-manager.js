@@ -798,7 +798,7 @@ class UIManager {
     // 如果还没有文本元素，创建一个
     if (!textElement) {
       textElement = document.createElement('p');
-      textElement.className = 'message-text';
+      textElement.className = 'message-text sekai-message__text';
       const contentDiv = msgDiv.querySelector('.message-content');
       if (contentDiv) {
         contentDiv.appendChild(textElement);
@@ -2026,7 +2026,7 @@ class UIManager {
     // Message text - 使用 SEKAI Renderer 或降级到 StickerService
     if (msg.text) {
       const p = document.createElement('p');
-      p.className = 'message-text';
+      p.className = 'message-text sekai-message__text';
 
       let frag;
       if (this.sekaiRenderer) {

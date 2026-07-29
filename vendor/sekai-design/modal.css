@@ -1,0 +1,132 @@
+/* @sekai-vendor @sekai/design@v0.1.0 css/components/modal.css */
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 The 25-ji-code-de Team */
+
+/* ============================================================
+   Modal / Overlay
+   ------------------------------------------------------------
+   The nightcord name chooser, generalised. A blurred scrim, a
+   large-radius panel that slides up, and a close affordance that
+   stays out of the reading path.
+   ============================================================ */
+
+.sekai-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--sekai-z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sekai-space-lg);
+  background: rgb(var(--sekai-scrim) / var(--sekai-scrim-a));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: sekai-fade-in var(--sekai-dur-slower) ease-out;
+}
+
+.sekai-overlay[hidden],
+.sekai-overlay.is-hidden {
+  display: none;
+}
+
+.sekai-modal {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  padding: var(--sekai-space-4xl);
+  background: rgb(var(--sekai-surface-raised));
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: var(--sekai-radius-2xl);
+  box-shadow: var(--sekai-elev-modal);
+  text-align: center;
+  animation: sekai-slide-up var(--sekai-dur-slower) var(--sekai-ease-out);
+}
+
+.sekai-modal__logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--sekai-space-2xl);
+}
+
+/* The mark breathes. This is the only ambient animation in the
+   system that runs without user input — keep it to the logo. */
+.sekai-modal__logo svg {
+  filter: drop-shadow(0 0 10px rgb(var(--sekai-accent) / 0.4));
+  animation: sekai-float 6s ease-in-out infinite;
+}
+
+.sekai-modal__title {
+  margin: 0 0 var(--sekai-space-sm);
+  font-size: var(--sekai-text-3xl);
+  font-weight: var(--sekai-weight-bold);
+  letter-spacing: var(--sekai-tracking-wide);
+  color: rgb(var(--sekai-fg));
+}
+
+.sekai-modal__subtitle {
+  margin: 0 0 var(--sekai-space-3xl);
+  font-size: var(--sekai-text-md);
+  color: rgb(var(--sekai-fg-muted));
+}
+
+.sekai-modal__close {
+  position: absolute;
+  top: var(--sekai-space-lg);
+  right: var(--sekai-space-lg);
+}
+
+/* ---------- Divider with a word in it ----------
+   "OR" between a primary path and an alternative one. The gradient
+   rules fade out at the edges so the word floats. */
+.sekai-or {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: var(--sekai-space-2xl) 0;
+  color: rgb(255 255 255 / 0.3);
+  font-size: var(--sekai-text-label);
+}
+
+.sekai-or::before,
+.sekai-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.1),
+    transparent
+  );
+}
+
+.sekai-or > span {
+  padding: 0 var(--sekai-space-md);
+  font-weight: var(--sekai-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--sekai-tracking-wider);
+}
+
+@media screen and (max-width: 768px) {
+  .sekai-modal {
+    max-width: 90%;
+    padding: 36px var(--sekai-space-2xl);
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .sekai-modal {
+    padding: var(--sekai-space-2xl) var(--sekai-space-xl);
+  }
+
+  .sekai-modal__title {
+    font-size: var(--sekai-text-2xl);
+  }
+}
+
+@media screen and (max-width: 768px) and (orientation: landscape) {
+  .sekai-modal {
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}

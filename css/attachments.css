@@ -1,0 +1,400 @@
+/* 文件上传菜单 */
+.file-upload-menu {
+  position: absolute;
+  bottom: 70px;
+  right: 20px;
+  background: rgba(47, 42, 63, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(61, 55, 80, 0.8);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  min-width: 160px;
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+  transform-origin: bottom right;
+  transition: opacity 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+
+.file-upload-menu:not(.hidden) {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  display: block; /* 覆盖 .hidden 的 display: none，但保留 transition */
+}
+
+/* 移除 .file-upload-menu.hidden 的 display: none，通过 opacity 控制显隐来实现动画 */
+.file-upload-menu.hidden {
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+  pointer-events: none;
+  /* display: none; 不要直接隐藏，否则动画无效。改为 pointer-events: none */
+}
+
+.file-upload-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #e0e0e0;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.file-upload-menu-item:hover {
+  background: rgba(187, 134, 252, 0.1);
+  color: #fff;
+  transform: translateX(2px);
+}
+
+.file-upload-menu-item svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+  transition: transform 0.2s;
+}
+
+.file-upload-menu-item:hover svg {
+  transform: scale(1.1);
+  opacity: 1;
+  color: #bb86fc;
+}
+
+/* 文件上传进度 - 胶囊样式 */
+.file-upload-progress {
+  position: absolute;
+  bottom: 80px;
+  right: 20px;
+  left: auto; /* 取消全宽 */
+  width: 300px;
+  background: rgba(47, 42, 63, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(61, 55, 80, 0.8);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  transform: translateX(0);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+}
+
+.file-upload-progress.hidden {
+  display: block; /* 可能会导致布局问题，如果完全隐藏需要 */
+  transform: translateX(120%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.file-upload-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.file-upload-progress-filename {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin-right: 12px;
+}
+
+.file-upload-progress-percent {
+  font-size: 12px;
+  font-feature-settings: "tnum";
+  color: #bb86fc;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.file-upload-progress-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.file-upload-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #bb86fc, #7c4dff);
+  border-radius: 3px;
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 10px rgba(187, 134, 252, 0.5);
+}
+
+/* 拖拽上传覆盖层 */
+.drag-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(80, 71, 106, 0.9);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.drag-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drag-overlay.hidden {
+  display: none;
+}
+
+.drag-message {
+  color: white;
+  font-size: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: bounce 1s infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+/* --- Nightcord Voice Message Component (Studio/Talkback Style) --- */
+
+.sekai-voice-bubble {
+  /* Reset/Override base player styles for a cleaner bubble look */
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 4px 0 !important;
+  height: 48px !important; /* Compact height */
+  width: auto !important;
+  min-width: 200px !important;
+  max-width: 320px !important;
+
+  /* Flex layout for the bubble */
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+
+  /* Bubble container styling */
+  background-color: rgba(40, 35, 55, 0.6) !important; /* Semi-transparent dark */
+  border-radius: 24px !important; /* Fully rounded bubble */
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding-right: 20px !important; /* Space for time duration on the right */
+  
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+.sekai-voice-bubble:hover {
+  background-color: rgba(50, 45, 65, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+.sekai-voice-bubble.playing {
+  background-color: rgba(55, 50, 75, 0.9) !important;
+  border-color: rgba(167, 139, 250, 0.3) !important; /* Nightcord Purple Tint */
+  box-shadow: 0 4px 16px rgba(167, 139, 250, 0.15) !important;
+}
+
+/* --- Left Module: Talkback Button & LED --- */
+
+.sekai-voice-control-module {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sekai-voice-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(145deg, #3a324b, #2a2536); /* Subtle 3D gradient */
+  box-shadow: 
+    3px 3px 6px #1e1b26, 
+    -1px -1px 2px #463d5a; /* Neumorphic-ish depth */
+  color: #bbb;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.sekai-voice-btn:hover {
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.sekai-voice-btn:active, .sekai-voice-btn.active {
+  background: #252030;
+  box-shadow: 
+    inset 2px 2px 5px #1a1722, 
+    inset -1px -1px 2px #3a324b; /* Pressed state */
+  transform: scale(0.95);
+  color: #a78bfa; /* Active accent color */
+}
+
+.sekai-voice-btn svg {
+  width: 14px; /* Smaller, sharper icon */
+  height: 14px;
+  fill: currentColor;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5));
+}
+
+/* Status LED (The "Recording Studio" Dot) */
+.sekai-voice-led {
+  position: absolute;
+  bottom: 8px; /* Slightly below the button center visually */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #554a4a; /* Dim/Off state (dark brownish-red) */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  transition: all 0.3s ease;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.sekai-voice-led.on {
+  background-color: #ff4757; /* Studio Recording Red */
+  box-shadow: 0 0 6px #ff4757, 0 0 12px rgba(255, 71, 87, 0.6);
+}
+
+.sekai-voice-bubble:hover .sekai-voice-led:not(.on) {
+  background-color: #776a6a; /* Slightly lighter on hover */
+}
+
+/* --- Right Module: Content & Visualizer --- */
+
+.sekai-voice-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer; /* Whole area is seekable */
+}
+
+/* New Digital Waveform Visualizer */
+.sekai-voice-visualizer {
+  display: flex;
+  align-items: center; /* Center vertically */
+  gap: 2px;
+  height: 20px;
+  width: 100%;
+}
+
+.sekai-voice-bar {
+  flex: 1;
+  background-color: #625b75; /* Inactive bar color */
+  border-radius: 1px;
+  min-width: 2px;
+  transition: height 0.1s ease, background-color 0.2s;
+  height: 4px; /* Default height */
+}
+
+.sekai-voice-bubble.playing .sekai-voice-bar {
+  background-color: #a78bfa; /* Active bar color */
+  box-shadow: 0 0 4px rgba(167, 139, 250, 0.4);
+}
+
+/* Metadata Row (Time) */
+.sekai-voice-meta {
+  position: absolute;
+  right: 0;
+  bottom: 8px; /* Stick to bottom right inside content area? No, let's move it to the far right of the bubble */
+  display: none; /* Hide default meta row placement logic */
+}
+
+/* Time Display - Positioned at the end of the bubble */
+.sekai-voice-time {
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+  letter-spacing: -0.5px;
+  margin-left: auto; /* Push to right if inside flex */
+  white-space: nowrap;
+}
+
+/* Progress Track (Subtle line below/behind visualizer) */
+.sekai-voice-progress-track {
+    position: absolute;
+    bottom: 0px;
+    left: 0;
+    width: 100%;
+    height: 2px; /* Very thin line */
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.sekai-voice-progress-fill {
+    height: 100%;
+    background: #a78bfa;
+    width: 0%;
+    opacity: 0.8;
+    transition: width 0.1s linear;
+}
+
+/* Mobile responsive tweak */
+@media (max-width: 480px) {
+    .sekai-voice-bubble {
+        min-width: 160px;
+    }
+    .sekai-voice-time {
+        font-size: 10px;
+    }
+}
+
+/* Accessibility — only for keyboard-navigated interactive elements */
+:where(a, button, select, summary, [tabindex]:not([tabindex="-1"]), input[type="radio"], input[type="checkbox"]):focus-visible {
+  outline: 2px solid rgb(var(--sekai-accent, 124 111 172));
+  outline-offset: 2px;
+}
+
+/* Chat input has its own visual container — don't double-ring it */
+.input:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

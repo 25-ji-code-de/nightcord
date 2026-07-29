@@ -252,7 +252,7 @@ describe('login 与 logout', () => {
     assert.equal(url.origin + url.pathname, 'https://id.nightcord.de5.net/oauth/authorize');
     assert.equal(url.searchParams.get('client_id'), 'nightcord_client');
     assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
-    assert.equal(url.searchParams.get('scope'), 'openid profile email');
+    assert.equal(url.searchParams.get('scope'), 'openid profile');
     assert.ok(session.getItem('sekai_pass_code_verifier'));
   });
 

@@ -18,25 +18,32 @@
 /**
  * FileUploadService - 文件上传服务客户端
  *
- * 默认走 SEKAI v2 门面：PUT {baseUrl}/v2/upload → { uuid, type, size(kB), name, kind, w?, h? }
+ * 默认走 SEKAI v2 三步直传：
+ *   POST {baseUrl}/v2/upload/init → POST upload.url → POST {baseUrl}/v2/upload/complete
  * 资源解析：{resourceBaseUrl}/images|files|stickers/{uuid}
  *
- * 仍兼容 legacy：PUT {baseUrl}/ → { key, url, size(bytes) }
+ * 大文件走 multipart：/v2/upload/multipart/*
  */
 class FileUploadService {
+  static get ANON_MAX_UPLOAD_BYTES() { return 536870912; }         // 512 MiB
+  static get DIRECT_UPLOAD_MAX_BYTES() { return 838860800; }       // 800 MiB, single gateway request
+  static get MULTIPART_MAX_UPLOAD_BYTES() { return 8388608000000; } // 800 MiB * 10,000 parts
+
   /**
    * @param {Object} [opts]
    * @param {string} [opts.baseUrl] 存储网关（上传）
    * @param {string} [opts.resourceBaseUrl] 资源解析基址（默认同 baseUrl；可绑 r2. 域名）
-   * @param {boolean} [opts.useSekaiV2] 是否使用 /v2/upload（默认 true）
+   * @param {boolean} [opts.useMultipartUpload] 是否允许 multipart 大文件直传（默认 true）
    * @param {number} [opts.timeout] 上传超时（毫秒）
    * @param {() => Promise<string|null>} [opts.getAccessToken] 取 SEKAI Pass token（可选；> 512 MiB 时用）
    */
   constructor(opts = {}) {
-    // Upload host (legacy + /v2/upload). Resource GET prefers r2 facade when bound.
+    // Storage API signs uploads; resource GET always uses the r2 host.
     this.baseUrl = (opts.baseUrl || 'https://storage.nightcord.de5.net').replace(/\/$/, '');
     this.resourceBaseUrl = (opts.resourceBaseUrl || 'https://r2.nightcord.de5.net').replace(/\/$/, '');
-    this.useSekaiV2 = opts.useSekaiV2 !== false;
+    this.useMultipartUpload = opts.useMultipartUpload !== false;
+    this.directUploadMaxBytes = opts.directUploadMaxBytes || FileUploadService.DIRECT_UPLOAD_MAX_BYTES;
+    this.multipartMaxUploadBytes = opts.multipartMaxUploadBytes || FileUploadService.MULTIPART_MAX_UPLOAD_BYTES;
     // CF edge → OSS can be slow; allow large files (e.g. ~67MB) without false timeouts.
     this.timeout = opts.timeout || 900000;
     // Optional SEKAI Pass token provider — must resolve null (not throw) when unauthenticated,
@@ -69,13 +76,15 @@ class FileUploadService {
     }
 
     // 客户端软上限，与 storage-worker 对齐：
-    //   匿名 ≤ 512 MiB（ANON_MAX，对齐 Cloudflare 缓存对象上限）
-    //   持 SEKAI Pass token 可到绝对硬顶 ~1GB（ABS_MAX）
-    const ANON_MAX = 536870912;   // 512 MiB
-    const ABS_MAX = 1048576000;   // ~1GB
+    //   匿名 ≤ 512 MiB；更大文件需要 SEKAI Pass。
+    //   单次 direct ≤ 800 MiB；再大走 multipart。
+    const ANON_MAX = FileUploadService.ANON_MAX_UPLOAD_BYTES;
     const size = typeof file.size === 'number' ? file.size : 0;
-    if (size > ABS_MAX) {
-      throw new Error('File too large (max ~1GB)');
+    const maxUploadBytes = this.useMultipartUpload
+      ? this.multipartMaxUploadBytes
+      : this.directUploadMaxBytes;
+    if (size > maxUploadBytes) {
+      throw new Error(`File too large (max ${FileUploadService.formatSize(maxUploadBytes)})`);
     }
 
     // 超过匿名档才需要 token；未登录时明确报错而不是发一个注定 401 的请求
@@ -95,14 +104,13 @@ class FileUploadService {
 
     const name = filename || file.name || 'file';
 
-    if (this.useSekaiV2) {
-      return this._uploadV2(file, name, onProgress, extra, token).catch((err) => {
-        // Worker 尚未部署 /v2 时回退 legacy，避免整站上传瘫痪
-        console.warn('SEKAI v2 upload failed, falling back to legacy:', err && err.message);
-        return this._uploadLegacy(file, name, onProgress, token);
-      });
+    if (size <= this.directUploadMaxBytes) {
+      return this._uploadDirectV2(file, name, onProgress, extra, token);
     }
-    return this._uploadLegacy(file, name, onProgress, token);
+    if (this.useMultipartUpload) {
+      return this._uploadMultipartV2(file, name, onProgress, extra, token);
+    }
+    throw new Error(`File too large (max ${FileUploadService.formatSize(this.directUploadMaxBytes)})`);
   }
 
   /**
@@ -187,66 +195,175 @@ class FileUploadService {
   }
 
   /**
-   * SEKAI v2 upload → PUT /v2/upload
+   * SEKAI v2 preferred upload → init, direct POST to OSS gateway, complete.
    * @private
    */
-  _uploadV2(file, name, onProgress, extra, token) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      this._attachProgress(xhr, onProgress);
+  async _uploadDirectV2(file, name, onProgress, extra, token) {
+    const init = await this._jsonPost('/v2/upload/init', this._uploadInitBody(file, name, extra), token);
 
-      const fail = (err) => {
-        if (xhr._sekaiProgress) xhr._sekaiProgress.dispose();
-        reject(err instanceof Error ? err : new Error(String(err)));
-      };
+    const form = new FormData();
+    const fields = (init.upload && init.upload.fields) || {};
+    for (const [fieldName, value] of Object.entries(fields)) {
+      form.append(fieldName, value);
+    }
+    form.append('file', file, name);
 
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const result = JSON.parse(xhr.responseText);
-            // Normalize for callers that still expect .key
-            if (result.uuid && !result.key) result.key = result.uuid;
-            // size in v2 response is kB; keep size_bytes if present
-            if (xhr._sekaiProgress) xhr._sekaiProgress.complete();
-            resolve(result);
-          } catch (e) {
-            fail(new Error('Invalid server response'));
-          }
-        } else {
-          try {
-            const error = JSON.parse(xhr.responseText);
-            fail(new Error(error.error || `Upload failed: ${xhr.status}`));
-          } catch {
-            fail(new Error(`Upload failed: ${xhr.status}`));
-          }
-        }
-      });
-
-      xhr.addEventListener('error', () => fail(new Error('Network error')));
-      xhr.addEventListener('abort', () => fail(new Error('Upload aborted')));
-      xhr.timeout = this.timeout;
-      xhr.addEventListener('timeout', () => fail(new Error('Upload timeout')));
-
-      xhr.open('PUT', `${this.baseUrl}/v2/upload`);
-      xhr.setRequestHeader('X-Filename', encodeURIComponent(name));
-      if (file.type) xhr.setRequestHeader('Content-Type', file.type);
-      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-
-      const kind = extra.kind || this._inferKind(file);
-      if (kind) xhr.setRequestHeader('X-Sekai-Kind', kind);
-      if (extra.w > 0) xhr.setRequestHeader('X-Image-Width', String(extra.w));
-      if (extra.h > 0) xhr.setRequestHeader('X-Image-Height', String(extra.h));
-
-      xhr.send(file);
+    const uploaded = await this._xhrRequest({
+      method: (init.upload && init.upload.method) || 'POST',
+      url: init.upload && init.upload.url,
+      body: form,
+      onProgress,
+      completeProgressOnLoad: false
     });
+
+    const result = await this._jsonPost('/v2/upload/complete', { token: init.complete_token });
+    if (uploaded.xhr._sekaiProgress) uploaded.xhr._sekaiProgress.complete();
+    return this._normalizeV2Result(result);
   }
 
   /**
-   * Legacy PUT /
+   * SEKAI v2 multipart upload through signed part URLs.
    * @private
    */
-  _uploadLegacy(file, name, onProgress, token) {
+  async _uploadMultipartV2(file, name, onProgress, extra, token) {
+    if (!token) {
+      throw new Error('大文件 multipart 上传需要先登录 SEKAI Pass');
+    }
+
+    let multipartToken = null;
+    try {
+      const init = await this._jsonPost(
+        '/v2/upload/multipart/init',
+        this._uploadInitBody(file, name, extra),
+        token
+      );
+      multipartToken = init.multipart_token;
+
+      const partSize = Number(init.part_size);
+      const partCount = Number(init.part_count);
+      const concurrency = Math.max(1, Math.min(4, Number(init.recommended_concurrency) || 2));
+      if (!multipartToken || !Number.isSafeInteger(partSize) || partSize <= 0 ||
+          !Number.isSafeInteger(partCount) || partCount <= 0) {
+        throw new Error('Invalid multipart init response');
+      }
+
+      const loadedByPart = new Map();
+      let lastPercent = -1;
+      const emitProgress = () => {
+        if (!onProgress || typeof onProgress !== 'function') return;
+        let loaded = 0;
+        for (const value of loadedByPart.values()) loaded += value;
+        const percent = Math.min(99, Math.floor((loaded / file.size) * 99));
+        if (percent === lastPercent) return;
+        lastPercent = percent;
+        try {
+          onProgress(percent);
+        } catch (_) { /* UI callback must not break upload */ }
+      };
+
+      const completedParts = [];
+      const signBatchMax = 20;
+      for (let start = 1; start <= partCount; start += signBatchMax) {
+        const partNumbers = [];
+        for (let n = start; n <= Math.min(partCount, start + signBatchMax - 1); n += 1) {
+          partNumbers.push(n);
+        }
+        const signed = await this._jsonPost('/v2/upload/multipart/parts', {
+          token: multipartToken,
+          part_numbers: partNumbers
+        });
+        const batchParts = signed.parts || [];
+        const uploadedParts = await this._runLimited(batchParts, concurrency, async (part) => {
+          const partNumber = Number(part.part_number);
+          const begin = (partNumber - 1) * partSize;
+          const end = Math.min(file.size, begin + partSize);
+          const body = file.slice(begin, end);
+          return this._uploadMultipartPart(part, body, (loaded) => {
+            loadedByPart.set(partNumber, Math.min(loaded, end - begin));
+            emitProgress();
+          });
+        });
+        completedParts.push(...uploadedParts);
+      }
+
+      const result = await this._jsonPost('/v2/upload/multipart/complete', {
+        token: multipartToken,
+        parts: completedParts
+      });
+      if (onProgress && typeof onProgress === 'function') {
+        try {
+          onProgress(100);
+        } catch (_) { /* ignore */ }
+      }
+      return this._normalizeV2Result(result);
+    } catch (err) {
+      if (multipartToken) {
+        this._jsonPost('/v2/upload/multipart/abort', { token: multipartToken }).catch(() => {});
+      }
+      throw err;
+    }
+  }
+
+  _uploadInitBody(file, name, extra = {}) {
+    const body = {
+      name,
+      type: file.type || 'application/octet-stream',
+      size: file.size,
+      kind: extra.kind || this._inferKind(file)
+    };
+    if (extra.w > 0) body.w = extra.w;
+    if (extra.h > 0) body.h = extra.h;
+    return body;
+  }
+
+  async _jsonPost(path, body, token) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = await this._errorFromResponse(res);
+      throw err;
+    }
+    return res.json();
+  }
+
+  async _errorFromResponse(res) {
+    let message = `Upload failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body && body.error) message = body.error;
+    } catch (_) {
+      try {
+        const text = await res.text();
+        if (text) message = text;
+      } catch (_) { /* ignore */ }
+    }
+    const err = new Error(message);
+    err.status = res.status;
+    return err;
+  }
+
+  _errorFromXhr(xhr) {
+    let message = `Upload failed: ${xhr.status}`;
+    try {
+      const body = JSON.parse(xhr.responseText || '{}');
+      if (body && body.error) message = body.error;
+    } catch (_) { /* ignore */ }
+    const err = new Error(message);
+    err.status = xhr.status;
+    return err;
+  }
+
+  _xhrRequest({ method, url, headers = {}, body, onProgress, completeProgressOnLoad = true }) {
     return new Promise((resolve, reject) => {
+      if (!url) {
+        reject(new Error('Upload URL missing'));
+        return;
+      }
       const xhr = new XMLHttpRequest();
       this._attachProgress(xhr, onProgress);
 
@@ -257,34 +374,79 @@ class FileUploadService {
 
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const result = JSON.parse(xhr.responseText);
-            if (xhr._sekaiProgress) xhr._sekaiProgress.complete();
-            resolve(result);
-          } catch (e) {
-            fail(new Error('Invalid server response'));
-          }
+          if (completeProgressOnLoad && xhr._sekaiProgress) xhr._sekaiProgress.complete();
+          resolve({
+            xhr,
+            responseText: xhr.responseText || '',
+            getResponseHeader: (name) => xhr.getResponseHeader(name)
+          });
         } else {
-          try {
-            const error = JSON.parse(xhr.responseText);
-            fail(new Error(error.error || `Upload failed: ${xhr.status}`));
-          } catch {
-            fail(new Error(`Upload failed: ${xhr.status}`));
-          }
+          fail(this._errorFromXhr(xhr));
         }
       });
-
       xhr.addEventListener('error', () => fail(new Error('Network error')));
       xhr.addEventListener('abort', () => fail(new Error('Upload aborted')));
       xhr.timeout = this.timeout;
       xhr.addEventListener('timeout', () => fail(new Error('Upload timeout')));
 
-      xhr.open('PUT', this.baseUrl);
-      xhr.setRequestHeader('X-Filename', encodeURIComponent(name));
-      if (file.type) xhr.setRequestHeader('Content-Type', file.type);
-      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      xhr.send(file);
+      xhr.open(method, url);
+      for (const [name, value] of Object.entries(headers)) {
+        xhr.setRequestHeader(name, value);
+      }
+      xhr.send(body);
     });
+  }
+
+  _uploadMultipartPart(part, body, onPartProgress) {
+    return new Promise((resolve, reject) => {
+      const upload = part && part.upload;
+      const xhr = new XMLHttpRequest();
+      const fail = (err) => reject(err instanceof Error ? err : new Error(String(err)));
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (!e.lengthComputable || e.total <= 0) return;
+        onPartProgress(Math.min(e.loaded, e.total));
+      });
+      xhr.upload.addEventListener('load', () => onPartProgress(body.size));
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const etag = xhr.getResponseHeader('ETag');
+          if (!etag) {
+            fail(new Error('Multipart upload did not expose ETag'));
+            return;
+          }
+          resolve({ part_number: Number(part.part_number), etag });
+        } else {
+          fail(this._errorFromXhr(xhr));
+        }
+      });
+      xhr.addEventListener('error', () => fail(new Error('Network error')));
+      xhr.addEventListener('abort', () => fail(new Error('Upload aborted')));
+      xhr.timeout = this.timeout;
+      xhr.addEventListener('timeout', () => fail(new Error('Upload timeout')));
+
+      xhr.open((upload && upload.method) || 'PUT', upload && upload.url);
+      xhr.send(body);
+    });
+  }
+
+  async _runLimited(items, limit, iteratee) {
+    const results = new Array(items.length);
+    let next = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const index = next;
+        next += 1;
+        results[index] = await iteratee(items[index]);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  }
+
+  _normalizeV2Result(result) {
+    if (result && result.uuid && !result.key) result.key = result.uuid;
+    return result;
   }
 
   /**
@@ -318,8 +480,8 @@ class FileUploadService {
       return `${this.resourceBaseUrl}/${folder}/${raw}`;
     }
 
-    // Legacy key: uid/file.ext
-    return `${this.baseUrl}/${raw}`;
+    // Legacy key: uid/file.ext. Public downloads go through r2, not storage.
+    return `${this.resourceBaseUrl}/${raw}`;
   }
 
   /**

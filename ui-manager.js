@@ -168,9 +168,11 @@ class UIManager {
         // v2 typed paths (images|files|stickers/{uuid}) — may be r2.* host later
         resourceBaseUrl: fus
           ? (fus.resourceBaseUrl || fus.baseUrl)
-          : 'https://storage.nightcord.de5.net',
-        // legacy keys still live on storage host
-        storageBaseUrl: fus ? fus.baseUrl : 'https://storage.nightcord.de5.net',
+          : 'https://r2.nightcord.de5.net',
+        // legacy keys are public media too; storage is kept for API/compat upload.
+        storageBaseUrl: fus
+          ? (fus.resourceBaseUrl || fus.baseUrl)
+          : 'https://r2.nightcord.de5.net',
         lookupReply: (ts) => this.lookupReplyMeta(ts)
       });
     } else {
@@ -1607,8 +1609,8 @@ class UIManager {
   async handleFileUpload(file, uploadType) {
     const { uploadProgress, uploadFilename, uploadPercent, uploadFill, chatInput } = this.elements;
 
-    // 验证文件大小（95MB）
-    const maxSize = 95 * 1024 * 1024;
+    // 验证文件大小：上传服务会按 direct / multipart / compat 选择端口。
+    const maxSize = this.fileUploadService.multipartMaxUploadBytes || FileUploadService.MULTIPART_MAX_UPLOAD_BYTES;
     if (!FileUploadService.validateSize(file, maxSize)) {
       this.addChatMessage('系统', `文件过大，最大支持 ${FileUploadService.formatSize(maxSize)}`, Date.now(), this.systemIcon, 'bg-red-600');
       return;

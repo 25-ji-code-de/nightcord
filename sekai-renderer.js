@@ -58,7 +58,7 @@ const AUDIO_VIZ_CONFIG = {
  * const renderer = new SekaiRenderer({
  *   stickerService: stickerService,
  *   aiPersonas: ['Nako', 'Asagi', 'Miku'],
- *   resourceBaseUrl: 'https://storage.nightcord.de5.net',
+ *   resourceBaseUrl: 'https://r2.nightcord.de5.net',
  *   lookupReply: (ts) => ({ name, preview })
  * });
  *
@@ -94,8 +94,8 @@ class SekaiRenderer {
     // Tier-1 resource resolution
     // - Full URL → as-is
     // - Pure UUID → {resourceBaseUrl}/{images|files|stickers}/{uuid}
-    // - Legacy key (uid/file.ext) → {resourceBaseUrl}/{key}  (same host often = storage)
-    this.resourceBaseUrl = (options.resourceBaseUrl || options.storageBaseUrl || 'https://storage.nightcord.de5.net').replace(/\/$/, '');
+    // - Legacy key (uid/file.ext) → {storageBaseUrl}/{key}; default host is r2, not storage
+    this.resourceBaseUrl = (options.resourceBaseUrl || options.storageBaseUrl || 'https://r2.nightcord.de5.net').replace(/\/$/, '');
     this.storageBaseUrl = (options.storageBaseUrl || this.resourceBaseUrl).replace(/\/$/, '');
     // Optional: (timestamp) => { name?: string, preview?: string } | null
     this.lookupReply = typeof options.lookupReply === 'function' ? options.lookupReply : null;

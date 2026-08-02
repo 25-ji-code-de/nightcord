@@ -8,7 +8,7 @@
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Content-Security-Policy: object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://r2.nightcord.de5.net https://sticker.nightcord.de5.net https://storage.nightcord.de5.net; media-src 'self' blob: https://r2.nightcord.de5.net https://storage.nightcord.de5.net; connect-src 'self' wss: https://api.nightcord.de5.net https://nako.nightcord.de5.net https://storage.nightcord.de5.net https://r2.nightcord.de5.net https://sticker.nightcord.de5.net; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://r2.nightcord.de5.net https://sticker.nightcord.de5.net; media-src 'self' blob: https://r2.nightcord.de5.net; connect-src 'self' wss: https://api.nightcord.de5.net https://nako.nightcord.de5.net https://storage.nightcord.de5.net https://upload.nightcord.de5.net https://r2.nightcord.de5.net https://sticker.nightcord.de5.net; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
 
 # 音效为内容固定的二进制资源，改名即换版本
 /se_cord.opus

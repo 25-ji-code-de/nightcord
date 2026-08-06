@@ -53,7 +53,7 @@ function loadEscapeHtml() {
  * 抠到的是结束反引号之后的一段代码，于是「没注入」是假阴性。
  * 下面那条断言就是为了挡住这种情况。
  */
-function evalTemplate(source, anchor, vars) {
+function evalTemplate(source, anchor, vars, thisArg = null) {
   const at = source.indexOf(anchor);
   assert.ok(at !== -1, `源码里找不到锚点：${anchor}`);
 
@@ -77,7 +77,7 @@ function evalTemplate(source, anchor, vars) {
 
   const names = Object.keys(vars);
   const fn = new Function('escapeHtml', ...names, `return ${body};`);
-  return fn(loadEscapeHtml(), ...names.map((n) => vars[n]));
+  return fn.call(thisArg, loadEscapeHtml(), ...names.map((n) => vars[n]));
 }
 
 /** 逃逸载荷：闭合属性 + 起一个会执行的标签。 */
@@ -166,7 +166,7 @@ describe('@ 补全列表（ui-autocomplete.js）', () => {
   test('贴纸项也转义（数据来自远端 JSON）', () => {
     const html = evalTemplate(src, 'class="mention-item sticker-autocomplete-item"', {
       s: { code: PAYLOAD, url: PAYLOAD, label: PAYLOAD, category: PAYLOAD },
-    });
+    }, { getCategoryLabel: (category) => category });
     assert.ok(
       !html.includes('<img src=x onerror=alert(1)>'),
       `载荷原样进入了 HTML：\n${html}`,

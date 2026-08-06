@@ -138,13 +138,21 @@ class UIManager {
       this.stickerService = null;
     }
 
+    if (typeof EmojiService !== 'undefined') {
+      this.emojiService = new EmojiService();
+    } else {
+      console.warn('EmojiService not available, emoji rendering disabled');
+      this.emojiService = null;
+    }
+
     if (typeof AutocompleteManager !== 'undefined') {
       this.autocomplete = new AutocompleteManager({
         input: this.elements.chatInput,
         list: document.querySelector('#mention-list'),
         atButton: document.querySelector('.input-btns button[title="@"]'),
         getAllUsers: () => this.getAllUsers(),
-        getStickers: () => (this.stickerService ? this.stickerService.getStickers() : [])
+        getStickers: () => (this.stickerService ? this.stickerService.getStickers() : []),
+        getEmojis: () => (this.emojiService ? this.emojiService.getEmojis() : [])
       });
     } else {
       console.warn('AutocompleteManager not available, mention/sticker autocomplete disabled');
@@ -162,6 +170,7 @@ class UIManager {
       const fus = this.fileUploadService;
       this.sekaiRenderer = new SekaiRenderer({
         stickerService: this.stickerService,
+        emojiService: this.emojiService,
         stickerDir: this.stickerDir,
         aiPersonas: window.AIConfig ? window.AIConfig.getAllDisplayNames() : [],
         imageWidthThreshold: 400,

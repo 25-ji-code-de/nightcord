@@ -443,6 +443,109 @@ body {
   display: none;
 }
 
+.mention-list.picker-mode {
+  width: min(430px, calc(100vw - 32px));
+  max-height: 360px;
+  overflow: hidden;
+}
+
+.picker-categories {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  scrollbar-width: thin;
+  scrollbar-color: #62606a transparent;
+}
+
+.picker-categories::-webkit-scrollbar {
+  height: 5px;
+}
+
+.picker-categories::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: #62606a;
+}
+
+.picker-category {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #b9bbbe;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.picker-category:hover,
+.picker-category.active {
+  background: #40444b;
+  color: #fff;
+}
+
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  max-height: 292px;
+  padding: 8px;
+  overflow-y: auto;
+  scrollbar-color: #62606a transparent;
+  scrollbar-width: thin;
+}
+
+.picker-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.picker-grid::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: #62606a;
+}
+
+.picker-grid-item {
+  display: grid;
+  grid-template-rows: 40px 16px;
+  min-width: 0;
+  min-height: 64px;
+  align-items: center;
+  justify-items: center;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #b9bbbe;
+  cursor: pointer;
+}
+
+.picker-grid-item:hover,
+.picker-grid-item.active {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: #40444b;
+  color: #fff;
+}
+
+.picker-grid-item img {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+}
+
+.picker-grid-item span {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mention-item {
   padding: 8px 12px;
   cursor: pointer;
@@ -489,6 +592,29 @@ body {
 .mention-item.sticker-autocomplete-item {
   height: auto;
   min-height: 48px;
+}
+
+.mention-item.emoji-autocomplete-item {
+  min-height: 40px;
+}
+
+.emoji-preview {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  object-fit: contain;
+}
+
+.emoji-autocomplete-item .sticker-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media screen and (max-width: 520px) {
+  .picker-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 .sticker-preview {
   width: 48px;

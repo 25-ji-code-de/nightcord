@@ -23,15 +23,16 @@
  */
 (function (global) {
   class AutocompleteManager {
-    constructor({ input, list, atButton, getAllUsers, getStickers } = {}) {
+    constructor({ input, list, atButton, getAllUsers, getStickers, getEmojis } = {}) {
       this.input = input;
       this.list = list;
       this.atButton = atButton;
       this.getAllUsers = getAllUsers || (() => []);
       this.getStickers = getStickers || (() => []);
+      this.getEmojis = getEmojis || (() => []);
 
       this.autocompleteIndex = 0;
-      this.autocompleteType = null; // 'mention' | 'sticker'
+      this.autocompleteType = null; // 'mention' | 'sticker' | 'emoji'
       this.autocompleteStart = 0;
 
       this.init();
@@ -40,7 +41,7 @@
     init() {
       if (!this.input || !this.list) return;
 
-      this.input.addEventListener('keyup', (e) => this.handleInput(e));
+      this.input.addEventListener('input', (e) => this.handleInput(e));
       this.input.addEventListener('keydown', (e) => this.handleNav(e));
 
       document.addEventListener('click', (e) => {
@@ -89,6 +90,22 @@
       const text = targetInput.value;
       const cursor = targetInput.selectionStart;
 
+      // Emoji (:shortcode:). Require a boundary before the opening colon so
+      // URL schemes and times do not open the picker.
+      const beforeCursor = text.substring(0, cursor);
+      const emojiMatch = beforeCursor.match(/(^|[\s([{"':])(:([\p{L}\p{N}_+-]*))$/u);
+      if (beforeCursor.endsWith('::')) {
+        this.autocompleteType = 'emoji';
+        this.autocompleteStart = cursor - 2;
+        this.showList('');
+        return;
+      } else if (emojiMatch) {
+        this.autocompleteType = 'emoji';
+        this.autocompleteStart = cursor - emojiMatch[2].length;
+        this.showList(emojiMatch[3]);
+        return;
+      }
+
       // Mentions (@)
       const lastAt = text.lastIndexOf('@', cursor - 1);
       if (lastAt !== -1) {
@@ -103,6 +120,12 @@
 
       // Stickers ([)
       const lastBracket = text.lastIndexOf('[', cursor - 1);
+      if (beforeCursor.endsWith('[]')) {
+        this.autocompleteType = 'sticker';
+        this.autocompleteStart = cursor - 2;
+        this.showList('');
+        return;
+      }
       if (lastBracket !== -1) {
         const query = text.substring(lastBracket + 1, cursor);
         if (!query.includes(']') && !query.includes('\n')) {
@@ -119,7 +142,13 @@
     handleNav(e) {
       if (!this.isOpen()) return;
 
-      const items = this.list.querySelectorAll('.mention-item');
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.hideList();
+        return;
+      }
+
+      const items = this.list.querySelectorAll('.mention-item, .picker-grid-item');
       if (items.length === 0) return;
 
       if (e.key === 'ArrowDown') {
@@ -139,11 +168,10 @@
             this.completeMention(selected.dataset.name);
           } else if (this.autocompleteType === 'sticker') {
             this.completeSticker(selected.dataset.code);
+          } else if (this.autocompleteType === 'emoji') {
+            this.completeEmoji(selected.dataset.shortcode);
           }
         }
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        this.hideList();
       }
     }
 
@@ -163,6 +191,8 @@
         this.showMentionList(query);
       } else if (this.autocompleteType === 'sticker') {
         this.showStickerList(query);
+      } else if (this.autocompleteType === 'emoji') {
+        this.showEmojiList(query);
       }
     }
 
@@ -193,7 +223,15 @@
 
     showStickerList(query) {
       const stickers = this.getStickers();
-      if (!stickers || stickers.length === 0) return;
+      if (!stickers || stickers.length === 0) {
+        this.hideList();
+        return;
+      }
+
+      if (!query) {
+        this.showPicker(stickers, 'sticker');
+        return;
+      }
 
       const lowerQuery = query.toLowerCase();
       let matches = [];
@@ -228,10 +266,178 @@
           <img src="${escapeHtml(s.url)}" class="sticker-preview" loading="lazy" />
           <div class="sticker-info">
              <div class="sticker-label">${escapeHtml(s.label)}</div>
-             <div class="sticker-desc">${escapeHtml(s.category)}</div>
+             <div class="sticker-desc">${escapeHtml(this.getCategoryLabel(s.category))}</div>
           </div>
         </div>
       `, (item) => this.completeSticker(item.dataset.code));
+    }
+
+    showEmojiList(query) {
+      const emojis = this.getEmojis();
+      if (!emojis || emojis.length === 0) {
+        this.hideList();
+        return;
+      }
+
+      if (!query) {
+        this.showPicker(emojis, 'emoji');
+        return;
+      }
+
+      const lowerQuery = query.toLocaleLowerCase();
+      const matches = emojis
+        .filter((emoji) => emoji.shortcode.toLocaleLowerCase().includes(lowerQuery))
+        .sort((a, b) => {
+          const aStarts = a.shortcode.toLocaleLowerCase().startsWith(lowerQuery);
+          const bStarts = b.shortcode.toLocaleLowerCase().startsWith(lowerQuery);
+          if (aStarts !== bStarts) return aStarts ? -1 : 1;
+          return a.shortcode.localeCompare(b.shortcode);
+        })
+        .slice(0, 100);
+
+      this.renderItems(matches, (emoji) => `
+        <div class="mention-item emoji-autocomplete-item" data-shortcode="${escapeHtml(emoji.shortcode)}">
+          <img src="${escapeHtml(emoji.url)}" class="emoji-preview" loading="lazy" alt="" />
+          <div class="sticker-info">
+            <div class="sticker-label">:${escapeHtml(emoji.shortcode)}:</div>
+            <div class="sticker-desc">${escapeHtml(this.getCategoryLabel(emoji.category))}</div>
+          </div>
+        </div>
+      `, (item) => this.completeEmoji(item.dataset.shortcode));
+    }
+
+    getCategoryLabel(category) {
+      const labels = {
+        'smileys_&_emotion': '表情',
+        'people_&_body': '人物',
+        'animals_&_nature': '自然',
+        'food_&_drink': '食物',
+        'travel_&_places': '地点',
+        activities: '活动',
+        objects: '物品',
+        symbols: '符号',
+        flags: '旗帜',
+        bilibili: '哔哩哔哩',
+        lark: '飞书',
+        rednote: '小红书',
+        tieba: '贴吧',
+        ick: '星乃一歌',
+        saki: '天马咲希',
+        hnm: '望月穗波',
+        shiho: '日野森志步',
+        mnr: '花里实乃理',
+        hrk: '桐谷遥',
+        airi: '桃井爱莉',
+        szk: '日野森雫',
+        khn: '小豆泽心羽',
+        an: '白石杏',
+        akt: '东云彰人',
+        toya: '青柳冬弥',
+        tks: '天马司',
+        emu: '凤笑梦',
+        nene: '草薙宁宁',
+        rui: '神代类',
+        knd: '宵崎奏',
+        mfy: '朝比奈真冬',
+        ena: '东云绘名',
+        mzk: '晓山瑞希',
+        miku: '初音未来',
+        rin: '镜音铃',
+        len: '镜音连',
+        luka: '巡音流歌',
+        meiko: 'MEIKO',
+        kaito: 'KAITO',
+        text: '文字'
+      };
+      return labels[category] || String(category).replaceAll('_', ' ');
+    }
+
+    showPicker(items, type) {
+      if (!this.list || items.length === 0) {
+        this.hideList();
+        return;
+      }
+
+      const categories = [...new Set(items.map((item) => item.category))];
+      if (type === 'emoji') {
+        const categoryOrder = [
+          'smileys_&_emotion', 'people_&_body', 'animals_&_nature',
+          'food_&_drink', 'travel_&_places', 'activities', 'objects',
+          'symbols', 'flags', 'bilibili', 'lark', 'rednote', 'tieba'
+        ];
+        const orderOf = (category) => {
+          const index = categoryOrder.indexOf(category);
+          return index === -1 ? categoryOrder.length : index;
+        };
+        categories.sort((a, b) => orderOf(a) - orderOf(b));
+      } else if (type === 'sticker') {
+        const categoryOrder = [
+          'ick', 'saki', 'hnm', 'shiho',
+          'mnr', 'hrk', 'airi', 'szk',
+          'khn', 'an', 'akt', 'toya',
+          'tks', 'emu', 'nene', 'rui',
+          'knd', 'mfy', 'ena', 'mzk',
+          'miku', 'rin', 'len', 'luka', 'meiko', 'kaito',
+          'text'
+        ];
+        const orderOf = (category) => {
+          const index = categoryOrder.indexOf(category);
+          return index === -1 ? categoryOrder.length : index;
+        };
+        categories.sort((a, b) => orderOf(a) - orderOf(b));
+      }
+      this.pickerCategories = this.pickerCategories || {};
+      let activeCategory = this.pickerCategories[type];
+      if (!categories.includes(activeCategory)) activeCategory = categories[0];
+      this.pickerCategories[type] = activeCategory;
+
+      const categoryItems = items.filter((item) => item.category === activeCategory);
+      const categoryButtons = categories.map((category) => `
+        <button type="button" class="picker-category${category === activeCategory ? ' active' : ''}"
+                data-category="${escapeHtml(category)}" role="tab"
+                aria-selected="${category === activeCategory ? 'true' : 'false'}">
+          ${escapeHtml(this.getCategoryLabel(category))}
+        </button>
+      `).join('');
+
+      const gridItems = categoryItems.map((item, index) => {
+        const isEmoji = type === 'emoji';
+        const value = isEmoji ? item.shortcode : item.code;
+        const label = isEmoji ? item.shortcode : item.label;
+        const dataAttribute = isEmoji ? 'data-shortcode' : 'data-code';
+        const title = isEmoji ? `:${value}:` : `[${value}]`;
+        return `
+          <button type="button" class="picker-grid-item${index === 0 ? ' active' : ''}"
+                  ${dataAttribute}="${escapeHtml(value)}" title="${escapeHtml(title)}"
+                  aria-label="${escapeHtml(title)}" role="gridcell">
+            <img src="${escapeHtml(item.url)}" loading="lazy" alt="" />
+            <span>${escapeHtml(label)}</span>
+          </button>
+        `;
+      }).join('');
+
+      this.list.classList.add('picker-mode');
+      this.list.innerHTML = `
+        <div class="picker-categories" role="tablist">${categoryButtons}</div>
+        <div class="picker-grid" role="grid">${gridItems}</div>
+      `;
+
+      this.list.querySelectorAll('.picker-category').forEach((button) => {
+        button.addEventListener('click', (event) => {
+          event.stopPropagation();
+          this.pickerCategories[type] = button.dataset.category;
+          this.showPicker(items, type);
+        });
+      });
+      this.list.querySelectorAll('.picker-grid-item').forEach((button) => {
+        button.addEventListener('click', () => {
+          if (type === 'emoji') this.completeEmoji(button.dataset.shortcode);
+          else this.completeSticker(button.dataset.code);
+        });
+      });
+
+      this.list.classList.remove('hidden');
+      this.autocompleteIndex = 0;
     }
 
     renderItems(items, templateFn, clickHandler) {
@@ -241,6 +447,7 @@
         return;
       }
 
+      this.list.classList.remove('picker-mode');
       this.list.innerHTML = items.map((item, index) => {
         let html = templateFn(item);
         if (index === 0) html = html.replace('class="', 'class="active ');
@@ -258,6 +465,7 @@
     hideList() {
       if (!this.list) return;
       this.list.classList.add('hidden');
+      this.list.classList.remove('picker-mode');
       this.autocompleteIndex = 0;
     }
 
@@ -300,6 +508,25 @@
 
       const newPos = lastBracket + code.length + 2;
       input.setSelectionRange(newPos, newPos);
+    }
+
+    completeEmoji(shortcode) {
+      const input = this.input;
+      if (!input) return;
+
+      const text = input.value;
+      const cursor = input.selectionStart;
+      let afterCursor = text.substring(cursor);
+      if (afterCursor.startsWith(':')) afterCursor = afterCursor.substring(1);
+
+      const before = text.substring(0, this.autocompleteStart);
+      input.value = `${before}:${shortcode}:${afterCursor}`;
+      this.hideList();
+      input.focus();
+
+      const newPos = this.autocompleteStart + shortcode.length + 2;
+      input.setSelectionRange(newPos, newPos);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     }
   }
 

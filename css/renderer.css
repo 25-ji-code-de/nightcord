@@ -8,6 +8,36 @@
   line-height: 1.6;
 }
 
+.nightcord-emoji {
+  position: relative;
+  display: inline-flex;
+  width: 1.375em;
+  height: 1.375em;
+  align-items: center;
+  justify-content: center;
+  vertical-align: -0.3em;
+  margin: 0 0.04em;
+}
+
+.nightcord-emoji__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.nightcord-emoji__shortcode {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Bold text styling */
 .sekai-text-node strong {
   font-weight: 700;

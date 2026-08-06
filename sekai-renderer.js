@@ -87,6 +87,7 @@ const V2_TYPE_ANCHORED = new RegExp(`^(${V2_TYPE_SOURCE})`);
 class SekaiRenderer {
   constructor(options = {}) {
     this.stickerService = options.stickerService;
+    this.emojiService = options.emojiService;
     this.stickerDir = options.stickerDir || 'https://sticker.nightcord.de5.net/stickers';
     this.aiPersonas = options.aiPersonas || [];
     this.imageWidthThreshold = options.imageWidthThreshold || 400;
@@ -892,6 +893,10 @@ class SekaiRenderer {
     // Process legacy stickers [airi_name] etc.
     if (this.stickerService) {
          this.processStickerInHTML(span);
+    }
+
+    if (this.emojiService) {
+      this.emojiService.processElement(span);
     }
 
     return span;

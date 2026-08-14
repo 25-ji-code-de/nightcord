@@ -203,8 +203,13 @@ class Nightcord {
       // 加入房间
       this.joinRoom(roomname || 'nightcord-default');
     } catch (error) {
-      console.error('OAuth callback failed:', error);
-      alert('登录失败：' + error.message);
+      // 把 SDK / 适配层抛出的原始异常翻译成带错误码的可读描述。
+      // describeAuthError 始终保留 sourceCode 与 originalMessage，控制台不丢信息。
+      const descriptor = window.describeAuthError(error);
+      console.error('[Nightcord Auth]', descriptor, error);
+      this.ui.showAuthError(descriptor, {
+        onRetry: () => this.sekaiPassAuth.login(),
+      });
 
       // 清理 URL 并回到名称选择
       window.history.replaceState({}, document.title, '/');

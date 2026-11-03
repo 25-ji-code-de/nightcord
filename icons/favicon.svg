@@ -1,0 +1,14 @@
+<!--
+  SPDX-License-Identifier: AGPL-3.0-only
+  Copyright (C) 2025 The 25-ji-code-de Team
+
+  Nightcord favicon — 满幅紫底 + 月牙 mark（源：nightcord_mark.svg v4）
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" rx="180" fill="#99509A"/>
+  <path fill="#ffffff" fill-rule="evenodd" d="
+    M874.6667 512 A341.3333 341.3333 0 1 1 192 512 A341.3333 341.3333 0 0 1 874.6667 512 Z
+    M874.6667 512 A256 256 0 1 1 362.6667 512 A256 256 0 0 1 874.6667 512 Z
+    M576 512 A42.6667 42.6667 0 1 1 490.6667 512 A42.6667 42.6667 0 0 1 576 512 Z
+    M746.6667 512 A42.6667 42.6667 0 1 1 661.3333 512 A42.6667 42.6667 0 0 1 746.6667 512 Z"/>
+</svg>

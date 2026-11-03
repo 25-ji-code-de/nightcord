@@ -81,7 +81,12 @@
       const btn = ev.target.closest('[data-action]');
       if (!btn) return;
       if (btn.getAttribute('data-action') === 'reload') {
-        location.reload();
+        const pwa = window.NightcordPWA;
+        if (pwa && typeof pwa.activatePendingUpdate === 'function') {
+          pwa.activatePendingUpdate();
+        } else {
+          location.reload();
+        }
       } else if (btn.getAttribute('data-action') === 'dismiss') {
         updateBar.remove();
         updateBar = null;

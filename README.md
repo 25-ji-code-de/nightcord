@@ -43,6 +43,10 @@
 ├── ui-autocomplete.js        # UI 自动补全（@提及与贴纸补全）
 ├── nightcord.js              # 主应用类（Nightcord）
 ├── index.html                # HTML 入口文件
+├── manifest.json             # PWA 清单
+├── sw.js                     # Service Worker（离线外壳，network-first）
+├── pwa.js                    # PWA 引导（注册 SW、更新时激活新 SW）
+├── icons/                    # 主屏图标、favicon 与 mark 矢量源
 ├── docs/API.md               # API 文档
 ├── docs/ARCHITECTURE.md      # 架构文档
 ├── docs/NAKO_AI.md           # Nako AI 文档
@@ -84,6 +88,29 @@ const app = new Nightcord({
 });
 app.init();
 ```
+
+## 📱 PWA 与离线
+
+站点带有 `manifest.json` 与 Service Worker，可安装为独立窗口应用：
+
+- Chrome / Edge：地址栏右侧的安装图标，或菜单 →「安装 Nightcord」。
+- iOS Safari：分享 →「添加到主屏幕」。图标与状态栏 meta 在安装时固化，修改后需删除图标重新添加。
+
+离线只保证**应用外壳 + localStorage 里的历史消息**；聊天本身仍然需要网络。
+
+更新流程只有一条：`version-checker.js` 每 30 秒以 `no-store` 检查 `/version.json`，
+版本变化时显示 Update Toast；用户点击后才刷新。新 Service Worker 默认处于 `waiting`，
+不会自动 `skipWaiting`，也不会自动刷新页面，避免聊天输入被清空。
+
+维护 Service Worker 时请遵守以下约定（`test/pwa.test.mjs` 会检查）：
+
+- 新增入口脚本或样式后，必须同步加入 `sw.js` 的 `PRECACHE`，否则测试会失败。
+- 预缓存键是 `/`，不是 `/index.html`（后者会 308 到 `/`）。
+- 不要预缓存 `/version.json`、`/sw.js`、`/api/*` 或音频；`/version.json` 永远走网络。
+- 在线时代码一律 network-first，缓存只作离线兜底；不要把它改成 cache-first。
+- 站点对未知路径返回 `200 + index.html`，因此写入缓存前必须校验 Content-Type。
+- 图标统一由设计包的 `nightcord_mark_purple_1024.png` 缩放生成；
+  不要使用 `apple-touch-icon-purple.png`（底色是 `#945397`，与主色 `#99509A` 不一致）。
 
 ## 📚 文档
 

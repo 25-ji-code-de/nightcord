@@ -104,7 +104,7 @@ class UIManager {
 
     // 当前房间（由外部调用 setCurrentRoom / room:ready 设置）
     this.currentRoom = null;
-    // 每条消息对象只保留 user/text/timestamp 存入 localStorage；渲染层会补充 avatar/color/time
+    // 每条消息对象只保留 user/text/timestamp 存入 localStorage；渲染层会补充 avatar/color，时间由 timestamp 在渲染时计算
     this.messages = [];
     this.lastMsgTimestamp = 0;
     this.roster = [];
@@ -281,7 +281,6 @@ class UIManager {
           user: name,
           avatar,
           color,
-          time: timestamp ? this.formatDate(timestamp) : '',
           text,
           timestamp
         };
@@ -590,7 +589,6 @@ class UIManager {
           user: name,
           avatar,
           color,
-          time: timestamp ? this.formatDate(timestamp) : '',
           text,
           timestamp
         };
@@ -1822,7 +1820,6 @@ class UIManager {
       user: name,
       avatar: avatar ?? userAvatar,
       color: color ?? userColor,
-      time: timestamp ? this.formatDate(timestamp) : new Date().toLocaleTimeString(),
       text: message,
       timestamp: timestamp || Date.now()
     };
@@ -2115,7 +2112,7 @@ class UIManager {
     userSpan.textContent = msg.user;
     const timeSpan = document.createElement('span');
     timeSpan.className = 'message-time';
-    timeSpan.textContent = msg.time;
+    timeSpan.textContent = msg.timestamp ? this.formatDate(msg.timestamp) : '';
     headerDiv.appendChild(userSpan);
     headerDiv.appendChild(timeSpan);
     contentDiv.appendChild(headerDiv);

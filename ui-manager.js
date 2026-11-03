@@ -109,7 +109,7 @@ class UIManager {
     this.lastMsgTimestamp = 0;
     this.roster = [];
 
-    this.systemIcon = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M13,10.69v2.72H10.23V10.69Zm3,0v2.69h2.69V10.72ZM23.29,12A11.31,11.31,0,1,1,12,.67,11.31,11.31,0,0,1,23.29,12Zm-.18.07a8.87,8.87,0,1,0-8.87,8.86A8.87,8.87,0,0,0,23.11,12.05Z" fill="white"></path></svg>`;
+    this.systemIcon = `<svg width="24" height="24" viewBox="-32 -32 1088 1088" xmlns="http://www.w3.org/2000/svg"><path d="M1024 512A512 512 0 1 1 0 512A512 512 0 1 1 1024 512ZM1024 512A384 384 0 1 1 256 512A384 384 0 1 1 1024 512ZM576 512A64 64 0 1 1 448 512A64 64 0 1 1 576 512ZM832 512A64 64 0 1 1 704 512A64 64 0 1 1 832 512Z" fill="white" fill-rule="evenodd"></path></svg>`;
 
     // Storage manager (handles per-room keys and legacy migration)
     try {

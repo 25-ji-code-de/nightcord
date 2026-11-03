@@ -34,7 +34,6 @@
  */
 class UIManager {
   static MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
-  static TWELVE_HOURS_MS = UIManager.MILLISECONDS_PER_DAY / 2;
   static STICKER_WIDTH_THRESHOLD = 180;
 
   /**
@@ -2307,8 +2306,10 @@ class UIManager {
    *   - Older than a week (diffDays >= 7): "M月D日 HH:MM:SS"
    *
    * Notes:
-   * - This function depends on UIManager.MILLISECONDS_PER_DAY to calculate full-day differences and UIManager.TWELVE_HOURS_MS (12 hours) to compute the 30-hour adjustment.
-   * - The "30-hour" clock is a display convention: times from 00:00 to 05:59 are treated as belonging to the previous night's extended shift.
+   * - This function depends on UIManager.MILLISECONDS_PER_DAY to calculate full-day differences.
+   * - The "30-hour" clock is a display convention: times from 00:00 to 05:59 are shown as 24:xx–29:xx in parentheses.
+   *   The parenthetical carries no day label — the message's day is always the one implied by the main clock,
+   *   so the two readings can never contradict each other.
    *
    * @param {number|string|Date|null|undefined} timestamp - Value accepted by `new Date(timestamp)`. If falsy, the function returns an empty string.
    * @returns {string} A formatted, localized time string with contextual day label and optional 30-hour parenthetical.
@@ -2318,8 +2319,8 @@ class UIManager {
    * formatDate(Date.now()) // => "14:23:05"
    *
    * @example
-   * // Early morning treated as previous night (30-hour clock shown in parentheses)
-   * formatDate(new Date("2025-11-13T01:05:00").getTime()) // => "01:05:00（昨天 25:05:00）"
+   * // Early morning (30-hour clock in parentheses, no day word inside)
+   * formatDate(new Date("2025-11-13T01:05:00").getTime()) // => "01:05:00（25:05:00）"
    *
    * @example
    * // Yesterday
@@ -2343,19 +2344,14 @@ class UIManager {
     const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const diffDays = Math.floor((startToday - startDate) / UIManager.MILLISECONDS_PER_DAY);
 
-    let adjustedTimeString = '';
-
-    // For messages sent before 6 AM, display them as belonging to the previous night.
-    // According to 30-hour clock system.
+    // 0–6 点的消息补一个 30 小时制读数（01:05 → 25:05）。括号内不写日期词：
+    // 日期一律由主时钟的日标签决定，避免出现“01:05（昨天 25:05）”这种自相矛盾的显示。
     if (date.getHours() < 6) {
-      const adjustedDate = new Date(date.getTime() - UIManager.TWELVE_HOURS_MS);
-      adjustedTimeString = this.formatDate(adjustedDate.getTime()).replace(/(\d{1,2}):(\d{2}):(\d{2})/, (match, p1, p2, p3) => {
-        return `${parseInt(p1) + 12}:${p2}:${p3}`;
-      });
-      adjustedTimeString = `（${adjustedTimeString}）`;
+      const h = date.getHours() + 24;
+      const m = String(date.getMinutes()).padStart(2, '0');
+      const s = String(date.getSeconds()).padStart(2, '0');
+      timeString += `（${h}:${m}:${s}）`;
     }
-
-    timeString += adjustedTimeString;
 
     if (diffDays === 0) return timeString;
     if (diffDays === 1) return `昨天 ${timeString}`;

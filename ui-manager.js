@@ -1739,31 +1739,7 @@ class UIManager {
   addSystemMessage(message, timestamp, avatar, color) {
     const messageData = this.createMessageData('系统', message, timestamp, avatar, color);
     this.messages.push(messageData);
-
-    // 使用 RAF 优化 DOM 操作
-    const appendOperation = () => {
-      // 直接创建并添加消息元素，而不是重新渲染整个列表
-      const msgDiv = this.createMessageElement(messageData);
-
-      // 如果有正在流式显示的消息，插入到它之前，否则添加到末尾
-      const streamingMsg = this.elements.chatlog.querySelector('.streaming');
-      if (streamingMsg) {
-        this.elements.chatlog.insertBefore(msgDiv, streamingMsg);
-      } else {
-        this.elements.chatlog.appendChild(msgDiv);
-      }
-
-      // 智能滚动
-      if (this.shouldAutoScrollToBottom()) {
-        this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
-      }
-    };
-
-    if (typeof PerformanceOptimizer !== 'undefined') {
-      PerformanceOptimizer.raf(appendOperation);
-    } else {
-      appendOperation();
-    }
+    this.appendMessageToDOM(messageData);
   }
 
   /**
@@ -1783,30 +1759,7 @@ class UIManager {
     this.saveMessageToStorage(msgObj);
     this.lastMsgTimestamp = msgObj.timestamp;
 
-    // 使用 RAF 优化 DOM 操作
-    const appendOperation = () => {
-      // 直接创建并添加消息元素，而不是重新渲染整个列表
-      const msgDiv = this.createMessageElement(messageData);
-
-      // 如果有正在流式显示的消息，插入到它之前，否则添加到末尾
-      const streamingMsg = this.elements.chatlog.querySelector('.streaming');
-      if (streamingMsg) {
-        this.elements.chatlog.insertBefore(msgDiv, streamingMsg);
-      } else {
-        this.elements.chatlog.appendChild(msgDiv);
-      }
-
-      // 智能滚动
-      if (this.shouldAutoScrollToBottom()) {
-        this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
-      }
-    };
-
-    if (typeof PerformanceOptimizer !== 'undefined') {
-      PerformanceOptimizer.raf(appendOperation);
-    } else {
-      appendOperation();
-    }
+    this.appendMessageToDOM(messageData);
   }
 
   /**
@@ -1850,6 +1803,38 @@ class UIManager {
       }
     } catch (e) {
       // 静默失败，存储错误不应影响消息显示
+    }
+  }
+
+  /**
+   * 将单条消息追加到聊天日志（不重渲染整个列表）
+   * @param {Object} messageData - 消息数据
+   * @private
+   */
+  appendMessageToDOM(messageData) {
+    // 使用 RAF 优化 DOM 操作
+    const appendOperation = () => {
+      // 直接创建并添加消息元素，而不是重新渲染整个列表
+      const msgDiv = this.createMessageElement(messageData);
+
+      // 如果有正在流式显示的消息，插入到它之前，否则添加到末尾
+      const streamingMsg = this.elements.chatlog.querySelector('.streaming');
+      if (streamingMsg) {
+        this.elements.chatlog.insertBefore(msgDiv, streamingMsg);
+      } else {
+        this.elements.chatlog.appendChild(msgDiv);
+      }
+
+      // 智能滚动
+      if (this.shouldAutoScrollToBottom()) {
+        this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+      }
+    };
+
+    if (typeof PerformanceOptimizer !== 'undefined') {
+      PerformanceOptimizer.raf(appendOperation);
+    } else {
+      appendOperation();
     }
   }
 

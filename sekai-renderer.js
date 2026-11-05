@@ -1074,16 +1074,12 @@ class SekaiRenderer {
     const alt = desc.alt || desc.name || 'Image';
     const container = this.renderImage(url, alt);
 
-    // Pre-reserve aspect ratio when w/h known (spec §9.1)
+    // Pre-reserve the real box when w/h known (spec §9.1).
+    // 否则会落回 .loading 的固定 400×225 横屏占位，竖图/方图加载时整页跳动。
     const w = parseInt(desc.w, 10);
     const h = parseInt(desc.h, 10);
     if (w > 0 && h > 0 && container && container.style) {
-      container.style.aspectRatio = `${w} / ${h}`;
-      if (w > this.imageWidthThreshold) {
-        container.classList.add('sekai-image-large');
-      } else {
-        container.classList.add('sekai-image-small');
-      }
+      this._applyImageBox(container, w, h);
     }
 
     if (this._descBool(desc, 'spoiler', false) && container) {
@@ -1109,6 +1105,61 @@ class SekaiRenderer {
     }
 
     return container;
+  }
+
+  /**
+   * 用 v2 Image 的 w/h 预留加载占位框，尺寸与加载完成后一致。
+   *
+   * 加载完成后容器的盒子由两层约束决定（见 css/renderer.css）：
+   *   .sekai-image-large   max-width: 400px
+   *   .sekai-image-small   max-width: 200px
+   *   .sekai-image-content max-height: 400px
+   * 所以这里按同样的上限算出显示尺寸，加载时就不会再跳。
+   * 宽度同时用 min(…, 100%) 保证窄屏不溢出，高度交给 aspect-ratio 等比推导。
+   *
+   * @private
+   */
+  _applyImageBox(container, w, h) {
+    const large = w > this.imageWidthThreshold;
+    const maxW = large ? 400 : 200;
+    const maxH = 400;
+    let boxW = Math.min(w, maxW);
+    let boxH = (boxW * h) / w;
+    if (boxH > maxH) {
+      boxH = maxH;
+      boxW = (boxH * w) / h;
+    }
+
+    container.classList.add(large ? 'sekai-image-large' : 'sekai-image-small');
+    container.style.width = `min(${Math.max(1, Math.round(boxW))}px, 100%)`;
+    // 覆盖 .loading 的固定 225px 高度，让 aspect-ratio 生效
+    container.style.height = 'auto';
+    container.style.aspectRatio = `${w} / ${h}`;
+
+    // 加载完成后把尺寸交还给浏览器自然排版：
+    // - w/h 正确时自然排版的盒子与预留框逐像素相同，无跳动；
+    // - w/h 被写错（第三方客户端、奇怪浏览器）时，这里会纠正成真实尺寸，
+    //   而不是留下一块比例错误的底色。
+    const img = container.querySelector('img');
+    if (!img) return;
+    const release = () => {
+      container.style.width = '';
+      container.style.height = '';
+      container.style.aspectRatio = '';
+      // 大/小类以真实宽度为准，避免描述与实物不符时两个 class 并存
+      const nw = img.naturalWidth;
+      if (nw > 0) {
+        const isLarge = nw > this.imageWidthThreshold;
+        container.classList.toggle('sekai-image-large', isLarge);
+        container.classList.toggle('sekai-image-small', !isLarge);
+      }
+    };
+    if (img.complete) {
+      release(); // 缓存命中 / data URI 可能已经解码
+    } else {
+      img.addEventListener('load', release, { once: true });
+      img.addEventListener('error', release, { once: true });
+    }
   }
 
   /**

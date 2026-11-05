@@ -40,6 +40,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  touch-action: none; /* Pinch zoom and panning are handled by the viewer. */
 }
 
 .sekai-viewer-image {

@@ -222,8 +222,16 @@ class SekaiImageViewer {
 
     }, { passive: false });
 
+    // Browsers can synthesize mouse events after a touch gesture.
+    let lastTouchTime = -Infinity;
+    const isTouchMouseEvent = (e) => {
+      if (e.sourceCapabilities) return e.sourceCapabilities.firesTouchEvents;
+      return Date.now() - lastTouchTime < 800;
+    };
+
     // Drag to pan
     this.container.addEventListener('mousedown', (e) => {
+      if (!this.isOpen || isTouchMouseEvent(e)) return;
       if (this.scale <= 1) return; // Only drag when zoomed
       
       this.isDragging = true;
@@ -257,6 +265,7 @@ class SekaiImageViewer {
 
     // Double tap/click handler
     const handleDoubleAction = (e) => {
+      e.preventDefault();
       e.stopPropagation(); // Prevent bubbling issues
       
       if (this.scale > 1.1) { // Fuzzy compare against 1
@@ -268,6 +277,7 @@ class SekaiImageViewer {
 
     // Double click (Desktop)
     this.container.addEventListener('dblclick', (e) => {
+      if (!this.isOpen || isTouchMouseEvent(e)) return;
       if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
       handleDoubleAction(e);
     });
@@ -275,9 +285,13 @@ class SekaiImageViewer {
     // Touch gestures (Pinch Zoom + Pan/Drag + Double Tap)
     let touchStartDistance = 0;
     let touchStartScale = 1;
-    let lastTouchScale = 1; // Track last scale to calculate incremental zoom
+    let lastTouchScale = 1;
+    let lastTouchCenterX = 0;
+    let lastTouchCenterY = 0;
     let isPinching = false;
     let isTouchDragging = false;
+    let didPinch = false; // Remains true until every finger is lifted
+    let didMove = false;
     let touchDragStartX = 0;
     let touchDragStartY = 0;
     let lastTapTime = 0;
@@ -285,167 +299,206 @@ class SekaiImageViewer {
     let lastTapY = 0;
     let singleTouchStartX = 0;
     let singleTouchStartY = 0;
-    let lastPinchEnd = -1000; // Initialize to old time to allow initial taps
+    let singleTouchStartTime = 0;
     const TAP_THRESHOLD = 10; // Max movement in pixels to be considered a tap
     const DOUBLE_TAP_DELAY = 400; // Max time between taps in ms
+    const MAX_TAP_DURATION = 400;
+
+    this.resetTouchState = () => {
+      isPinching = false;
+      isTouchDragging = false;
+      didPinch = false;
+      didMove = false;
+      singleTouchStartTime = 0;
+      lastTapTime = 0;
+    };
+
+    const getTouchCenter = (touches) => {
+      const rect = this.container.getBoundingClientRect();
+      return {
+        x: (touches[0].clientX + touches[1].clientX) / 2 - rect.left - rect.width / 2,
+        y: (touches[0].clientY + touches[1].clientY) / 2 - rect.top - rect.height / 2
+      };
+    };
+
+    const startPinch = (touches) => {
+      touchStartDistance = Math.max(1, Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY
+      ));
+      touchStartScale = this.scale;
+      lastTouchScale = this.scale;
+      const center = getTouchCenter(touches);
+      lastTouchCenterX = center.x;
+      lastTouchCenterY = center.y;
+      isPinching = true;
+      isTouchDragging = false;
+      didPinch = true;
+      lastTapTime = 0;
+      this.image.style.transition = 'none';
+    };
+
+    const startSingleTouch = (touch) => {
+      singleTouchStartX = touch.clientX;
+      singleTouchStartY = touch.clientY;
+      singleTouchStartTime = Date.now();
+      touchDragStartX = touch.clientX - this.translateX;
+      touchDragStartY = touch.clientY - this.translateY;
+      isTouchDragging = false;
+    };
+
+    const movedBeyondTap = (touch) => Math.hypot(
+      touch.clientX - singleTouchStartX,
+      touch.clientY - singleTouchStartY
+    ) > TAP_THRESHOLD;
+
+    const renderTouchTransform = () => {
+      this.image.style.transform =
+        `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale}) rotate(${this.rotation}deg)`;
+      this.scaleText.textContent = `${Math.round(this.scale * 100)}%`;
+      this.image.style.cursor = isTouchDragging ? 'grabbing' : this.scale > 1 ? 'grab' : 'default';
+    };
 
     this.container.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 2) {
-        // Two-finger pinch zoom
+      if (!this.isOpen) return;
+      lastTouchTime = Date.now();
+      if (e.touches.length >= 2) {
         e.preventDefault();
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        touchStartDistance = Math.sqrt(dx * dx + dy * dy);
-        touchStartScale = this.scale;
-        lastTouchScale = this.scale; // Initialize for incremental calculation
-
-        isPinching = true;
-        isTouchDragging = false; // Cancel any drag
-
-        // Disable transition for smooth pinch
-        this.image.style.transition = 'none';
+        didPinch = true;
+        lastTapTime = 0;
+        isTouchDragging = false;
+        isPinching = false;
+        if (e.touches.length === 2) startPinch(e.touches);
       } else if (e.touches.length === 1) {
-        // Record single touch start position for tap detection
-        singleTouchStartX = e.touches[0].clientX;
-        singleTouchStartY = e.touches[0].clientY;
-
-        if (this.scale > 1) {
-          // Single-finger drag when zoomed
-          isTouchDragging = true;
-          touchDragStartX = e.touches[0].clientX - this.translateX;
-          touchDragStartY = e.touches[0].clientY - this.translateY;
-
-          // Disable transition for smooth drag
-          this.image.style.transition = 'none';
-        }
+        didPinch = false;
+        didMove = false;
+        isPinching = false;
+        startSingleTouch(e.touches[0]);
       }
     }, { passive: false });
 
     this.container.addEventListener('touchmove', (e) => {
-      if (e.touches.length === 2 && isPinching) {
-        // Two-finger pinch zoom
+      if (!this.isOpen) return;
+      lastTouchTime = Date.now();
+      this.resetIdle();
+
+      if (e.touches.length >= 2) {
         e.preventDefault();
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+        didPinch = true;
+        lastTapTime = 0;
+        if (e.touches.length !== 2) {
+          isPinching = false;
+          isTouchDragging = false;
+          return;
+        }
+        if (!isPinching) {
+          startPinch(e.touches);
+          return;
+        }
+
+        const distance = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
         const scaleDelta = distance / touchStartDistance;
         const newScale = touchStartScale * scaleDelta;
-
-        // Clamp scale
         const clampedScale = Math.max(this.minScale, Math.min(this.maxScale, newScale));
+        const center = getTouchCenter(e.touches);
 
-        // Calculate center point between two fingers (for this frame)
-        const rect = this.container.getBoundingClientRect();
-        const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left - rect.width / 2;
-        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top - rect.height / 2;
-
-        // Adjust translation incrementally to zoom towards touch center
-        // Formula: newTrans = oldTrans + (center - oldTrans) * (1 - zoomFactor)
-        // This keeps the point under fingers stable
+        // Keep the image point under the previous midpoint under the new one.
         const zoomFactor = clampedScale / lastTouchScale;
-        this.translateX += (centerX - this.translateX) * (1 - zoomFactor);
-        this.translateY += (centerY - this.translateY) * (1 - zoomFactor);
-
+        this.translateX = center.x + (this.translateX - lastTouchCenterX) * zoomFactor;
+        this.translateY = center.y + (this.translateY - lastTouchCenterY) * zoomFactor;
         this.scale = clampedScale;
-        lastTouchScale = clampedScale; // Update for next frame
+        lastTouchScale = clampedScale;
+        lastTouchCenterX = center.x;
+        lastTouchCenterY = center.y;
 
-        // Reset translation if zooming out to 1x
         if (this.scale <= 1) {
           this.translateX = 0;
           this.translateY = 0;
         }
-
-        // Update transform immediately
-        this.image.style.transform =
-          `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale}) rotate(${this.rotation}deg)`;
-        this.scaleText.textContent = `${Math.round(this.scale * 100)}%`;
-        this.image.style.cursor = this.scale > 1 ? 'grab' : 'default';
-      } else if (isPinching && e.touches.length < 2) {
-        // One finger lifted during pinch - end pinch immediately
-        isPinching = false;
-        lastPinchEnd = Date.now();
-
-        // Re-enable transition
-        this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)';
-
-        // Persist the scale
-        touchStartScale = this.scale;
-      } else if (e.touches.length === 1 && isTouchDragging && this.scale > 1) {
-        // Single-finger drag
-        e.preventDefault();
-        this.translateX = e.touches[0].clientX - touchDragStartX;
-        this.translateY = e.touches[0].clientY - touchDragStartY;
-
-        this.image.style.transform =
-          `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale}) rotate(${this.rotation}deg)`;
+        renderTouchTransform();
+      } else if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        if (isPinching) {
+          isPinching = false;
+          startSingleTouch(touch);
+          return;
+        }
+        if (movedBeyondTap(touch)) {
+          didMove = true;
+          lastTapTime = 0;
+        }
+        if (didMove) {
+          e.preventDefault();
+          if (this.scale > 1) {
+            isTouchDragging = true;
+            this.image.style.transition = 'none';
+            this.translateX = touch.clientX - touchDragStartX;
+            this.translateY = touch.clientY - touchDragStartY;
+            renderTouchTransform();
+          }
+        }
       }
     }, { passive: false });
 
     this.container.addEventListener('touchend', (e) => {
-      // Handle pinch end
-      if (isPinching) {
+      if (!this.isOpen) return;
+      lastTouchTime = Date.now();
+      this.resetIdle();
+
+      if (e.touches.length > 0) {
+        // Every part of a multi-touch gesture is excluded from tap detection.
+        didPinch = true;
+        lastTapTime = 0;
         isPinching = false;
-        lastPinchEnd = Date.now();
-
-        // Re-enable transition
-        this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)';
-
-        // Update the final scale - this persists the zoom level
-        touchStartScale = this.scale;
-        return;
-      }
-
-      // Handle drag end
-      if (isTouchDragging) {
         isTouchDragging = false;
-
-        // Re-enable transition
-        this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)';
-
-        // Don't process double tap if was dragging
+        if (e.touches.length === 2) startPinch(e.touches);
+        else if (e.touches.length === 1) startSingleTouch(e.touches[0]);
         return;
       }
 
-      // Double tap detection - only for single-finger taps without movement
-      if (e.touches.length === 0 && e.changedTouches.length === 1) {
-        const touch = e.changedTouches[0];
-        const currentTime = Date.now();
-        const timeSincePinch = currentTime - lastPinchEnd;
+      const touch = e.changedTouches[0];
+      const currentTime = Date.now();
+      const isTap = e.changedTouches.length === 1 && !didPinch && !didMove &&
+        !movedBeyondTap(touch) && currentTime - singleTouchStartTime <= MAX_TAP_DURATION;
 
-        // Check if touch moved (swipe vs tap)
-        const deltaX = Math.abs(touch.clientX - singleTouchStartX);
-        const deltaY = Math.abs(touch.clientY - singleTouchStartY);
-        const didMove = deltaX > TAP_THRESHOLD || deltaY > TAP_THRESHOLD;
+      isPinching = false;
+      isTouchDragging = false;
+      didPinch = false;
+      didMove = false;
+      singleTouchStartTime = 0;
+      this.updateTransform();
 
-        if (!didMove && timeSincePinch > 300) {
-          // This was a valid tap (not a swipe, not right after pinch)
-          const tapLength = currentTime - lastTapTime;
-          const tapDeltaX = Math.abs(touch.clientX - lastTapX);
-          const tapDeltaY = Math.abs(touch.clientY - lastTapY);
-          const sameTapLocation = tapDeltaX < 50 && tapDeltaY < 50; // Taps within 50px
-
-          // Detect double tap (within time window and same general location)
-          if (tapLength < DOUBLE_TAP_DELAY && tapLength > 0 && sameTapLocation) {
-            if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
-              handleDoubleAction(e);
-              // Reset tap tracking after successful double tap
-              lastTapTime = 0;
-              return;
-            }
-          }
-
-          // Record this tap for next comparison
-          lastTapTime = currentTime;
-          lastTapX = touch.clientX;
-          lastTapY = touch.clientY;
-        }
+      if (!isTap || e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+        lastTapTime = 0;
+        return;
       }
+
+      const tapLength = currentTime - lastTapTime;
+      const sameTapLocation = Math.hypot(touch.clientX - lastTapX, touch.clientY - lastTapY) < 50;
+      if (tapLength > 0 && tapLength < DOUBLE_TAP_DELAY && sameTapLocation) {
+        lastTapTime = 0;
+        handleDoubleAction(e);
+      } else {
+        lastTapTime = currentTime;
+        lastTapX = touch.clientX;
+        lastTapY = touch.clientY;
+      }
+    }, { passive: false });
+
+    this.container.addEventListener('touchcancel', () => {
+      lastTouchTime = Date.now();
+      this.resetTouchState();
+      this.updateTransform();
     });
   }
 
   open(imageSrc, filename = '') {
     this.currentImage = imageSrc;
     this.isOpen = true;
+    this.resetTouchState();
     this.reset();
 
     this.viewer.classList.add('active');
@@ -475,6 +528,7 @@ class SekaiImageViewer {
 
   close() {
     this.isOpen = false;
+    this.resetTouchState();
     this.viewer.classList.remove('active');
     this.viewer.classList.remove('ui-hidden');
     clearTimeout(this.idleTimer);

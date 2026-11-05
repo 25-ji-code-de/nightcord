@@ -109,8 +109,11 @@ app.init();
 - 不要预缓存 `/version.json`、`/sw.js`、`/api/*` 或音频；`/version.json` 永远走网络。
 - 在线时代码一律 network-first，缓存只作离线兜底；不要把它改成 cache-first。
 - 站点对未知路径返回 `200 + index.html`，因此写入缓存前必须校验 Content-Type。
-- 图标统一由设计包的 `nightcord_mark_purple_1024.png` 缩放生成；
-  不要使用 `apple-touch-icon-purple.png`（底色是 `#945397`，与主色 `#99509A` 不一致）。
+- 图标由 `node scripts/generate-icons.mjs` 生成（几何同 `icons/nightcord-mark.svg`），勿手改：
+  favicon / icon-192 / icon-512 是圆形底 + 透明四角；maskable 是满幅方形，圆角交给系统遮罩。
+  `apple-touch-icon.png` 例外 —— 用设计提供的 180×180 液态玻璃稿，生成器不会覆盖它。
+  底色统一用 `#99509A`，不要用 `apple-touch-icon-purple.png`
+  （底色是 `#945397`，与主色不一致）。
 
 ## 📚 文档
 

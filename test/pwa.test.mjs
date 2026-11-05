@@ -8,6 +8,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import vm from 'node:vm';
+import { inflateSync } from 'node:zlib';
+
+import { generateAll } from '../scripts/generate-icons.mjs';
 
 const root = new URL('..', import.meta.url).pathname.replace(/^\/(.:)/, '$1');
 const read = (path) => readFileSync(join(root, path), 'utf8');
@@ -29,6 +32,80 @@ function pngSize(path) {
   assert.equal(buf.toString('ascii', 1, 4), 'PNG', `${path} 不是 PNG`);
   assert.equal(buf.toString('ascii', 12, 16), 'IHDR', `${path} 缺少 IHDR`);
   return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
+const decoded = new Map();
+
+/** 解出 8 位 RGBA PNG 的像素，支持全部五种行过滤器。 */
+function pngDecode(path) {
+  if (decoded.has(path)) return decoded.get(path);
+  const buf = readFileSync(join(root, path));
+  assert.equal(buf.toString('ascii', 1, 4), 'PNG', `${path} 不是 PNG`);
+  const width = buf.readUInt32BE(16);
+  const height = buf.readUInt32BE(20);
+  assert.equal(buf[24], 8, `${path} 应为 8 位色深`);
+  assert.equal(buf[25], 6, `${path} 应为 RGBA`);
+
+  const idat = [];
+  for (let off = 8; off < buf.length; ) {
+    const length = buf.readUInt32BE(off);
+    const type = buf.toString('ascii', off + 4, off + 8);
+    if (type === 'IDAT') idat.push(buf.subarray(off + 8, off + 8 + length));
+    off += 12 + length;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const bpp = 4;
+  const stride = width * bpp;
+  const data = Buffer.alloc(stride * height);
+
+  for (let y = 0; y < height; y++) {
+    const base = y * (stride + 1);
+    const filter = raw[base];
+    const line = raw.subarray(base + 1, base + 1 + stride);
+    const cur = data.subarray(y * stride, (y + 1) * stride);
+    const prev = y > 0 ? data.subarray((y - 1) * stride, y * stride) : null;
+    for (let i = 0; i < stride; i++) {
+      const left = i >= bpp ? cur[i - bpp] : 0;
+      const up = prev ? prev[i] : 0;
+      const upLeft = prev && i >= bpp ? prev[i - bpp] : 0;
+      let value = line[i];
+      if (filter === 1) value += left;
+      else if (filter === 2) value += up;
+      else if (filter === 3) value += (left + up) >> 1;
+      else if (filter === 4) value += paeth(left, up, upLeft);
+      else assert.equal(filter, 0, `${path} 未知 filter ${filter}`);
+      cur[i] = value & 0xff;
+    }
+  }
+
+  const image = { width, height, data };
+  decoded.set(path, image);
+  return image;
+}
+
+function paeth(a, b, c) {
+  const p = a + b - c;
+  const pa = Math.abs(p - a);
+  const pb = Math.abs(p - b);
+  const pc = Math.abs(p - c);
+  return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+}
+
+function pngPixel(path, x, y) {
+  const { width, data } = pngDecode(path);
+  const offset = (y * width + x) * 4;
+  return [...data.subarray(offset, offset + 4)];
+}
+
+/** 四个角坐标。 */
+function corners(path) {
+  const { width, height } = pngDecode(path);
+  return [
+    [0, 0],
+    [width - 1, 0],
+    [0, height - 1],
+    [width - 1, height - 1],
+  ];
 }
 
 const manifest = JSON.parse(read('manifest.json'));
@@ -67,6 +144,51 @@ describe('PWA manifest', () => {
 
   test('apple-touch-icon 为 180×180', () => {
     assert.deepEqual(pngSize('icons/apple-touch-icon.png'), { width: 180, height: 180 });
+  });
+});
+
+describe('图标形状', () => {
+  test('any 图标用圆形底，四角透明', () => {
+    for (const path of ['icons/favicon-32.png', 'icons/icon-192.png', 'icons/icon-512.png']) {
+      const { width, height } = pngDecode(path);
+      for (const [x, y] of corners(path)) {
+        assert.equal(pngPixel(path, x, y)[3], 0, `${path} (${x},${y}) 应透明：默认图标必须是圆形`);
+      }
+      assert.equal(pngPixel(path, width >> 1, height >> 1)[3], 255, `${path} 圆心应不透明`);
+    }
+  });
+
+  test('maskable 为满幅方形，圆角交给系统遮罩', () => {
+    const path = 'icons/icon-maskable-512.png';
+    for (const [x, y] of corners(path)) {
+      assert.deepEqual(pngPixel(path, x, y), [153, 80, 154, 255], `${path} (${x},${y}) 应为满幅紫底`);
+    }
+  });
+
+  test('apple-touch 为满幅不透明的液态玻璃稿', () => {
+    const path = 'icons/apple-touch-icon.png';
+    const [first, ...rest] = corners(path).map(([x, y]) => pngPixel(path, x, y));
+    assert.equal(first[3], 255, '四角必须不透明，圆角交给 iOS 遮罩');
+    for (const corner of rest) {
+      assert.deepEqual(corner.slice(0, 3), first.slice(0, 3), '底色应均匀');
+    }
+  });
+
+  test('favicon.svg 与 PNG 同源（圆形底）', () => {
+    const svg = read('icons/favicon.svg');
+    assert.match(svg, /<circle cx="512" cy="512" r="512" fill="#99509A"\/>/);
+    assert.doesNotMatch(svg, /<rect/);
+  });
+
+  test('磁盘上的图标与 scripts/generate-icons.mjs 生成结果一致', () => {
+    for (const [name, expected] of generateAll()) {
+      const actual = readFileSync(join(root, 'icons', name));
+      // Windows 检出的 SVG 是 CRLF，比较前统一换行
+      const same = name.endsWith('.svg')
+        ? actual.toString('utf8').replace(/\r\n/g, '\n') === expected.toString('utf8')
+        : actual.equals(expected);
+      assert.ok(same, `icons/${name} 已过期，请运行 node scripts/generate-icons.mjs`);
+    }
   });
 });
 

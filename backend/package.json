@@ -1,0 +1,22 @@
+{
+  "name": "nightcord-chat",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8787",
+    "types": "wrangler types",
+    "check": "npm run types && tsc --noEmit",
+    "pretest": "wrangler deploy --dry-run --outdir dist",
+    "test": "node --test test/chat.test.mjs",
+    "test:browser": "node --test test/browser.test.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "miniflare": "5.20261104.0-beta",
+    "playwright": "^1.64.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.158.0",
+    "ws": "^8.22.1"
+  }
+}

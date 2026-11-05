@@ -107,6 +107,12 @@ class UIManager {
     this.messages = [];
     this.lastMsgTimestamp = 0;
     this.roster = [];
+    this.currentUser = null;
+    this.profileUI = new NightcordProfileUI(this);
+    document.getElementById('account-button')?.addEventListener('click', () => {
+      if (this.currentUser) this.profileUI.open(this.currentUser);
+      else void this.sekaiPassLoginCallback?.();
+    });
 
     this.systemIcon = `<svg width="24" height="24" viewBox="-32 -32 1088 1088" xmlns="http://www.w3.org/2000/svg"><path d="M1024 512A512 512 0 1 1 0 512A512 512 0 1 1 1024 512ZM1024 512A384 384 0 1 1 256 512A384 384 0 1 1 1024 512ZM576 512A64 64 0 1 1 448 512A64 64 0 1 1 576 512ZM832 512A64 64 0 1 1 704 512A64 64 0 1 1 832 512Z" fill="white" fill-rule="evenodd"></path></svg>`;
 
@@ -245,16 +251,22 @@ class UIManager {
 
       // 检查本地是否已存在该消息（通过时间戳和内容简单去重）
       const exists = this.messages.some(
-        m => m.text === data.message && m.user === data.name && Math.abs(m.timestamp - data.timestamp) < 1000
+        m => m.text === data.message && m.user === data.name && m.profile?.id === data.user?.id && m.timestamp === data.timestamp
       );
       if (!exists) {
-        this.addChatMessage(data.name, data.message, data.timestamp);
+        this.addChatMessage(data.name, data.message, data.timestamp, undefined, undefined, data.user, data.sender);
       }
     });
     this.eventBus.on('message:error', (data) => this.showError(data.error));
     this.eventBus.on('message:sent', () => this.clearChatInput());
-    this.eventBus.on('user:joined', (data) => this.addUserToRoster(data.username));
-    this.eventBus.on('user:quit', (data) => this.removeUserFromRoster(data.username));
+    this.eventBus.on('user:joined', (data) => this.addUserToRoster(data.username, data.user));
+    this.eventBus.on('user:quit', (data) => this.removeUserFromRoster(data.username, data.userId));
+    this.eventBus.on('session:updated', (data) => {
+      this.currentUser = data.user;
+      this.updateAccountControl();
+      this.addUserToRoster(data.user.displayName, data.user);
+    });
+    this.eventBus.on('user:profile', (data) => this.addUserToRoster(data.user.displayName, data.user));
     this.eventBus.on('user:rename', (data) => this.handleUserRename(data.oldUsername, data.newUsername));
     this.eventBus.on('roster:clear', () => this.clearRoster());
     this.eventBus.on('room:ready', (data) => {
@@ -281,7 +293,9 @@ class UIManager {
           avatar,
           color,
           text,
-          timestamp
+          timestamp,
+          profile: m.profile,
+          sender: m.sender
         };
       });
       // 欢迎消息（在渲染之前添加到 messages 数组）
@@ -589,7 +603,9 @@ class UIManager {
           avatar,
           color,
           text,
-          timestamp
+          timestamp,
+          profile: m.profile,
+          sender: m.sender
         };
       });
       this.lastMsgTimestamp = this.storage ? this.storage.getLastMsgTimestamp(this.currentRoom || 'nightcord-default') : this.getLastMsgTimestamp(this.currentRoom || 'nightcord-default');
@@ -624,6 +640,17 @@ class UIManager {
       h = Math.imul(h, 16777619) >>> 0;
     }
     return h & 7;
+  }
+
+  updateAccountControl() {
+    const button = document.getElementById('account-button');
+    if (!button) return;
+    button.textContent = this.currentUser?.authenticated ? 'SEKAI Pass · 我的资料' : this.currentUser ? '访客 · 账号' : '登录 / 账号';
+  }
+
+  setSessionUnavailable() {
+    this.currentUser = null;
+    this.updateAccountControl();
   }
 
   generateAvatar(username) {
@@ -685,8 +712,11 @@ class UIManager {
             <span style="font-size:14px;">${escapeHtml(user.name)}</span>
           </div>
         `;
-      // 只有是自己才可点击
-      if (user.name === currentName) {
+      if (user.profile) {
+        this.profileUI.avatar(div.querySelector('.avatar'), user.profile);
+        div.querySelector('.voice-user-info').appendChild(this.profileUI.badge(user.profile));
+        this.profileUI.makeTrigger(div, user.profile);
+      } else if (user.name === currentName) {
         div.style.cursor = 'pointer';
         div.title = '点击修改你的昵称';
         div.addEventListener('click', () => {
@@ -905,6 +935,9 @@ class UIManager {
       this.onSetUser = onSetUser;
     }
 
+    if (this.chatRoomListenersBound) return;
+    this.chatRoomListenersBound = true;
+
     // 监听滚动事件，检测用户是否接近底部
     chatlog.addEventListener("scroll", UIManager.throttle(() => {
       const distanceFromBottom = chatlog.scrollHeight - chatlog.scrollTop - chatlog.clientHeight;
@@ -981,8 +1014,8 @@ class UIManager {
           chatInput.style.height = 'auto'; // 重置为单行高度
 
           // 先广播用户的问题（让所有人看到）
-          if (onSendMessage) {
-            onSendMessage(message);
+          if (this.onSendMessage) {
+            this.onSendMessage(message);
           }
 
           // 触发 AI 调用事件（传递 persona 参数）
@@ -995,7 +1028,7 @@ class UIManager {
         }
 
         // 普通消息处理
-        if (message && onSendMessage) {
+        if (message && this.onSendMessage) {
           if (pangu) {
             // 保护 SEKAI / Markdown 语法不被 pangu 插入空格
             const placeholders = [];
@@ -1037,7 +1070,7 @@ class UIManager {
           // 用户主动发送消息，重置交互时间并标记在底部
           this.isAtBottom = true;
           this.updateUserActivityTime();
-          onSendMessage(message);
+          this.onSendMessage(message);
         }
       }
     });
@@ -1161,7 +1194,7 @@ class UIManager {
     this.elements.main.addEventListener("click", (e) => {
       // 如果点击的是提及列表项，不要聚焦输入框（因为点击事件会先触发，然后才是列表项的点击处理）
       // 或者更简单地，让列表项的点击处理完后再聚焦
-      if (e.target.closest('.mention-list') || e.target.closest('.mention-item')) return;
+      if (e.target.closest('.mention-list, .mention-item, .profile-trigger, button, a')) return;
 
       if (window.getSelection().toString() == "") {
         if (window.innerWidth > 768) chatInput.focus();
@@ -1724,11 +1757,11 @@ class UIManager {
    * @param {string} [avatar] - 发送者头像
    * @param {string} [color='bg-default'] - 头像背景颜色
    */
-  addChatMessage(user, message, timestamp, avatar, color) {
+  addChatMessage(user, message, timestamp, avatar, color, profile, sender) {
     if (user === '系统') {
       this.addSystemMessage(message, timestamp, avatar, color);
     } else {
-      this.addUserMessage(user, message, timestamp, avatar, color);
+      this.addUserMessage(user, message, timestamp, avatar, color, profile, sender);
     }
   }
 
@@ -1746,14 +1779,16 @@ class UIManager {
    * 添加用户消息（保存到本地存储）
    * @private
    */
-  addUserMessage(user, message, timestamp, avatar, color) {
-    const messageData = this.createMessageData(user, message, timestamp, avatar, color);
+  addUserMessage(user, message, timestamp, avatar, color, profile, sender) {
+    const messageData = { ...this.createMessageData(user, message, timestamp, avatar, color), profile, sender };
     this.messages.push(messageData);
 
     const msgObj = {
       user: messageData.user,
       text: message,
-      timestamp: messageData.timestamp
+      timestamp: messageData.timestamp,
+      profile,
+      sender
     };
 
     this.saveMessageToStorage(msgObj);
@@ -1850,12 +1885,14 @@ class UIManager {
    * 添加用户到在线用户列表
    * @param {string} username - 用户名
    */
-  addUserToRoster(username) {
+  addUserToRoster(username, profile) {
     // Avoid adding duplicate entries for the same username. Server may emit
     // a user:joined after we have locally renamed the user, so skip if
     // username already exists in the roster.
-    if (this.roster.some(u => u.name === username)) return;
-    this.roster.push(this.generateAvatar(username));
+    const index = this.roster.findIndex(u => profile ? u.profile?.id === profile.id : !u.profile && u.name === username);
+    const entry = { ...this.generateAvatar(username), profile };
+    if (index !== -1) this.roster[index] = entry;
+    else this.roster.push(entry);
     this.renderVoiceUsers();
   }
 
@@ -1880,10 +1917,10 @@ class UIManager {
    * 从在线用户列表移除用户
    * @param {string} username - 用户名
    */
-  removeUserFromRoster(username) {
+  removeUserFromRoster(username, userId) {
     // Remove all matching users with the provided username to guard against
     // duplicates and then re-render only if something changed.
-    const newRoster = this.roster.filter(user => user.name !== username);
+    const newRoster = this.roster.filter(user => userId ? user.profile?.id !== userId : user.name !== username);
     if (newRoster.length !== this.roster.length) {
       this.roster = newRoster;
       this.renderVoiceUsers();
@@ -1928,8 +1965,8 @@ class UIManager {
   showWelcomeMessages(data) {
     // 只添加到 messages 数组，不触发 DOM 操作（由 renderMessages 统一渲染）
     const messages = [
-      { text: `警告: 此聊天室的参与者是互联网上的随机用户。用户名未经认证，任何人都可以冒充任何人。聊天记录将被保存。`, color: 'bg-red-600' },
-      { text: '提示: 若要修改你的昵称，点击左侧在线用户列表中你的昵称并输入新昵称。', color: 'bg-default' },
+      { text: 'SEKAI Pass 标记表示账号身份已验证；访客可自选昵称。聊天记录会保存。', color: 'bg-default' },
+      { text: '点击头像或成员查看身份和个性签名；在右上角账号菜单管理登录和资料。', color: 'bg-default' },
       { text: `欢迎来到聊天室: ${data.roomname}`, color: 'bg-default' }
     ];
 
@@ -2083,6 +2120,8 @@ class UIManager {
     const avatarSpan = document.createElement('span');
     avatarSpan.className = `avatar ${msg.color}`;
     avatarSpan.innerHTML = msg.avatar;
+    this.profileUI.avatar(avatarSpan, msg.profile);
+    this.profileUI.makeTrigger(avatarSpan, msg.profile);
 
     // Content
     const contentDiv = document.createElement('div');
@@ -2094,10 +2133,19 @@ class UIManager {
     const userSpan = document.createElement('span');
     userSpan.className = 'message-user';
     userSpan.textContent = msg.user;
+    this.profileUI.makeTrigger(userSpan, msg.profile);
     const timeSpan = document.createElement('span');
     timeSpan.className = 'message-time';
     timeSpan.textContent = msg.timestamp ? this.formatDate(msg.timestamp) : '';
     headerDiv.appendChild(userSpan);
+    if (msg.profile) headerDiv.appendChild(this.profileUI.badge(msg.profile));
+    if (msg.sender) {
+      const sender = document.createElement('span');
+      sender.className = 'identity-badge';
+      sender.textContent = `由 ${msg.sender.displayName} 转发`;
+      this.profileUI.makeTrigger(sender, msg.sender);
+      headerDiv.appendChild(sender);
+    }
     headerDiv.appendChild(timeSpan);
     contentDiv.appendChild(headerDiv);
 

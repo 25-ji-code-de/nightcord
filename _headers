@@ -2,30 +2,42 @@
 # 本站渲染用户投稿内容（经 DOMPurify），是四个静态站里最需要 CSP 的一个。
 # connect-src 里的 wss: 是聊天室 WebSocket —— websocket-mgr.js 用当前 hostname 拼。
 /*
-  Cache-Control: no-cache
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Content-Security-Policy: object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://r2.nightcord.de5.net https://sticker.nightcord.de5.net https://emojis.nightcord.de5.net; media-src 'self' blob: https://r2.nightcord.de5.net; connect-src 'self' wss: https://api.nightcord.de5.net https://nako.nightcord.de5.net https://storage.nightcord.de5.net https://upload.nightcord.de5.net https://r2.nightcord.de5.net https://sticker.nightcord.de5.net; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://r2.nightcord.de5.net https://sticker.nightcord.de5.net https://emojis.nightcord.de5.net; media-src 'self' blob: https://r2.nightcord.de5.net; connect-src 'self' wss: https://chat.nightcord.de5.net https://api.nightcord.de5.net https://nako.nightcord.de5.net https://storage.nightcord.de5.net https://upload.nightcord.de5.net https://r2.nightcord.de5.net https://sticker.nightcord.de5.net; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
 
-# 音效为内容固定的二进制资源，改名即换版本
-# 注意：Pages 会合并所有匹配规则的同名头（值以逗号拼接），
-# 只写 Cache-Control 会得到 "no-cache, public, max-age=..."，no-cache 生效。
-# 故先用 ! 从合并结果里删掉 /* 的 Cache-Control，再设长缓存。
+# 页面、代码与版本信息每次使用前重新验证，确保更新后切换到新后端。
+# 缓存规则按资源类型设置，避免 Pages 合并相互冲突的 Cache-Control。
+/
+  Cache-Control: no-cache
+
+/auth/*
+  Cache-Control: no-cache
+
+/*.html
+  Cache-Control: no-cache
+
+/*.js
+  Cache-Control: no-cache
+
+/*.css
+  Cache-Control: no-cache
+
+/*.json
+  Cache-Control: no-cache
+
+# 音效为内容固定的二进制资源，改名即换版本。
 /se_cord.opus
-  ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
 /se_cord.mp3
-  ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
 /se_dcord.opus
-  ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
 /se_dcord.mp3
-  ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable

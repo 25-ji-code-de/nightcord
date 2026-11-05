@@ -45,16 +45,19 @@ class NightcordManager {
    * @param {EventBus} [config.eventBus] - 事件总线实例
    */
   constructor(config = {}) {
-    this.hostname = config.hostname || "edge-chat-demo.cloudflareworkers.com";
+    this.hostname = config.hostname || "chat.nightcord.de5.net";
     this.eventBus = config.eventBus || new EventBus();
     this.username = null;
     this.roomname = null;
     this.lastSeenTimestamp = 0;
     this.wroteWelcomeMessages = false;
-    this.roster = new Set();
+    this.roster = new Map();
+    this.currentUser = null;
     
     this.wsManager = new WebSocketManager({
       hostname: this.hostname,
+      getAccessToken: config.getAccessToken,
+      onAuthError: (error) => this.eventBus.emit('auth:required', { error }),
       onOpen: () => this.handleConnectionOpen(),
       onMessage: (data) => this.handleMessage(data),
       onClose: () => this.handleConnectionClose(),
@@ -84,16 +87,9 @@ class NightcordManager {
       // close and reopen the socket.
       try { this.wsManager.pauseAutoReconnect(); } catch (e) {}
 
-      // Emit a rename event so the UI can replace the username smoothly
-      // without clearing/rebuilding the entire roster.
-      this.eventBus.emit('user:rename', { oldUsername, newUsername: username });
-
-      // Close current socket and then reconnect with the new username. We do
-      // NOT clear the local roster or wroteWelcomeMessages here to avoid
-      // triggering welcome messages on a simple rename; UI will update on
-      // server-sent join/quit events as they arrive.
+      // A guest rename creates a fresh session; rebuild presence by ID.
       this.wsManager.disconnect();
-      this.wsManager.connect(this.roomname, username);
+      this.joinRoom(this.roomname);
 
       // Resume normal auto-reconnect behavior (connect() also enables it but
       // call resume to be explicit for implementations that check the flag).
@@ -133,6 +129,10 @@ class NightcordManager {
   joinRoom(roomname) {
     // Normalize the room name
     this.roomname = roomname.replace(/[^a-zA-Z0-9_-]/g, "").replace(/_/g, "-").toLowerCase();
+    this.lastSeenTimestamp = 0;
+    this.wroteWelcomeMessages = false;
+    this.roster.clear();
+    this.eventBus.emit('roster:clear');
 
     if (this.roomname.length > 32 && !this.roomname.match(/^[0-9a-f]{64}$/)) {
       this.eventBus.emit('error', { message: 'Invalid room name' });
@@ -207,14 +207,22 @@ class NightcordManager {
    * @fires message:received
    */
   handleMessage(data) {
-    if (data.error) {
+    if (data.type === 'session') {
+      this.currentUser = data.user;
+      this.username = data.user.displayName;
+      try { localStorage.setItem('nightcord-username', this.username); } catch (e) {}
+      this.eventBus.emit('session:updated', { user: data.user });
+    } else if (data.type === 'profile') {
+      if (this.roster.has(data.user.id)) this.roster.set(data.user.id, data.user);
+      this.eventBus.emit('user:profile', { user: data.user });
+    } else if (data.error) {
       this.eventBus.emit('message:error', { error: data.error });
     } else if (data.joined) {
-      this.roster.add(data.joined);
-      this.eventBus.emit('user:joined', { username: data.joined });
+      this.roster.set(data.user?.id || data.joined, data.user || { displayName: data.joined });
+      this.eventBus.emit('user:joined', { username: data.joined, user: data.user });
     } else if (data.quit) {
-      this.roster.delete(data.quit);
-      this.eventBus.emit('user:quit', { username: data.quit });
+      this.roster.delete(data.userId || data.quit);
+      this.eventBus.emit('user:quit', { username: data.quit, userId: data.userId });
     } else if (data.ready) {
       if (!this.wroteWelcomeMessages) {
         this.wroteWelcomeMessages = true;
@@ -250,6 +258,8 @@ class NightcordManager {
         name: senderName,
         message: message,
         timestamp: data.timestamp,
+        user: isNakoMessage ? null : data.user,
+        sender: isNakoMessage ? data.user : null,
         isNako: isNakoMessage
       });
     }
@@ -271,7 +281,7 @@ class NightcordManager {
    * @returns {string[]} 成员用户名数组
    */
   getRoster() {
-    return Array.from(this.roster);
+    return Array.from(this.roster.values()).map(user => user.displayName);
   }
 
   /**

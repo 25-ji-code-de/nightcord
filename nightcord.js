@@ -25,6 +25,7 @@ class Nightcord {
     this.eventBus = new EventBus();
     this.chatRoom = new NightcordManager({
       hostname: config.hostname,
+      getAccessToken: async () => this.sekaiPassAuth.isAuthenticated() ? this.sekaiPassAuth.getAccessToken() : null,
       eventBus: this.eventBus
     });
     this.ui = new UIManager(this.eventBus);
@@ -40,6 +41,23 @@ class Nightcord {
           this.sekaiPassAuth.login();
         }, 1000);
       }
+    });
+    this.ui.sekaiPassLoginCallback = () => this.sekaiPassAuth.login();
+    this.ui.onRefreshProfile = () => this.chatRoom.wsManager.refreshAuthentication();
+    this.ui.onLogout = async () => {
+      await this.sekaiPassAuth.logout();
+      this.chatRoom.leave();
+      this.chatRoom.currentUser = null;
+      this.ui.currentUser = null;
+      this.ui.updateAccountControl();
+      this.ui.showNameChooser({ mode: 'init' }, (username) => {
+        this.chatRoom.setUser(username);
+        this.joinRoom(this.chatRoom.roomname || 'nightcord-default');
+      }, this.ui.sekaiPassLoginCallback);
+    };
+    this.eventBus.on('auth:required', () => {
+      this.ui.showError('SEKAI Pass 登录已失效，请在账号菜单中重新登录。');
+      this.ui.setSessionUnavailable();
     });
 
     // 大文件上传（> 512 MiB）需 SEKAI Pass token。给上传服务注入与 Nako 同形的
@@ -155,7 +173,7 @@ class Nightcord {
     if (this.sekaiPassAuth.isAuthenticated()) {
       const user = this.sekaiPassAuth.getCurrentUser();
       // 优先使用 name，其次 preferred_username，最后 sub
-      const username = user.name || user.preferred_username || user.sub;
+      const username = user && (user.name || user.display_name || user.preferred_username || user.username || user.sub);
       if (user && username) {
         this.chatRoom.setUser(username);
         this.joinRoom(roomname || 'nightcord-default');
@@ -192,7 +210,7 @@ class Nightcord {
       const userInfo = await this.sekaiPassAuth.handleCallback();
 
       // 优先使用 name，其次 preferred_username，最后 sub
-      const username = userInfo.name || userInfo.preferred_username || userInfo.sub;
+      const username = userInfo.name || userInfo.display_name || userInfo.preferred_username || userInfo.username || userInfo.sub;
 
       // 使用 SEKAI Pass 的用户名
       this.chatRoom.setUser(username);

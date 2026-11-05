@@ -7,6 +7,27 @@
   --sticker-size: 120px;
 }
 
+.avatar { flex-shrink: 0; overflow: hidden; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.account-button { margin-left: auto; margin-right: 12px; padding: 8px 12px; min-height: 40px; border: 1px solid #8d7ca6; border-radius: 8px; color: #fff; background: #3f355b; cursor: pointer; font: inherit; font-size: 12px; }
+.identity-badge { display: inline-block; flex-shrink: 0; border: 1px solid #a99cba; border-radius: 4px; padding: 1px 5px; font-size: 10px; line-height: 1.5; color: #e2dbea; white-space: nowrap; }
+.identity-badge--verified { color: #d1ffe8; border-color: #80c6ac; background: #234c45; }
+.profile-trigger { cursor: pointer; }
+.profile-trigger:focus-visible, .account-button:focus-visible, .user-profile-dialog :is(button, a):focus-visible { outline: 2px solid #d1c1f2; outline-offset: 3px; }
+.voice-user-info { min-width: 0; flex-wrap: wrap; }
+.user-profile-dialog { position: fixed; width: min(380px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); box-sizing: border-box; padding: 28px; border: 1px solid #88769f; border-radius: 18px; background: #3f355b; color: #fff; box-shadow: 0 20px 64px #17102088; overflow-y: auto; }
+.user-profile-dialog::backdrop { background: #171020aa; }
+.user-profile-dialog h2 { margin: 16px 0 8px; font-size: 22px; overflow-wrap: anywhere; }
+.profile-close { float: right; }
+.user-profile-dialog button, .profile-actions a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 12px; box-sizing: border-box; border: 1px solid #9483aa; border-radius: 8px; color: #fff; background: #50476a; font: inherit; font-size: 14px; text-decoration: none; cursor: pointer; }
+.user-profile-dialog .profile-avatar { width: 72px; height: 72px; font-size: 28px; }
+.profile-handle { color: #d3c8e1; overflow-wrap: anywhere; }
+.profile-bio { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; margin: 24px 0; }
+.profile-id-label { font-size: 12px; color: #d3c8e1; margin-bottom: 8px; }
+.profile-id { display: block; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; padding: 12px; border-radius: 8px; background: #302743; user-select: all; }
+.profile-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+@media (max-width: 480px) { .account-button { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .user-profile-dialog { padding: 20px; } }
+
 body {
   margin: 0;
   font-family: "Segoe UI", "Noto Sans JP", sans-serif;

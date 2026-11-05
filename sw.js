@@ -68,6 +68,7 @@ const PRECACHE = [
   '/sekai-renderer.js',
   '/sekai-image-viewer.js',
   '/ui-autocomplete.js',
+  '/user-profile.js',
   '/ui-manager.js',
   '/nightcord.js',
   '/pangu.js',

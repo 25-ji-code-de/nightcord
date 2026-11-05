@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "nightcord-chat",
+  "account_id": "5694444d23d3a8eea30dd74eb665633b",
+  "main": "src/chat.ts",
+  "compatibility_date": "2026-11-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "services": [
+    { "binding": "SEKAI_PASS", "service": "sekai-pass" }
+  ],
+  "routes": [
+    { "pattern": "chat.nightcord.de5.net", "custom_domain": true }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "ChatRoom" },
+      { "name": "LIMITERS", "class_name": "RateLimiter" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ChatRoom", "RateLimiter"] }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  }
+}

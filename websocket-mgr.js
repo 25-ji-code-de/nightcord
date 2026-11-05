@@ -44,7 +44,7 @@ class WebSocketManager {
    * @param {Function} [config.onReconnect] - 重连时的回调
    */
   constructor(config = {}) {
-    this.hostname = config.hostname || 'edge-chat-demo.cloudflareworkers.com';
+    this.hostname = config.hostname || 'chat.nightcord.de5.net';
     this.reconnectDelay = config.reconnectDelay || 10000;
     this.ws = null;
     this.rejoined = false;
@@ -58,6 +58,12 @@ class WebSocketManager {
     this._reconnectTimer = null;
     /** Generation token so stale sockets/timers cannot rejoin after a new connect */
     this._gen = 0;
+    this.getAccessToken = config.getAccessToken || (async () => null);
+    this.onAuthError = config.onAuthError || (() => {});
+    this._authTimer = null;
+    this._authRefreshing = false;
+    this.authExpiresAt = 0;
+    this.ready = false;
 
     // Callbacks
     this.onOpen = config.onOpen || (() => {});
@@ -80,6 +86,10 @@ class WebSocketManager {
     this.startTime = Date.now();
     this._gen += 1;
     const gen = this._gen;
+    clearTimeout(this._authTimer);
+    this._authRefreshing = false;
+    this.ready = false;
+    this.authExpiresAt = 0;
 
     // Drop previous socket without triggering a parallel reconnect loop
     if (this._reconnectTimer) {
@@ -103,14 +113,19 @@ class WebSocketManager {
     const ws = new WebSocket(wss + this.hostname + '/api/room/' + encodeURIComponent(roomname) + '/websocket');
     this.ws = ws;
 
-    ws.addEventListener('open', (event) => {
+    ws.addEventListener('open', async (event) => {
       if (gen !== this._gen || this.ws !== ws) return;
       try {
-        ws.send(JSON.stringify({ name: username }));
+        const token = await this.getAccessToken();
+        if (gen !== this._gen || this.ws !== ws) return;
+        ws.send(JSON.stringify(token ? { accessToken: token } : { name: username }));
+        this.onOpen(event);
       } catch (e) {
-        console.warn('WebSocketManager: failed to send join name', e);
+        if (gen !== this._gen || this.ws !== ws) return;
+        this.pauseAutoReconnect();
+        this.onAuthError(e);
+        ws.close(4001, 'Authentication required');
       }
-      this.onOpen(event);
     });
 
     ws.addEventListener('message', (event) => {
@@ -122,11 +137,31 @@ class WebSocketManager {
         console.warn('WebSocketManager: invalid JSON message', e);
         return;
       }
+      if (data.type === 'session') {
+        this._authRefreshing = false;
+        this.authExpiresAt = data.authExpiresAt || 0;
+        clearTimeout(this._authTimer);
+        if (this.authExpiresAt) {
+          this._authTimer = setTimeout(() => this.refreshAuthentication(), Math.max(1000, this.authExpiresAt - Date.now() - 60000));
+        }
+      }
+      if (data.ready) this.ready = true;
+      if (data.code === 'auth_invalid') {
+        this.ready = false;
+        this.pauseAutoReconnect();
+        this.onAuthError(new Error(data.error));
+      }
+      if (data.code === 'auth_required') void this.refreshAuthentication();
+      if (data.code === 'auth_unavailable') ws.close(1013, 'Authentication service unavailable');
       this.onMessage(data);
     });
 
     ws.addEventListener('close', (event) => {
       if (gen !== this._gen) return;
+      this.ready = false;
+      this._authRefreshing = false;
+      clearTimeout(this._authTimer);
+      if (event.code === 4001) this.pauseAutoReconnect();
       console.log('WebSocket closed, reconnecting:', event.code, event.reason);
       this.onClose(event);
       if (this.shouldReconnect) this.rejoin();
@@ -177,7 +212,12 @@ class WebSocketManager {
    * @returns {boolean} 是否成功发送
    */
   send(message) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    if (this._authRefreshing) return false;
+    if (this.authExpiresAt && Date.now() >= this.authExpiresAt) {
+      void this.refreshAuthentication();
+      return false;
+    }
+    if (this.ready && this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify(message));
         return true;
@@ -193,6 +233,8 @@ class WebSocketManager {
    * 断开连接
    */
   disconnect() {
+    clearTimeout(this._authTimer);
+    this.ready = false;
     if (this._reconnectTimer) {
       clearTimeout(this._reconnectTimer);
       this._reconnectTimer = null;
@@ -225,6 +267,31 @@ class WebSocketManager {
    */
   resumeAutoReconnect() {
     this.shouldReconnect = true;
+  }
+
+  async refreshAuthentication() {
+    if (this._authRefreshing || !this.isConnected()) return;
+    this._authRefreshing = true;
+    const ws = this.ws;
+    try {
+      const token = await this.getAccessToken();
+      if (!token) throw new Error('SEKAI Pass session expired');
+      if (this.ws === ws && ws.readyState === WebSocket.OPEN) {
+        clearTimeout(this._authTimer);
+        this._authTimer = setTimeout(() => {
+          if (this.ws === ws && this._authRefreshing) ws.close(1013, 'Authentication timed out');
+        }, 12000);
+        ws.send(JSON.stringify({ type: 'auth', accessToken: token }));
+      } else this._authRefreshing = false;
+    } catch (error) {
+      if (this.ws === ws) {
+        this.pauseAutoReconnect();
+        this.ready = false;
+        this._authRefreshing = false;
+        this.onAuthError(error);
+        ws.close(4001, 'Authentication required');
+      }
+    }
   }
 
   /**

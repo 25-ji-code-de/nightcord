@@ -21,7 +21,7 @@ NightcordManager，负责处理聊天室的业务逻辑，包括用户管理、�
 ```javascript
 const eventBus = new EventBus();
 const chatRoom = new NightcordManager({
-  hostname: 'example.com',    // 可选，默认为 'edge-chat-demo.cloudflareworkers.com'
+  hostname: 'example.com',    // 可选，默认为 'chat.nightcord.de5.net'
   eventBus: eventBus          // 可选，默认创建新的 EventBus
 });
 ```
@@ -162,7 +162,7 @@ Nightcord（原 ChatApplication），主应用类，协调各个管理器，控�
 
 ```javascript
 const app = new Nightcord({
-  hostname: 'example.com'  // 可选，默认为 'edge-chat-demo.cloudflareworkers.com'
+  hostname: 'example.com'  // 可选，默认为 'chat.nightcord.de5.net'
 });
 ```
 
@@ -610,7 +610,7 @@ const autocomplete = new AutocompleteManager({
 
 ```javascript
 const app = new ChatApplication({
-  hostname: 'example.com'  // 可选，默认为 'edge-chat-demo.cloudflareworkers.com'
+  hostname: 'example.com'  // 可选，默认为 'chat.nightcord.de5.net'
 });
 ```
 

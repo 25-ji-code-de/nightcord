@@ -128,7 +128,7 @@ class StorageManager {
       seen.add(key);
 
       // 添加标准化后的消息
-      normalized.push({ user, text, timestamp });
+      normalized.push({ ...msg, user, text, timestamp, profile: isAIMessage ? null : msg.profile });
     }
 
     // 如果有修改，保存回 localStorage

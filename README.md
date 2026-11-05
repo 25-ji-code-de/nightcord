@@ -89,6 +89,12 @@ const app = new Nightcord({
 app.init();
 ```
 
+### 自部署聊天后端
+
+默认聊天室后端为 `chat.nightcord.de5.net`。Worker 源码、Cloudflare 配置、
+本地验证和部署步骤见 [backend/README.md](backend/README.md)。前端构建命令为
+`node scripts/build-pages.mjs`，Cloudflare Pages 输出目录为 `dist`。
+
 ## 📱 PWA 与离线
 
 站点带有 `manifest.json` 与 Service Worker，可安装为独立窗口应用：

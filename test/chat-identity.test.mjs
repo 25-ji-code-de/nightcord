@@ -1,0 +1,89 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+import test from 'node:test';
+
+function websocketHarness(getAccessToken) {
+  class Socket {
+    static OPEN = 1;
+    static CLOSED = 3;
+    constructor(url) { this.url = url; this.readyState = 1; this.events = {}; this.sent = []; }
+    addEventListener(type, listener) { this.events[type] = listener; }
+    send(value) { this.sent.push(JSON.parse(value)); }
+    close(code) { this.readyState = 3; this.events.close?.({ code }); }
+    message(value) { this.events.message({ data: JSON.stringify(value) }); }
+  }
+  const Manager = vm.runInNewContext(readFileSync(new URL('../websocket-mgr.js', import.meta.url), 'utf8') + '\nWebSocketManager', {
+    WebSocket: Socket, console: { log() {}, warn() {} }, setTimeout, clearTimeout,
+  });
+  const errors = [];
+  const manager = new Manager({ getAccessToken, onAuthError: e => errors.push(e) });
+  manager.connect('identity-test', 'Guest nickname');
+  return { manager, socket: manager.ws, errors };
+}
+
+test('token failure stops reconnect and never silently claims a guest session', async () => {
+  const { manager, socket, errors } = websocketHarness(async () => { throw new Error('revoked'); });
+  await socket.events.open({});
+  assert.deepEqual(socket.sent, []);
+  assert.equal(manager.shouldReconnect, false);
+  assert.equal(errors.length, 1);
+  manager.disconnect();
+});
+
+test('authenticated handshake and revalidation wait for the server before sending', async () => {
+  const { manager, socket } = websocketHarness(async () => 'test-bearer');
+  try {
+    await socket.events.open({});
+    assert.equal(socket.url.includes('test-bearer'), false);
+    assert.equal(socket.sent[0].accessToken, 'test-bearer');
+    assert.equal(manager.send({ message: 'too early' }), false);
+    socket.message({ type: 'session', user: { id: 'sekai:one' }, authExpiresAt: Date.now() + 300000 });
+    socket.message({ ready: true });
+    assert.equal(manager.send({ message: 'ready' }), true);
+    await manager.refreshAuthentication();
+    assert.equal(socket.sent.at(-1).type, 'auth');
+    assert.equal(manager.send({ message: 'while checking' }), false);
+    socket.message({ type: 'session', user: { id: 'sekai:one' }, authExpiresAt: Date.now() + 300000 });
+    assert.equal(manager.send({ message: 'checked' }), true);
+    socket.message({ code: 'auth_invalid', error: 'expired' });
+    assert.equal(manager.send({ message: 'after revocation' }), false);
+    assert.equal(manager.shouldReconnect, false);
+  } finally { manager.disconnect(); }
+});
+
+test('an obsolete token request cannot pause a newer connection', async () => {
+  let rejectOld;
+  const { manager, socket } = websocketHarness(() => new Promise((_, reject) => { rejectOld = reject; }));
+  const pending = socket.events.open({});
+  manager.getAccessToken = async () => null;
+  manager.connect('another-room', 'visitor');
+  const current = manager.ws;
+  await current.events.open({});
+  rejectOld(new Error('old request failed'));
+  await pending;
+  assert.equal(manager.shouldReconnect, true);
+  assert.equal(current.sent[0].name, 'visitor');
+  manager.disconnect();
+});
+
+test('presence uses identity IDs and AI forwarding preserves the actual sender', () => {
+  const events = [];
+  const Manager = vm.runInNewContext(readFileSync(new URL('../nightcord-mgr.js', import.meta.url), 'utf8') + '\nNightcordManager', {
+    WebSocketManager: class {}, localStorage: { setItem() {} }, window: { AIConfig: { getAllDisplayNames: () => ['Nako'] } },
+  });
+  const manager = new Manager({ eventBus: { emit: (type, data) => events.push({ type, data }) } });
+  const user = { id: 'sekai:one', displayName: 'Same name', authenticated: true };
+  const guest = { id: 'guest:two', displayName: 'Same name', authenticated: false };
+  manager.handleMessage({ joined: 'Same name', user });
+  manager.handleMessage({ joined: 'Same name', user: guest });
+  assert.equal(manager.roster.size, 2);
+  manager.handleMessage({ quit: 'Same name', userId: guest.id });
+  assert.equal(manager.roster.size, 1);
+  assert.ok(manager.roster.has(user.id));
+  manager.handleMessage({ name: user.displayName, message: '[Nako]forwarded text', timestamp: 100, user });
+  const message = events.at(-1).data;
+  assert.equal(message.user, null);
+  assert.equal(message.sender.id, user.id);
+});

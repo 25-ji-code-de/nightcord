@@ -49,14 +49,13 @@ class Nightcord {
       this.chatRoom.leave();
       this.chatRoom.currentUser = null;
       this.ui.currentUser = null;
-      this.ui.updateAccountControl();
       this.ui.showNameChooser({ mode: 'init' }, (username) => {
         this.chatRoom.setUser(username);
         this.joinRoom(this.chatRoom.roomname || 'nightcord-default');
       }, this.ui.sekaiPassLoginCallback);
     };
     this.eventBus.on('auth:required', () => {
-      this.ui.showError('SEKAI Pass 登录已失效，请在账号菜单中重新登录。');
+      this.ui.showError('SEKAI Pass 登录已失效，请重新登录。');
       this.ui.setSessionUnavailable();
     });
 

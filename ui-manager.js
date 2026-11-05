@@ -109,10 +109,6 @@ class UIManager {
     this.roster = [];
     this.currentUser = null;
     this.profileUI = new NightcordProfileUI(this);
-    document.getElementById('account-button')?.addEventListener('click', () => {
-      if (this.currentUser) this.profileUI.open(this.currentUser);
-      else void this.sekaiPassLoginCallback?.();
-    });
 
     this.systemIcon = `<svg width="24" height="24" viewBox="-32 -32 1088 1088" xmlns="http://www.w3.org/2000/svg"><path d="M1024 512A512 512 0 1 1 0 512A512 512 0 1 1 1024 512ZM1024 512A384 384 0 1 1 256 512A384 384 0 1 1 1024 512ZM576 512A64 64 0 1 1 448 512A64 64 0 1 1 576 512ZM832 512A64 64 0 1 1 704 512A64 64 0 1 1 832 512Z" fill="white" fill-rule="evenodd"></path></svg>`;
 
@@ -263,7 +259,6 @@ class UIManager {
     this.eventBus.on('user:quit', (data) => this.removeUserFromRoster(data.username, data.userId));
     this.eventBus.on('session:updated', (data) => {
       this.currentUser = data.user;
-      this.updateAccountControl();
       this.addUserToRoster(data.user.displayName, data.user);
     });
     this.eventBus.on('user:profile', (data) => this.addUserToRoster(data.user.displayName, data.user));
@@ -642,15 +637,8 @@ class UIManager {
     return h & 7;
   }
 
-  updateAccountControl() {
-    const button = document.getElementById('account-button');
-    if (!button) return;
-    button.textContent = this.currentUser?.authenticated ? 'SEKAI Pass · 我的资料' : this.currentUser ? '访客 · 账号' : '登录 / 账号';
-  }
-
   setSessionUnavailable() {
     this.currentUser = null;
-    this.updateAccountControl();
   }
 
   generateAvatar(username) {
@@ -1966,7 +1954,7 @@ class UIManager {
     // 只添加到 messages 数组，不触发 DOM 操作（由 renderMessages 统一渲染）
     const messages = [
       { text: 'SEKAI Pass 标记表示账号身份已验证；访客可自选昵称。聊天记录会保存。', color: 'bg-default' },
-      { text: '点击头像或成员查看身份和个性签名；在右上角账号菜单管理登录和资料。', color: 'bg-default' },
+      { text: '点击头像或成员查看身份和个性签名；点击自己的资料可管理登录和资料。', color: 'bg-default' },
       { text: `欢迎来到聊天室: ${data.roomname}`, color: 'bg-default' }
     ];
 

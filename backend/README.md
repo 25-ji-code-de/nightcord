@@ -47,7 +47,7 @@ Its build publishes browser assets only; do not upload the repository root.
   devices and reconnects. Guest ID is a fresh `guest:<uuid>` per connection.
   The badge means account identity was checked, not email or real-name verification.
 - Profile carries displayName, username, HTTPS avatarUrl and bio. Pass calls bio
-  “个性签名”; profiles are edited in Pass settings and synced from the account menu.
+  “个性签名”; profiles are edited in Pass settings and synced from your own profile card.
   Historical messages retain the profile verified at send time.
 - Authentication leases last five minutes; clients refresh after four minutes
   with `{"type":"auth","accessToken":"..."}`. Invalid/revoked tokens close the

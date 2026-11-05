@@ -178,41 +178,39 @@
 /* --- Nightcord Voice Message Component (Studio/Talkback Style) --- */
 
 .sekai-voice-bubble {
-  /* Reset/Override base player styles for a cleaner bubble look */
-  background: transparent !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-  margin: 4px 0 !important;
-  height: 48px !important; /* Compact height */
-  width: auto !important;
-  min-width: 200px !important;
-  max-width: 320px !important;
+  /* Loaded after base player styles, so normal cascade order applies. */
+  background: rgba(40, 35, 55, 0.6); /* Semi-transparent dark */
+  box-shadow: none;
+  padding: 0 20px 0 0; /* Space for time duration on the right */
+  margin: 4px 0;
+  height: 48px; /* Compact height */
+  width: auto;
+  min-width: 200px;
+  max-width: 320px;
 
   /* Flex layout for the bubble */
-  display: flex !important;
-  align-items: center !important;
-  gap: 12px !important;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 
   /* Bubble container styling */
-  background-color: rgba(40, 35, 55, 0.6) !important; /* Semi-transparent dark */
-  border-radius: 24px !important; /* Fully rounded bubble */
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  padding-right: 20px !important; /* Space for time duration on the right */
+  border-radius: 24px; /* Fully rounded bubble */
+  border: 1px solid rgba(255, 255, 255, 0.08);
   
-  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .sekai-voice-bubble:hover {
-  background-color: rgba(50, 45, 65, 0.8) !important;
-  border-color: rgba(255, 255, 255, 0.15) !important;
+  background-color: rgba(50, 45, 65, 0.8);
+  border-color: rgba(255, 255, 255, 0.15);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .sekai-voice-bubble.playing {
-  background-color: rgba(55, 50, 75, 0.9) !important;
-  border-color: rgba(167, 139, 250, 0.3) !important; /* Nightcord Purple Tint */
-  box-shadow: 0 4px 16px rgba(167, 139, 250, 0.15) !important;
+  background-color: rgba(55, 50, 75, 0.9);
+  border-color: rgba(167, 139, 250, 0.3); /* Nightcord Purple Tint */
+  box-shadow: 0 4px 16px rgba(167, 139, 250, 0.15);
 }
 
 /* --- Left Module: Talkback Button & LED --- */
@@ -388,6 +386,7 @@
   outline: none;
 }
 
+/* Accessibility overrides must win over component and inline motion styles. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

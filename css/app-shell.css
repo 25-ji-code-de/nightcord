@@ -166,7 +166,7 @@ body {
   border: 1px solid #2b2633; /* 调整为深色边框 */
   border-radius: 4px;
   cursor: pointer;
-  display: flex !important;
+  display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -205,8 +205,8 @@ body {
 
 /* Reply jump highlight animation */
 .message-highlighted {
-  background: rgb(var(--sekai-accent) / 0.2) !important;
-  animation: message-highlight-pulse 2s ease-out;
+  /* Keep the final tint until the highlight class is removed. */
+  animation: message-highlight-pulse 2s ease-out both;
 }
 
 @keyframes message-highlight-pulse {
@@ -1165,6 +1165,31 @@ body {
   }
 }
 
+/* 触摸设备优化；小屏按钮在后面的断点中通过伪元素扩大点击区域。 */
+@media (hover: none) and (pointer: coarse) {
+  /* 增加点击区域 */
+  .input-btn,
+  .file-download,
+  .channel,
+  .voice-user {
+    min-height: 44px;
+  }
+
+  /* 移除悬停效果，使用点击效果 */
+  .input-btn:active {
+    background: #3d3750;
+    transform: scale(0.95);
+  }
+
+  .message:active {
+    background: rgba(4, 4, 5, 0.1);
+  }
+
+  .name-submit:active {
+    transform: scale(0.98);
+  }
+}
+
 /* 移动端适配 - 针对小屏手机 */
 @media screen and (max-width: 480px) {
   /* 减小字体大小 */
@@ -1321,40 +1346,6 @@ body {
   
   .input-box {
     padding: 8px 12px;
-  }
-}
-
-/* 触摸设备优化 */
-@media (hover: none) and (pointer: coarse) {
-  /* 增加点击区域 */
-  .input-btn,
-  .file-download,
-  .channel,
-  .voice-user {
-    min-height: 44px;
-  }
-  
-  /* 移除悬停效果，使用点击效果 */
-  .input-btn:active {
-    background: #3d3750;
-    transform: scale(0.95);
-  }
-  
-  .message:active {
-    background: rgba(4, 4, 5, 0.1);
-  }
-  
-  .name-submit:active {
-    transform: scale(0.98);
-  }
-}
-
-/* 最终修正：针对移动端强制覆盖触摸设备的大尺寸设置，使用伪元素扩大点击区域代替 */
-@media screen and (max-width: 480px) {
-  .input-btn {
-    min-height: 32px !important;
-    height: 32px !important;
-    width: 32px !important;
   }
 }
 

@@ -7,6 +7,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
+  "vars": {
+    "CHAT_ALLOWED_ORIGINS": "https://nightcord.de5.net,http://localhost:8000,http://127.0.0.1:8000"
+  },
   "services": [
     { "binding": "SEKAI_PASS", "service": "sekai-pass" }
   ],

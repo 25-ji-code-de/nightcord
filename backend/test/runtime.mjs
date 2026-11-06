@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 
 // Fixtures exist only in the local test process, never in the deployed Worker.
-export function createRuntime(state = {}) {
+export function createRuntime(state = {}, options = {}) {
   return new Miniflare(convertV4MiniflareOptions({
     workers: [{
       name: 'nightcord-chat', modules: true, scriptPath: 'dist/chat.js',
       compatibilityDate: '2026-11-04', compatibilityFlags: ['nodejs_compat'],
+      bindings: {
+        GUEST_SIGNING_KEY: 'ab'.repeat(32),
+        CHAT_ALLOWED_ORIGINS: options.origin || 'https://nightcord.de5.net',
+      },
       durableObjects: {
         ROOMS: { className: 'ChatRoom', useSQLite: true },
         LIMITERS: { className: 'RateLimiter', useSQLite: true },

@@ -15,18 +15,108 @@
 .profile-trigger { cursor: pointer; }
 .profile-trigger:focus-visible, .user-profile-dialog :is(button, a):focus-visible { outline: 2px solid #d1c1f2; outline-offset: 3px; }
 .voice-user-info { min-width: 0; flex-wrap: wrap; }
-.user-profile-dialog { position: fixed; width: min(380px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); box-sizing: border-box; padding: 28px; border: 1px solid #88769f; border-radius: 18px; background: #3f355b; color: #fff; box-shadow: 0 20px 64px #17102088; overflow-y: auto; }
-.user-profile-dialog::backdrop { background: #171020aa; }
-.user-profile-dialog h2 { margin: 16px 0 8px; font-size: 22px; overflow-wrap: anywhere; }
-.profile-close { float: right; }
-.user-profile-dialog button, .profile-actions a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 12px; box-sizing: border-box; border: 1px solid #9483aa; border-radius: 8px; color: #fff; background: #50476a; font: inherit; font-size: 14px; text-decoration: none; cursor: pointer; }
-.user-profile-dialog .profile-avatar { width: 72px; height: 72px; font-size: 28px; }
-.profile-handle { color: #d3c8e1; overflow-wrap: anywhere; }
-.profile-bio { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; margin: 24px 0; }
-.profile-id-label { font-size: 12px; color: #d3c8e1; margin-bottom: 8px; }
-.profile-id { display: block; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; padding: 12px; border-radius: 8px; background: #302743; user-select: all; }
-.profile-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
-@media (max-width: 480px) { .user-profile-dialog { padding: 20px; } }
+/* Profile cards share the name chooser's raised surface, spacing and motion. */
+.user-profile-dialog {
+  --profile-inset: var(--sekai-space-3xl);
+  position: fixed;
+  inset: 0;
+  width: calc(100% - 32px);
+  max-width: 420px;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: rgb(var(--sekai-surface-raised));
+  border: var(--sekai-hairline);
+  border-radius: var(--sekai-radius-2xl);
+  box-shadow: var(--sekai-elev-modal);
+  color: rgb(var(--sekai-fg));
+  font-family: inherit;
+  text-align: left;
+  animation: profile-dialog-in var(--sekai-dur-slow) var(--sekai-ease-out) both;
+}
+.user-profile-dialog::backdrop {
+  background: rgb(var(--sekai-scrim) / var(--sekai-scrim-a));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fadeIn var(--sekai-dur-slow) ease-out both;
+}
+.user-profile-dialog.is-closing { pointer-events: none; animation: profile-dialog-out var(--sekai-dur-fast) var(--sekai-ease) both; }
+.user-profile-dialog.is-closing::backdrop { animation: fadeIn var(--sekai-dur-fast) ease-out reverse both; }
+.user-profile-dialog .profile-close {
+  position: absolute;
+  top: var(--sekai-space-md);
+  right: var(--sekai-space-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sekai-radius-full);
+  background: transparent;
+  color: rgb(var(--sekai-fg-muted));
+  cursor: pointer;
+  transition: color var(--sekai-dur-fast), background var(--sekai-dur-fast), transform var(--sekai-dur) var(--sekai-ease-out);
+}
+.user-profile-dialog .profile-close:hover { color: rgb(var(--sekai-fg)); background: var(--sekai-tint-active); transform: rotate(90deg); }
+.user-profile-dialog .profile-close:active { transform: rotate(90deg) scale(0.94); }
+.profile-close svg { width: 20px; height: 20px; }
+.profile-header { padding: var(--profile-inset) var(--profile-inset) var(--sekai-space-2xl); }
+.profile-eyebrow { margin: 0 32px var(--sekai-space-xl) 0; color: rgb(var(--sekai-fg-muted)); font-size: var(--sekai-text-label); line-height: var(--sekai-leading); }
+.profile-summary { display: flex; align-items: center; gap: var(--sekai-space-lg); }
+.user-profile-dialog .profile-avatar { width: 64px; height: 64px; font-size: var(--sekai-text-3xl); box-shadow: 0 0 0 4px var(--sekai-tint-hover); }
+.profile-heading { min-width: 0; flex: 1; }
+.user-profile-dialog h2 { display: flex; align-items: center; gap: var(--sekai-space-sm); margin: 0; font-size: var(--sekai-text-3xl); font-weight: var(--sekai-weight-bold); line-height: 1.3; letter-spacing: var(--sekai-tracking-tight); }
+.user-profile-dialog h2 > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.profile-handle { margin: var(--sekai-space-xs) 0 0; color: rgb(var(--sekai-fg-muted)); font-size: var(--sekai-text-sm); line-height: var(--sekai-leading); overflow-wrap: anywhere; }
+.profile-body { padding: 0 var(--profile-inset) var(--sekai-space-2xl); }
+.profile-section-label { margin: 0 0 var(--sekai-space-sm); font-size: var(--sekai-text-label); font-weight: var(--sekai-weight-medium); line-height: var(--sekai-leading); color: rgb(var(--sekai-fg-muted)); }
+.profile-bio { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--sekai-text-md); line-height: 1.8; }
+.profile-bio--empty { color: rgb(var(--sekai-fg-muted)); }
+.profile-identity { margin-top: var(--sekai-space-2xl); border-top: var(--sekai-hairline); }
+.profile-identity > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--sekai-space-md); min-height: 44px; padding-top: var(--sekai-space-sm); color: rgb(var(--sekai-fg-muted)); font-size: var(--sekai-text-label); line-height: var(--sekai-leading); list-style: none; cursor: pointer; transition: color var(--sekai-dur-fast); }
+.profile-identity > summary::-webkit-details-marker { display: none; }
+.profile-identity > summary:hover { color: rgb(var(--sekai-fg)); }
+.profile-identity > summary svg { width: 16px; height: 16px; transition: transform var(--sekai-dur) var(--sekai-ease-out); }
+.profile-identity[open] > summary svg { transform: rotate(180deg); }
+.profile-identity-content { margin-top: var(--sekai-space-lg); padding: var(--sekai-space-md) var(--sekai-space-lg); border-radius: var(--sekai-radius-lg); background: rgb(var(--sekai-surface-sunken)); }
+.profile-id-label { margin: 0 0 var(--sekai-space-xs); font-size: var(--sekai-text-label); color: rgb(var(--sekai-fg-muted)); }
+.profile-id { display: block; font-family: var(--sekai-font-mono); font-size: var(--sekai-text-label); line-height: var(--sekai-leading-relaxed); overflow-wrap: anywhere; user-select: all; }
+.profile-actions { display: flex; flex-direction: column; gap: var(--sekai-space-sm); padding: var(--sekai-space-2xl) var(--profile-inset); border-top: var(--sekai-hairline); }
+.profile-secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sekai-space-sm); }
+.user-profile-dialog .profile-action { display: flex; align-items: center; justify-content: center; gap: var(--sekai-space-sm); width: 100%; min-height: 44px; box-sizing: border-box; padding: var(--sekai-space-md) var(--sekai-space-lg); border: 1px solid transparent; border-radius: var(--sekai-radius-lg); font: inherit; font-size: var(--sekai-text-md); font-weight: var(--sekai-weight-medium); line-height: var(--sekai-leading); text-decoration: none; cursor: pointer; transition: color var(--sekai-dur-fast), background var(--sekai-dur-fast), box-shadow var(--sekai-dur), transform var(--sekai-dur) var(--sekai-ease-out); }
+.user-profile-dialog .profile-action svg { width: 18px; height: 18px; flex-shrink: 0; }
+.user-profile-dialog .profile-action:not(.profile-action--primary) { background: var(--sekai-tint-hover); color: rgb(var(--sekai-fg)); }
+.user-profile-dialog .profile-action.profile-action--quiet { background: transparent; color: rgb(var(--sekai-fg-muted)); }
+.user-profile-dialog .profile-action:not(.profile-action--primary):hover { background: var(--sekai-tint-active); color: rgb(var(--sekai-fg)); }
+.user-profile-dialog .profile-action.profile-action--primary { font-weight: var(--sekai-weight-semibold); }
+.user-profile-dialog .profile-action:hover { transform: var(--sekai-lift); }
+.user-profile-dialog .profile-action:active { transform: translateY(0); }
+.user-profile-dialog .profile-action:disabled { opacity: 0.6; cursor: progress; }
+.profile-identity > summary:focus-visible { outline: 2px solid rgb(var(--sekai-accent)); outline-offset: 4px; border-radius: var(--sekai-radius-xs); }
+@keyframes profile-dialog-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes profile-dialog-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(8px) scale(0.99); }
+}
+@media (max-width: 480px) {
+  .user-profile-dialog { --profile-inset: var(--sekai-space-2xl); }
+  .profile-header { padding-top: var(--sekai-space-3xl); }
+  .user-profile-dialog .profile-avatar { width: 56px; height: 56px; }
+  .user-profile-dialog h2 { font-size: var(--sekai-text-2xl); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .user-profile-dialog, .user-profile-dialog::backdrop, .user-profile-dialog.is-closing, .user-profile-dialog.is-closing::backdrop { animation: none; }
+  .user-profile-dialog *, .user-profile-dialog *::after { transition: none; }
+  .user-profile-dialog .profile-close:hover, .user-profile-dialog .profile-close:active, .user-profile-dialog .profile-action:hover, .user-profile-dialog .profile-action:active { transform: none; }
+}
 
 body {
   margin: 0;

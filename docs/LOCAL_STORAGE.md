@@ -15,6 +15,18 @@
 
 ## 默认与回退
 
+身份相关的显示偏好也会保存在本地：
+
+- `nightcord-username`：最近由服务器确认的显示名，兼容旧版。
+- `nightcord-guest-name`：最近由服务器确认的访客昵称；登录 Pass 不覆盖，退出后恢复。
+- `nightcord-identity-event`：通知其他同源标签页重新连接的时间戳与随机事件编号，不包含凭证，也不授予认证状态。
+
+访客认证凭证由聊天后端保存在 HttpOnly、Secure、host-only 的
+`__Host-nightcord_guest` Cookie 中，不进入 localStorage，也不能通过公开 ID 找回。
+访客 ID 在刷新、重连、改名和切房间后保持不变；清除 Cookie、过期或换浏览器后改变。
+默认有效期 180 天，剩余不足 30 天时续期；浏览器也可能提前清理 Cookie。
+Pass 身份始终由后端验证账号凭证后确定，本地资料缓存仅用于展示。
+
 - 当未指定房间时，系统会使用 `nightcord-default` 作为回退房间名，生成的 key 如 `nightcord-messages:nightcord-default`。
 
 ## 旧数据迁移

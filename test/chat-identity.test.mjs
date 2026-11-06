@@ -15,29 +15,37 @@ function websocketHarness(getAccessToken) {
     message(value) { this.events.message({ data: JSON.stringify(value) }); }
   }
   const Manager = vm.runInNewContext(readFileSync(new URL('../websocket-mgr.js', import.meta.url), 'utf8') + '\nWebSocketManager', {
-    WebSocket: Socket, console: { log() {}, warn() {} }, setTimeout, clearTimeout,
+    WebSocket: Socket, console: { log() {}, warn() {} }, setTimeout, clearTimeout, AbortSignal,
   });
   const errors = [];
-  const manager = new Manager({ getAccessToken, onAuthError: e => errors.push(e) });
-  manager.connect('identity-test', 'Guest nickname');
-  return { manager, socket: manager.ws, errors };
+  const guestErrors = [];
+  const fetches = [];
+  const manager = new Manager({ getAccessToken, onAuthError: e => errors.push(e), onGuestError: e => guestErrors.push(e), fetch: async (url, options) => {
+    fetches.push({ url, options });
+    return { ok: true, json: async () => ({ id: 'guest:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', expiresAt: Date.now() + 180 * 86400000 }) };
+  } });
+  return { manager, errors, guestErrors, fetches };
 }
 
 test('token failure stops reconnect and never silently claims a guest session', async () => {
-  const { manager, socket, errors } = websocketHarness(async () => { throw new Error('revoked'); });
-  await socket.events.open({});
-  assert.deepEqual(socket.sent, []);
+  const { manager, errors, fetches } = websocketHarness(async () => { throw new Error('revoked'); });
+  await manager.connect('identity-test', 'Guest nickname');
+  assert.equal(manager.ws, null);
+  assert.equal(fetches.length, 0);
   assert.equal(manager.shouldReconnect, false);
   assert.equal(errors.length, 1);
   manager.disconnect();
 });
 
 test('authenticated handshake and revalidation wait for the server before sending', async () => {
-  const { manager, socket } = websocketHarness(async () => 'test-bearer');
+  const { manager, fetches } = websocketHarness(async () => 'test-bearer');
+  await manager.connect('identity-test', 'Guest nickname');
+  const socket = manager.ws;
   try {
     await socket.events.open({});
     assert.equal(socket.url.includes('test-bearer'), false);
     assert.equal(socket.sent[0].accessToken, 'test-bearer');
+    assert.equal(fetches.length, 0, 'Pass does not require a guest cookie');
     assert.equal(manager.send({ message: 'too early' }), false);
     socket.message({ type: 'session', user: { id: 'sekai:one' }, authExpiresAt: Date.now() + 300000 });
     socket.message({ ready: true });
@@ -55,16 +63,47 @@ test('authenticated handshake and revalidation wait for the server before sendin
 
 test('an obsolete token request cannot pause a newer connection', async () => {
   let rejectOld;
-  const { manager, socket } = websocketHarness(() => new Promise((_, reject) => { rejectOld = reject; }));
-  const pending = socket.events.open({});
+  const { manager } = websocketHarness(() => new Promise((_, reject) => { rejectOld = reject; }));
+  const pending = manager.connect('identity-test', 'Guest nickname');
   manager.getAccessToken = async () => null;
-  manager.connect('another-room', 'visitor');
+  await manager.connect('another-room', 'visitor');
   const current = manager.ws;
   await current.events.open({});
   rejectOld(new Error('old request failed'));
   await pending;
   assert.equal(manager.shouldReconnect, true);
   assert.equal(current.sent[0].name, 'visitor');
+  manager.disconnect();
+});
+
+test('guest initialization precedes the socket and only the cookie carries credentials', async () => {
+  const { manager, fetches } = websocketHarness(async () => null);
+  await manager.connect('identity-test', 'Visitor');
+  assert.equal(fetches.length, 1);
+  assert.equal(fetches[0].options.credentials, 'include');
+  assert.equal(fetches[0].options.method, 'POST');
+  assert.equal(fetches[0].options.cache, 'no-store');
+  await manager.ws.events.open({});
+  assert.equal(JSON.stringify(manager.ws.sent), '[{"name":"Visitor"}]');
+  assert.equal(manager.ws.url.includes('guest:'), false);
+  manager.ws.message({ type: 'session', user: { id: 'guest:one', displayName: 'Visitor' }, guestExpiresAt: Date.now() + 180 * 86400000 });
+  manager.ws.message({ ready: true });
+  assert.equal(manager.send({ message: 'ready' }), true);
+  manager.disconnect();
+});
+
+test('blocked guest cookie stops after one recovery instead of looping', async () => {
+  const { manager, guestErrors } = websocketHarness(async () => null);
+  await manager.connect('identity-test', 'Visitor');
+  await manager.ws.events.open({});
+  manager.ws.message({ code: 'guest_session_required' });
+  await manager.connectionPromise;
+  await manager.ws.events.open({});
+  manager.ws.message({ code: 'guest_session_required' });
+  assert.equal(manager.shouldReconnect, false);
+  assert.equal(manager.ready, false);
+  assert.equal(guestErrors.length, 1);
+  assert.match(guestErrors[0].message, /Cookie/);
   manager.disconnect();
 });
 

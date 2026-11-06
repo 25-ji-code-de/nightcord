@@ -32,6 +32,7 @@
  * wsManager.disconnect();
  */
 class WebSocketManager {
+  static guestRequests = new Map();
   /**
    * 创建 WebSocket 管理器实例
    * @param {Object} config - 配置对象
@@ -63,6 +64,11 @@ class WebSocketManager {
     this._authTimer = null;
     this._authRefreshing = false;
     this.authExpiresAt = 0;
+    this.guestExpiresAt = 0;
+    this._guestTimer = null;
+    this._guestRecoveries = 0;
+    this.fetch = config.fetch || ((...args) => globalThis.fetch(...args));
+    this.onGuestError = config.onGuestError || (() => {});
     this.ready = false;
 
     // Callbacks
@@ -87,9 +93,11 @@ class WebSocketManager {
     this._gen += 1;
     const gen = this._gen;
     clearTimeout(this._authTimer);
+    clearTimeout(this._guestTimer);
     this._authRefreshing = false;
     this.ready = false;
     this.authExpiresAt = 0;
+    this.guestExpiresAt = 0;
 
     // Drop previous socket without triggering a parallel reconnect loop
     if (this._reconnectTimer) {
@@ -109,23 +117,55 @@ class WebSocketManager {
       this.ws = null;
     }
 
-    const wss = 'wss://';
-    const ws = new WebSocket(wss + this.hostname + '/api/room/' + encodeURIComponent(roomname) + '/websocket');
+    this.connectionPromise = this.openConnection(gen, roomname, username);
+    return this.connectionPromise;
+  }
+
+  async prepareGuestSession() {
+    const url = 'https://' + this.hostname + '/api/guest/session';
+    if (!WebSocketManager.guestRequests.has(url)) {
+      const initialize = async () => {
+        const response = await this.fetch(url, {
+          method: 'POST', credentials: 'include', cache: 'no-store', signal: AbortSignal.timeout(12000),
+        });
+        const data = await response.json();
+        if (!response.ok) throw Object.assign(new Error(data.error || 'Guest identity unavailable'), { code: data.code });
+        if (!/^guest:[0-9a-f-]{36}$/.test(data.id) || !Number.isSafeInteger(data.expiresAt)) throw new Error('Invalid guest session response');
+      };
+      const request = globalThis.navigator?.locks
+        ? navigator.locks.request('nightcord:guest:' + this.hostname, initialize) : initialize();
+      WebSocketManager.guestRequests.set(url, request);
+      request.then(() => WebSocketManager.guestRequests.delete(url), () => WebSocketManager.guestRequests.delete(url));
+    }
+    return WebSocketManager.guestRequests.get(url);
+  }
+
+  async openConnection(gen, roomname, username) {
+    let token;
+    try { token = await this.getAccessToken(); }
+    catch (error) {
+      if (gen === this._gen) { this.pauseAutoReconnect(); this.onAuthError(error); }
+      return;
+    }
+    if (gen !== this._gen) return;
+    try { if (!token) await this.prepareGuestSession(); }
+    catch (error) {
+      if (gen === this._gen) {
+        this.onError(error);
+        if (this.shouldReconnect) void this.rejoin();
+      }
+      return;
+    }
+    if (gen !== this._gen) return;
+    let ws;
+    try { ws = new WebSocket('wss://' + this.hostname + '/api/room/' + encodeURIComponent(roomname) + '/websocket'); }
+    catch (error) { this.onError(error); if (this.shouldReconnect) void this.rejoin(); return; }
     this.ws = ws;
 
     ws.addEventListener('open', async (event) => {
       if (gen !== this._gen || this.ws !== ws) return;
-      try {
-        const token = await this.getAccessToken();
-        if (gen !== this._gen || this.ws !== ws) return;
-        ws.send(JSON.stringify(token ? { accessToken: token } : { name: username }));
-        this.onOpen(event);
-      } catch (e) {
-        if (gen !== this._gen || this.ws !== ws) return;
-        this.pauseAutoReconnect();
-        this.onAuthError(e);
-        ws.close(4001, 'Authentication required');
-      }
+      ws.send(JSON.stringify(token ? { accessToken: token } : { name: username }));
+      this.onOpen(event);
     });
 
     ws.addEventListener('message', (event) => {
@@ -140,12 +180,26 @@ class WebSocketManager {
       if (data.type === 'session') {
         this._authRefreshing = false;
         this.authExpiresAt = data.authExpiresAt || 0;
+        this.guestExpiresAt = data.guestExpiresAt || 0;
+        this.username = data.user.displayName;
+        this.scheduleGuestRenewal();
         clearTimeout(this._authTimer);
         if (this.authExpiresAt) {
           this._authTimer = setTimeout(() => this.refreshAuthentication(), Math.max(1000, this.authExpiresAt - Date.now() - 60000));
         }
       }
-      if (data.ready) this.ready = true;
+      if (data.ready) { this.ready = true; this._guestRecoveries = 0; }
+      if (data.code === 'guest_session_required') {
+        this.ready = false;
+        if (this._guestRecoveries++ < 1) {
+          this.onReconnect();
+          this.connect(this.roomname, this.username);
+        } else {
+          this.pauseAutoReconnect();
+          this.onGuestError(new Error('浏览器未允许保存访客身份。请允许此站点使用 Cookie，或使用 SEKAI Pass 登录。'));
+        }
+        return;
+      }
       if (data.code === 'auth_invalid') {
         this.ready = false;
         this.pauseAutoReconnect();
@@ -161,6 +215,7 @@ class WebSocketManager {
       this.ready = false;
       this._authRefreshing = false;
       clearTimeout(this._authTimer);
+      clearTimeout(this._guestTimer);
       if (event.code === 4001) this.pauseAutoReconnect();
       console.log('WebSocket closed, reconnecting:', event.code, event.reason);
       this.onClose(event);
@@ -213,6 +268,12 @@ class WebSocketManager {
    */
   send(message) {
     if (this._authRefreshing) return false;
+    if (this.guestExpiresAt && Date.now() >= this.guestExpiresAt) {
+      this.ready = false;
+      this.onReconnect();
+      this.connect(this.roomname, this.username);
+      return false;
+    }
     if (this.authExpiresAt && Date.now() >= this.authExpiresAt) {
       void this.refreshAuthentication();
       return false;
@@ -234,6 +295,7 @@ class WebSocketManager {
    */
   disconnect() {
     clearTimeout(this._authTimer);
+    clearTimeout(this._guestTimer);
     this.ready = false;
     if (this._reconnectTimer) {
       clearTimeout(this._reconnectTimer);
@@ -267,6 +329,20 @@ class WebSocketManager {
    */
   resumeAutoReconnect() {
     this.shouldReconnect = true;
+  }
+
+  scheduleGuestRenewal() {
+    clearTimeout(this._guestTimer);
+    if (!this.guestExpiresAt) return;
+    const remaining = this.guestExpiresAt - Date.now() - 30 * 86400000;
+    this._guestTimer = setTimeout(() => {
+      if (remaining > 2147483647) this.scheduleGuestRenewal();
+      else {
+        this.ready = false;
+        this.onReconnect();
+        this.connect(this.roomname, this.username);
+      }
+    }, Math.min(2147483647, Math.max(1000, remaining)));
   }
 
   async refreshAuthentication() {

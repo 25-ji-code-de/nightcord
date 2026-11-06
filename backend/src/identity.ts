@@ -37,7 +37,7 @@ export function profileFromUserInfo(value: unknown): Profile {
   };
 }
 
-export function guestProfile(name: string): Profile {
-  return { id: `guest:${crypto.randomUUID()}`, issuer: null, sub: null, authenticated: false,
+export function guestProfile(name: string, id: string): Profile {
+  return { id, issuer: null, sub: null, authenticated: false,
     displayName: name, username: '', avatarUrl: null, bio: '' };
 }

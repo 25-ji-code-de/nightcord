@@ -16,6 +16,8 @@
  */
 
 (function () {
+  // Static development servers have no generated version.json or published updates.
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return;
   let currentVersion = null;
   let updateBar = null;
   let checking = false;

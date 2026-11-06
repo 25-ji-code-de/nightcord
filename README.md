@@ -94,6 +94,9 @@ app.init();
 默认聊天室后端为 `chat.nightcord.de5.net`。Worker 源码、Cloudflare 配置、
 本地验证和部署步骤见 [backend/README.md](backend/README.md)。前端构建命令为
 `node scripts/build-pages.mjs`，Cloudflare Pages 输出目录为 `dist`。
+本地静态预览可使用 `http://localhost:8000` 或 `http://127.0.0.1:8000`；
+连接正式聊天后端需要浏览器允许该本地页面使用第三方 Cookie。若浏览器阻止，
+请在正式站 `https://nightcord.de5.net` 验证。正式站使用同站 Cookie，不依赖第三方 Cookie。
 
 ## CSP 与 Cloudflare
 

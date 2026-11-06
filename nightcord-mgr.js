@@ -58,6 +58,7 @@ class NightcordManager {
       hostname: this.hostname,
       getAccessToken: config.getAccessToken,
       onAuthError: (error) => this.eventBus.emit('auth:required', { error }),
+      onGuestError: (error) => this.eventBus.emit('guest:required', { error }),
       onOpen: () => this.handleConnectionOpen(),
       onMessage: (data) => this.handleMessage(data),
       onClose: () => this.handleConnectionClose(),
@@ -87,7 +88,7 @@ class NightcordManager {
       // close and reopen the socket.
       try { this.wsManager.pauseAutoReconnect(); } catch (e) {}
 
-      // A guest rename creates a fresh session; rebuild presence by ID.
+      // Reconnect to update the name; the signed cookie preserves guest identity.
       this.wsManager.disconnect();
       this.joinRoom(this.roomname);
 
@@ -210,7 +211,11 @@ class NightcordManager {
     if (data.type === 'session') {
       this.currentUser = data.user;
       this.username = data.user.displayName;
-      try { localStorage.setItem('nightcord-username', this.username); } catch (e) {}
+      this.wsManager.username = this.username;
+      try {
+        localStorage.setItem('nightcord-username', this.username);
+        if (!data.user.authenticated) localStorage.setItem('nightcord-guest-name', this.username);
+      } catch (e) {}
       this.eventBus.emit('session:updated', { user: data.user });
     } else if (data.type === 'profile') {
       if (this.roster.has(data.user.id)) this.roster.set(data.user.id, data.user);

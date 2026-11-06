@@ -45,19 +45,55 @@ class Nightcord {
     this.ui.sekaiPassLoginCallback = () => this.sekaiPassAuth.login();
     this.ui.onRefreshProfile = () => this.chatRoom.wsManager.refreshAuthentication();
     this.ui.onLogout = async () => {
-      await this.sekaiPassAuth.logout();
       this.chatRoom.leave();
+      this.ui.setSessionUnavailable();
+      await this.sekaiPassAuth.logout();
+      this.broadcastIdentityChange();
+      this.restoreGuest();
+    };
+    window.addEventListener('storage', (event) => {
+      if (event.key === 'nightcord-identity-event') {
+        this.chatRoom.leave();
+        this.ui.setSessionUnavailable();
+        if (this.sekaiPassAuth.isAuthenticated()) {
+          const user = this.sekaiPassAuth.getCurrentUser();
+          const name = user && (user.name || user.display_name || user.preferred_username || user.username || user.sub);
+          if (name) {
+            this.chatRoom.setUser(name);
+            this.joinRoom(this.chatRoom.roomname || 'nightcord-default');
+            return;
+          }
+        }
+        this.restoreGuest();
+      } else if (event.key === 'nightcord-guest-name' && event.newValue && !this.sekaiPassAuth.isAuthenticated()
+        && this.chatRoom.currentUser && !this.chatRoom.currentUser.authenticated && this.chatRoom.username !== event.newValue) {
+        this.chatRoom.setUser(event.newValue);
+      }
+    });
+    this.eventBus.on('guest:required', ({ error }) => {
+      this.ui.showError(error.message);
+      this.ui.setSessionUnavailable();
+    });
+    this.eventBus.on('auth:required', () => {
+      this.ui.showError('SEKAI Pass 登录已失效，请重新登录。');
+      this.ui.setSessionUnavailable();
+    });
+
+    this.restoreGuest = () => {
       this.chatRoom.currentUser = null;
       this.ui.currentUser = null;
+      let guestName;
+      try { guestName = localStorage.getItem('nightcord-guest-name'); } catch (e) {}
+      if (guestName) {
+        this.chatRoom.setUser(guestName);
+        this.joinRoom(this.chatRoom.roomname || 'nightcord-default');
+        return;
+      }
       this.ui.showNameChooser({ mode: 'init' }, (username) => {
         this.chatRoom.setUser(username);
         this.joinRoom(this.chatRoom.roomname || 'nightcord-default');
       }, this.ui.sekaiPassLoginCallback);
     };
-    this.eventBus.on('auth:required', () => {
-      this.ui.showError('SEKAI Pass 登录已失效，请重新登录。');
-      this.ui.setSessionUnavailable();
-    });
 
     // 大文件上传（> 512 MiB）需 SEKAI Pass token。给上传服务注入与 Nako 同形的
     // provider：未登录或取 token 失败时返回 null，绝不向上抛。
@@ -181,7 +217,7 @@ class Nightcord {
     }
 
     // 尝试从 localStorage 获取已保存的用户名（降级方案）
-    const storedName = localStorage.getItem('nightcord-username');
+    const storedName = localStorage.getItem('nightcord-guest-name') || localStorage.getItem('nightcord-username');
 
     if (storedName) {
       // 如果已有用户名，直接加入房间
@@ -213,6 +249,7 @@ class Nightcord {
 
       // 使用 SEKAI Pass 的用户名
       this.chatRoom.setUser(username);
+      this.broadcastIdentityChange();
 
       // 清理 URL（移除查询参数）
       window.history.replaceState({}, document.title, '/');
@@ -252,6 +289,11 @@ class Nightcord {
         this.chatRoom.setUser(username);
       });
     }
+  }
+
+  broadcastIdentityChange() {
+    // A notification only: each tab obtains credentials and the server verifies them.
+    try { localStorage.setItem('nightcord-identity-event', JSON.stringify({ at: Date.now(), nonce: crypto.randomUUID() })); } catch (e) {}
   }
 
   /**

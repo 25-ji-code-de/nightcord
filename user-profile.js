@@ -69,19 +69,24 @@
       return badge;
     }
 
-    makeTrigger(element, profile) {
+    makeTrigger(element, profile, options) {
       if (!profile) return;
       element.classList.add('profile-trigger');
       element.tabIndex = 0;
       element.setAttribute('role', 'button');
       element.setAttribute('aria-label', `查看 ${profile.displayName} 的资料`);
-      element.addEventListener('click', () => this.open(profile));
+      element.addEventListener('click', () => this.open(profile, options));
       element.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.open(profile); }
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.open(profile, options); }
       });
     }
 
-    open(profile) {
+    open(snapshot, { fromMessage = false } = {}) {
+      // Resolve on activation: old message triggers retain their original snapshot.
+      // Only an exact identity match can supply current profile data.
+      const current = snapshot.id && this.ui.roster.find(member => member.profile?.id === snapshot.id)?.profile;
+      const profile = current || snapshot;
+      const historical = fromMessage && !current;
       if (this.dialog) this.dialog.close();
       const previousFocus = document.activeElement;
       const own = this.ui.currentUser && this.ui.currentUser.id === profile.id;
@@ -138,6 +143,12 @@
       const badge = this.badge(profile);
       if (badge) title.appendChild(badge);
       heading.appendChild(title);
+      if (historical) {
+        const context = document.createElement('p');
+        context.className = 'profile-handle profile-snapshot-note';
+        context.textContent = '发送时昵称';
+        heading.appendChild(context);
+      }
       if (profile.username) {
         const handle = document.createElement('p');
         handle.className = 'profile-handle'; handle.textContent = `@${profile.username}`;

@@ -103,6 +103,22 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     await member.getByRole('button', { name: '同步资料', exact: true }).click();
     await guest.waitForFunction(() => nightcord.ui.roster.some(u => u.name === 'Updated profile'));
     assert.equal(await guest.evaluate(() => nightcord.ui.roster.length), 2);
+    const oldMessage = guest.locator('.message').filter({ hasText: text });
+    assert.equal(await oldMessage.locator('.message-user').textContent(), 'Shared name');
+    await oldMessage.locator('.message-user').click();
+    assert.equal(await guest.locator('dialog h2').textContent(), 'Updated profile');
+    assert.equal(await guest.locator('dialog .profile-snapshot-note').count(), 0);
+    assert.equal(await guest.locator('dialog .profile-bio').textContent(), '<img onerror=alert(1)> signature');
+    assert.equal(await guest.locator('dialog .profile-actions').count(), 0);
+    await guest.keyboard.press('Escape');
+    await guest.locator('dialog').waitFor({ state: 'detached' });
+    // Avatar and keyboard activation must resolve the same current identity.
+    await oldMessage.locator('.avatar').focus();
+    await guest.keyboard.press('Enter');
+    assert.equal(await guest.locator('dialog h2').textContent(), 'Updated profile');
+    await guest.keyboard.press('Escape');
+    await guest.locator('dialog').waitFor({ state: 'detached' });
+    assert.equal(await guest.evaluate(text => nightcord.ui.messages.find(m => m.text === text).profile.displayName, text), 'Shared name');
     await guest.reload({ waitUntil: 'domcontentloaded' });
     await guest.waitForFunction(() => nightcord.chatRoom.wsManager.ready && nightcord.ui.roster.length === 2);
     assert.equal(await guest.evaluate(() => nightcord.ui.currentUser.id), guestId);
@@ -165,6 +181,21 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
       await card.waitFor({ state: 'detached' });
     }
     await member.emulateMedia({ reducedMotion: 'no-preference' });
+
+    await guest.evaluate(() => nightcord.chatRoom.setUser('Shared name'));
+    await guest.waitForFunction(() => nightcord.chatRoom.wsManager.ready && nightcord.ui.currentUser.displayName === 'Shared name');
+    await member.evaluate(() => nightcord.chatRoom.leave());
+    await guest.waitForFunction(() => !nightcord.ui.roster.some(u => u.profile?.id === 'sekai:stable-subject'));
+    // A same-name online guest cannot be substituted for an offline account.
+    assert.ok(await guest.evaluate(() => nightcord.ui.roster.some(u => u.name === 'Shared name' && !u.profile.authenticated)));
+    await oldMessage.locator('.message-user').click();
+    assert.equal(await guest.locator('dialog h2').textContent(), 'Shared name');
+    assert.equal(await guest.locator('dialog .profile-snapshot-note').textContent(), '发送时昵称');
+    await guest.locator('dialog summary').click();
+    assert.equal(await guest.locator('dialog .profile-id').textContent(), 'sekai:stable-subject');
+    assert.equal(await oldMessage.locator('.message-user').textContent(), 'Shared name');
+    await guest.keyboard.press('Escape');
+    await guest.locator('dialog').waitFor({ state: 'detached' });
 
     // Two first visits with an empty cookie jar must serialize initialization.
     await delay(5500);

@@ -2110,7 +2110,7 @@ class UIManager {
     avatarSpan.className = `avatar ${msg.color}`;
     avatarSpan.innerHTML = msg.avatar;
     this.profileUI.avatar(avatarSpan, msg.profile);
-    this.profileUI.makeTrigger(avatarSpan, msg.profile);
+    this.profileUI.makeTrigger(avatarSpan, msg.profile, { fromMessage: true });
 
     // Content
     const contentDiv = document.createElement('div');
@@ -2122,7 +2122,7 @@ class UIManager {
     const userSpan = document.createElement('span');
     userSpan.className = 'message-user';
     userSpan.textContent = msg.user;
-    this.profileUI.makeTrigger(userSpan, msg.profile);
+    this.profileUI.makeTrigger(userSpan, msg.profile, { fromMessage: true });
     const timeSpan = document.createElement('span');
     timeSpan.className = 'message-time';
     timeSpan.textContent = msg.timestamp ? this.formatDate(msg.timestamp) : '';
@@ -2133,7 +2133,7 @@ class UIManager {
       const sender = document.createElement('span');
       sender.className = 'identity-badge';
       sender.textContent = `由 ${msg.sender.displayName} 转发`;
-      this.profileUI.makeTrigger(sender, msg.sender);
+      this.profileUI.makeTrigger(sender, msg.sender, { fromMessage: true });
       headerDiv.appendChild(sender);
     }
     headerDiv.appendChild(timeSpan);

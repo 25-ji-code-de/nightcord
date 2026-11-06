@@ -110,7 +110,7 @@ class UIManager {
     this.currentUser = null;
     this.profileUI = new NightcordProfileUI(this);
 
-    this.systemIcon = `<svg width="24" height="24" viewBox="-32 -32 1088 1088" xmlns="http://www.w3.org/2000/svg"><path d="M1024 512A512 512 0 1 1 0 512A512 512 0 1 1 1024 512ZM1024 512A384 384 0 1 1 256 512A384 384 0 1 1 1024 512ZM576 512A64 64 0 1 1 448 512A64 64 0 1 1 576 512ZM832 512A64 64 0 1 1 704 512A64 64 0 1 1 832 512Z" fill="white" fill-rule="evenodd"></path></svg>`;
+    this.systemIcon = `<svg width="24" height="24" viewBox="8 7 34 34" xmlns="http://www.w3.org/2000/svg"><path d="M41 24A16 16 0 1 1 9 24A16 16 0 1 1 41 24ZM41 24A12 12 0 1 1 17 24A12 12 0 1 1 41 24ZM27 24A2 2 0 1 1 23 24A2 2 0 1 1 27 24ZM35 24A2 2 0 1 1 31 24A2 2 0 1 1 35 24Z" fill="white" fill-rule="evenodd"></path></svg>`;
 
     // Storage manager (handles per-room keys and legacy migration)
     try {

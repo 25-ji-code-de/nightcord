@@ -22,19 +22,19 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = join(root, 'icons');
 
-/** 设计坐标系边长；图标里的所有几何都以它为基准。 */
-export const CANVAS = 1024;
+/** 与 icons/nightcord-mark.svg 共用的整数设计网格。 */
+export const CANVAS = 48;
 
 const PURPLE = [153, 80, 154]; // #99509A
 const WHITE = [255, 255, 255];
 
 /** 月牙 mark：外圆减内圆，再加两只眼睛（even-odd）。 */
 export const MARK = {
-  outer: { x: 533.3333, y: 512, r: 341.3333 },
-  inner: { x: 618.6667, y: 512, r: 256 },
+  outer: { x: 25, y: 24, r: 16 },
+  inner: { x: 29, y: 24, r: 12 },
   eyes: [
-    { x: 533.3333, y: 512, r: 42.6667 },
-    { x: 704, y: 512, r: 42.6667 },
+    { x: 25, y: 24, r: 2 },
+    { x: 33, y: 24, r: 2 },
   ],
 };
 
@@ -46,7 +46,7 @@ const inMark = (x, y) =>
 
 /** shape: 'circle' 满幅圆底；'square' 满幅方底（交给系统遮罩）。 */
 const inBackground = (x, y, shape) =>
-  shape === 'square' ? true : inCircle(x, y, { x: 512, y: 512, r: 512 });
+  shape === 'square' ? true : inCircle(x, y, { x: CANVAS / 2, y: CANVAS / 2, r: CANVAS / 2 });
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -141,12 +141,9 @@ export function renderSvg() {
   return `<!--
   SPDX-License-Identifier: AGPL-3.0-only
   Copyright (C) 2025 The 25-ji-code-de Team
-
-  Nightcord favicon — 圆形紫底 + 月牙 mark（源：icons/nightcord-mark.svg v4）
-  由 scripts/generate-icons.mjs 生成，勿手改。
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <circle cx="512" cy="512" r="512" fill="#99509A"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CANVAS} ${CANVAS}" width="${CANVAS}" height="${CANVAS}">
+  <circle cx="${CANVAS / 2}" cy="${CANVAS / 2}" r="${CANVAS / 2}" fill="#99509A"/>
   <path fill="#ffffff" fill-rule="evenodd" d="${d}"/>
 </svg>
 `;

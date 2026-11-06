@@ -176,7 +176,7 @@ describe('图标形状', () => {
 
   test('favicon.svg 与 PNG 同源（圆形底）', () => {
     const svg = read('icons/favicon.svg');
-    assert.match(svg, /<circle cx="512" cy="512" r="512" fill="#99509A"\/>/);
+    assert.match(svg, /<circle cx="24" cy="24" r="24" fill="#99509A"\/>/);
     assert.doesNotMatch(svg, /<rect/);
   });
 

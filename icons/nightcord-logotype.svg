@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 856 216" width="856" height="216" role="img" aria-labelledby="nightcord-logotype-title nightcord-logotype-desc" shape-rendering="geometricPrecision">
+  <title id="nightcord-logotype-title">Nightcord</title>
+  <desc id="nightcord-logotype-desc">White custom Nightcord lettering on a transparent background.</desc>
+  <g fill="#FFFFFF" fill-rule="evenodd" transform="translate(-210.000 4)">
+    <path id="letter-1-n" transform="translate(226.000 0)" d="M0 156V54H14.5V72C21 58 34 51.5 49.5 51.5C76.8 51.5 91.5 68.8 91.5 96V156H76.5V97.2C76.5 76.8 67.5 65.4 49 65.4C29.7 65.4 15 79.6 15 100.6V156Z"/>
+    <path id="letter-2-i" transform="translate(332.500 0)" d="M2.5 54H17.5V156H2.5Z M20 25A10 10 0 1 1 0 25A10 10 0 0 1 20 25Z"/>
+    <path id="letter-3-g" transform="translate(367.500 0)" d="M104 54V150C104 181 85 198 56 198C32 198 13 186 6 169C19 179 35 184 55 184C77 184 89 172 89 150V137C81 151 67 158 50 158C19.5 158 0 136 0 105C0 74 19.5 52 50 52C67 52 81 59 89 73V54Z M89 105C89 81.2 75.1 66 53 66C30.1 66 15 81.2 15 105C15 128.8 30.1 144 53 144C75.1 144 89 128.8 89 105Z"/>
+    <path id="letter-4-h" transform="translate(485.500 0)" d="M0 156V16H15V72C21 58 34 51.5 49.5 51.5C76.8 51.5 91.5 68.8 91.5 96V156H76.5V97.2C76.5 76.8 67.5 65.4 49 65.4C29.7 65.4 15 79.6 15 100.6V156Z"/>
+    <path id="letter-5-t" transform="translate(587.000 0)" d="M19 26H34V54H56V67.5H34V126.5C34 139.4 39.2 144 49 144C51.8 144 54.7 143.6 57 142.8V155.5C53.3 156.9 49.3 157.5 45 157.5C27.5 157.5 19 147.8 19 128V67.5H0V54H19Z"/>
+    <path id="letter-6-c" transform="translate(655.000 0)" d="M95.611 76.134A52 53 0 1 0 95.611 133.866L89.547 126.241A40 39 0 1 1 89.547 83.759Z"/>
+    <path id="letter-7-o" transform="translate(762.611 0)" d="M104 105A52 53 0 1 1 0 105A52 53 0 0 1 104 105Z M89 105A37 39 0 1 1 15 105A37 39 0 0 1 89 105Z"/>
+    <path id="letter-8-r" transform="translate(876.611 0)" d="M0 156V54H14.5V76C20 60 32 51.5 47.5 51.5C53 51.5 58.5 52.5 62 54.5L57.5 67.8C54.3 66.6 50.7 66 46.5 66C27.6 66 15 81 15 104.5V156Z"/>
+    <path id="letter-9-d" transform="translate(945.611 0)" d="M89 16H104V156H89V137C81 151 67 158 50 158C19.5 158 0 136 0 105C0 74 19.5 52 50 52C67 52 81 59 89 73Z M89 105C89 81.2 75.1 66 53 66C30.1 66 15 81.2 15 105C15 128.8 30.1 144 53 144C75.1 144 89 128.8 89 105Z"/>
+  </g>
+</svg>

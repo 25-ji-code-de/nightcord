@@ -1955,7 +1955,7 @@ class UIManager {
     // 只添加到 messages 数组，不触发 DOM 操作（由 renderMessages 统一渲染）
     const messages = [
       { text: '警告: 此聊天室的参与者是互联网上的随机用户。用户名未经认证，任何人都可以冒充任何人。聊天记录将被保存。', color: 'bg-red-600' },
-      { text: '提示: 点击头像或成员查看身份和个性签名；点击左侧在线用户列表中你的昵称可管理登录和资料。', color: 'bg-default' },
+      { text: '提示: 点击头像或成员可查看其身份和个性签名；点击左侧在线用户列表中你的昵称可管理登录和资料。', color: 'bg-default' },
       { text: `欢迎来到聊天室: ${data.roomname}`, color: 'bg-default' }
     ];
 

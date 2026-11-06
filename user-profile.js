@@ -86,7 +86,7 @@
         dialog.appendChild(handle);
       }
       const description = document.createElement('p');
-      description.className = 'profile-bio'; description.textContent = profile.bio || (profile.authenticated ? '还没有填写个性签名。' : '访客身份仅用于本次连接，登录后可展示头像和个性签名。');
+      description.className = 'profile-bio'; description.textContent = profile.bio || (profile.authenticated ? '还没有填写个性签名。' : '访客身份仅在当前会话期间有效；登录后即可显示您的头像和个人签名。');
       dialog.appendChild(description);
       const label = document.createElement('p'); label.className = 'profile-id-label'; label.textContent = profile.authenticated ? '唯一账号 ID' : '本次访客 ID';
       const identity = document.createElement('code'); identity.className = 'profile-id'; identity.textContent = profile.id || '未连接';

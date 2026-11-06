@@ -26,11 +26,22 @@
     }
 
     badge(profile) {
+      if (profile?.authenticated !== true) return null;
       const badge = document.createElement('span');
-      const verified = profile && profile.authenticated === true;
-      badge.className = 'identity-badge' + (verified ? ' identity-badge--verified' : '');
-      badge.textContent = verified ? 'SEKAI Pass' : '访客';
-      badge.title = verified ? '身份已由 SEKAI Pass 验证' : '访客昵称未经账号验证';
+      badge.className = 'identity-badge identity-badge--verified';
+      badge.title = '身份已由 SEKAI Pass 验证';
+      badge.setAttribute('role', 'img');
+      badge.setAttribute('aria-label', badge.title);
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.setAttribute('viewBox', '0 0 24 24');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.setAttribute('focusable', 'false');
+      const shape = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      shape.setAttribute('fill', 'currentColor');
+      shape.setAttribute('fill-rule', 'evenodd');
+      shape.setAttribute('d', 'M23 12l-2.44-2.79.34-3.69-3.61-.82L15.4 1.5 12 2.96 8.6 1.5 6.71 4.7 3.1 5.51l.34 3.7L1 12l2.44 2.79-.34 3.7 3.61.82L8.6 22.5l3.4-1.47 3.4 1.46 1.89-3.19 3.61-.82-.34-3.69L23 12zm-12.91 4.72L5.86 12.48l1.41-1.41 2.82 2.83 6.83-6.85 1.41 1.41-8.24 8.26z');
+      icon.appendChild(shape);
+      badge.appendChild(icon);
       return badge;
     }
 
@@ -67,7 +78,8 @@
       const title = document.createElement('h2');
       title.id = 'profile-title'; title.textContent = profile.displayName || '访客';
       dialog.appendChild(title);
-      dialog.appendChild(this.badge(profile));
+      const badge = this.badge(profile);
+      if (badge) dialog.appendChild(badge);
       if (profile.username) {
         const handle = document.createElement('p');
         handle.className = 'profile-handle'; handle.textContent = `@${profile.username}`;

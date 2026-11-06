@@ -10,7 +10,8 @@
 .avatar { flex-shrink: 0; overflow: hidden; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .identity-badge { display: inline-block; flex-shrink: 0; border: 1px solid #a99cba; border-radius: 4px; padding: 1px 5px; font-size: 10px; line-height: 1.5; color: #e2dbea; white-space: nowrap; }
-.identity-badge--verified { color: #d1ffe8; border-color: #80c6ac; background: #234c45; }
+.identity-badge--verified { display: inline-flex; align-items: center; justify-content: center; align-self: center; width: 11px; height: 11px; padding: 0; border: 0; border-radius: 0; background: none; color: #fff; vertical-align: -0.1em; transform: translateY(1px); }
+.identity-badge--verified svg { display: block; width: 100%; height: 100%; }
 .profile-trigger { cursor: pointer; }
 .profile-trigger:focus-visible, .user-profile-dialog :is(button, a):focus-visible { outline: 2px solid #d1c1f2; outline-offset: 3px; }
 .voice-user-info { min-width: 0; flex-wrap: wrap; }

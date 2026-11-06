@@ -63,14 +63,14 @@ test('browser identity, profiles, safe text, sync, replay, keyboard and mobile l
     assert.equal(new Set(profiles.map(u => u.id)).size, 2);
     assert.ok(profiles.every(u => u.displayName === 'Shared name'));
     assert.equal(await member.evaluate(() => nightcord.ui.currentUser.id), 'sekai:stable-subject');
-    async function openOwnProfile(page, authenticated) {
+    async function openOwnProfile(page) {
       if (page.viewportSize().width <= 768 && !await page.locator('.sidebar').evaluate(el => el.classList.contains('show'))) {
         await page.locator('.chat-header').click({ position: { x: 10, y: 20 } });
       }
-      const badge = authenticated ? page.locator('.identity-badge--verified') : page.getByText('访客', { exact: true });
-      await page.locator('#voice-users .voice-user').filter({ has: badge }).click();
+      const index = await page.evaluate(() => nightcord.ui.roster.findIndex(user => user.profile?.id === nightcord.ui.currentUser.id));
+      await page.locator('#voice-users .voice-user').nth(index).click();
     }
-    await openOwnProfile(member, true);
+    await openOwnProfile(member);
     const dialog = member.locator('dialog');
     await dialog.waitFor({ state: 'visible' });
     assert.equal(await dialog.locator('.profile-bio').textContent(), '<img onerror=alert(1)> signature');
@@ -86,14 +86,14 @@ test('browser identity, profiles, safe text, sync, replay, keyboard and mobile l
     await member.locator('#messageInput').press('Enter');
     await guest.waitForFunction(text => nightcord.ui.messages.some(m => m.text === text && m.profile?.authenticated), text);
     state.name = 'Updated profile';
-    await openOwnProfile(member, true);
+    await openOwnProfile(member);
     await member.getByRole('button', { name: '同步资料', exact: true }).click();
     await guest.waitForFunction(() => nightcord.ui.roster.some(u => u.name === 'Updated profile'));
     assert.equal(await guest.evaluate(() => nightcord.ui.roster.length), 2);
     await guest.reload({ waitUntil: 'domcontentloaded' });
     await guest.waitForFunction(() => nightcord.chatRoom.wsManager.ready && nightcord.ui.roster.length === 2);
     assert.equal(await guest.evaluate(text => nightcord.ui.messages.filter(m => m.text === text && m.profile?.id === 'sekai:stable-subject').length, text), 1);
-    await openOwnProfile(guest, false);
+    await openOwnProfile(guest);
     await guest.getByRole('button', { name: '修改访客昵称', exact: true }).click();
     assert.equal(await guest.evaluate(() => nightcord.ui.currentUser.authenticated), false);
     await guest.locator('#name-input').fill('Renamed visitor');
@@ -104,7 +104,7 @@ test('browser identity, profiles, safe text, sync, replay, keyboard and mobile l
     await member.waitForFunction(() => nightcord.ui.messages.some(m => m.text === 'Single send after rejoin'));
     assert.equal(await member.evaluate(() => nightcord.ui.messages.filter(m => m.text === 'Single send after rejoin').length), 1);
     await guest.screenshot({ path: 'dist/guest-desktop.png', fullPage: true });
-    await openOwnProfile(member, true);
+    await openOwnProfile(member);
     await member.screenshot({ path: 'dist/member-mobile.png', fullPage: true });
     assert.deepEqual(errors, []);
   } finally {

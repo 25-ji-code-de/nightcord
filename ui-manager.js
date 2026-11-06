@@ -702,7 +702,8 @@ class UIManager {
         `;
       if (user.profile) {
         this.profileUI.avatar(div.querySelector('.avatar'), user.profile);
-        div.querySelector('.voice-user-info').appendChild(this.profileUI.badge(user.profile));
+        const badge = this.profileUI.badge(user.profile);
+        if (badge) div.querySelector('.voice-user-info').appendChild(badge);
         this.profileUI.makeTrigger(div, user.profile);
       } else if (user.name === currentName) {
         div.style.cursor = 'pointer';
@@ -2126,7 +2127,8 @@ class UIManager {
     timeSpan.className = 'message-time';
     timeSpan.textContent = msg.timestamp ? this.formatDate(msg.timestamp) : '';
     headerDiv.appendChild(userSpan);
-    if (msg.profile) headerDiv.appendChild(this.profileUI.badge(msg.profile));
+    const badge = this.profileUI.badge(msg.profile);
+    if (badge) headerDiv.appendChild(badge);
     if (msg.sender) {
       const sender = document.createElement('span');
       sender.className = 'identity-badge';

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "include": ["/*"],
+  "exclude": [
+    "/cdn-cgi/*",
+    "/api/*",
+    "/css/*",
+    "/icons/*",
+    "/vendor/*",
+    "/*.js",
+    "/*.mjs",
+    "/*.css",
+    "/*.json",
+    "/*.mp3",
+    "/*.opus",
+    "/*.png",
+    "/*.svg"
+  ]
+}

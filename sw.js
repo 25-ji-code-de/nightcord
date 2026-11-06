@@ -71,6 +71,7 @@ const PRECACHE = [
   '/user-profile.js',
   '/ui-manager.js',
   '/nightcord.js',
+  '/boot.js',
   '/pangu.js',
   '/pwa.js',
   '/version-checker.js',

@@ -10,7 +10,7 @@ mkdirSync(output, { recursive: true });
 // Publish only browser assets. Backend source, dependencies, and local config
 // must never become part of the Pages upload or its file-count budget.
 for (const entry of readdirSync(root, { withFileTypes: true })) {
-  if (entry.isFile() && (/\.(?:html|js|css|mp3|opus)$/.test(entry.name) || ['_headers', 'manifest.json'].includes(entry.name))) {
+  if (entry.isFile() && (/\.(?:html|js|css|mp3|opus)$/.test(entry.name) || ['_headers', '_routes.json', 'manifest.json'].includes(entry.name))) {
     cpSync(join(root, entry.name), join(output, entry.name));
   }
 }

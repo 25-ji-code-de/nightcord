@@ -95,6 +95,25 @@ app.init();
 本地验证和部署步骤见 [backend/README.md](backend/README.md)。前端构建命令为
 `node scripts/build-pages.mjs`，Cloudflare Pages 输出目录为 `dist`。
 
+## CSP 与 Cloudflare
+
+HTML 经 Pages Functions 的 `functions/_middleware.js` 设置 CSP，每个响应生成随机
+nonce，让 Cloudflare JavaScript Detections 从响应头继承；业务启动代码放在 `boot.js`。
+内联脚本、内联事件处理器及动态求值被禁止，Web Analytics 和 Rocket Loader 的脚本域名
+显式放行。图片、媒体和网络连接的完整来源策略仍为 Report-Only，避免阻断消息中的外部媒体。
+
+Pages 构建命令为 `node scripts/build-pages.mjs`、输出目录为 `dist`，并需要一并部署
+仓库根目录的 `functions/`。`_routes.json` 让脚本、样式、图标等静态资源直接交给 Pages。
+本地连同 CSP 验证请运行 `npx wrangler@latest pages dev dist --compatibility-date=2026-11-05`；
+普通静态服务器不会运行 Functions，也不会应用 `_headers`。
+
+违规经 `report-to`（及旧浏览器的 `report-uri`）送到 `/csp-report`，以 `csp-violation`
+结构化日志输出。可在 Pages 部署的实时日志或
+`npx wrangler pages deployment tail --project-name=nightcord-web` 中查看；当前不保存历史报告。
+接收器限制请求大小和批量数量，不记录 URL 查询参数、片段、脚本样本或 nonce。
+上线后还应核对 Cloudflare 处理后的 HTML：检测脚本的 nonce 要与响应头一致，
+统计脚本应能加载并向本站 `/cdn-cgi/rum` 发出请求，不能只检查仓库内的 HTML。
+
 ## 📱 PWA 与离线
 
 站点带有 `manifest.json` 与 Service Worker，可安装为独立窗口应用：

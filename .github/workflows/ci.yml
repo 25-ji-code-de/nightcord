@@ -36,6 +36,11 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm run check
+      - name: Build Pages assets and CSP functions
+        working-directory: .
+        run: |
+          node scripts/build-pages.mjs
+          node backend/node_modules/wrangler/bin/wrangler.js pages functions build functions --outdir .wrangler/pages-functions --compatibility-date 2026-11-05
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser

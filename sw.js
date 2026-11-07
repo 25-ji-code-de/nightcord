@@ -76,6 +76,7 @@ const PRECACHE = [
   '/pwa.js',
   '/version-checker.js',
   // 图标与 favicon
+  '/icons/nightcord-logotype.svg',
   '/icons/favicon.svg',
   '/icons/favicon-32.png',
   '/icons/icon-192.png',

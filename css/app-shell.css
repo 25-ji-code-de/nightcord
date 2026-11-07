@@ -151,6 +151,18 @@ body {
 .server-header:hover {
   background: rgba(61, 55, 80, 0.5);
 }
+.server-logotype {
+  display: block;
+  width: auto;
+  height: 24px;
+  flex-shrink: 0;
+  /* Align the visible left edge and ascender-to-baseline center, allowing for g's tail. */
+  transform: translate(-2px, 2px);
+}
+.server-chevron {
+  display: block;
+  flex-shrink: 0;
+}
 .sidebar-content {
   flex: 1;
   overflow-y: auto;

@@ -29,6 +29,7 @@ class StorageManager {
     this.legacyMessagesKey = opts.legacyMessagesKey || 'nightcord-messages';
     this.legacyLastKey = opts.legacyLastKey || 'nightcord-lastmsg';
     this.defaultRoom = opts.defaultRoom || 'nightcord-default';
+    this.knownProfiles = new Map();
 
     // 自动执行一次旧数据迁移（如果存在旧键）
     try {
@@ -41,6 +42,61 @@ class StorageManager {
 
   storageKeyMessages(room) { return `nightcord-messages:${room}`; }
   storageKeyLastMsg(room) { return `nightcord-lastmsg:${room}`; }
+
+  // Only live session/presence events call rememberProfile. Message snapshots
+  // remain in their messages and must never replace the last observed profile.
+  normalizeProfile(profile) {
+    if (!profile || typeof profile.id !== 'string' || !profile.id || profile.id.length > 256
+      || typeof profile.displayName !== 'string' || !profile.displayName) return null;
+    return {
+      id: profile.id,
+      displayName: profile.displayName.slice(0, 50),
+      authenticated: profile.authenticated === true,
+      issuer: typeof profile.issuer === 'string' ? profile.issuer.slice(0, 256) : null,
+      sub: typeof profile.sub === 'string' ? profile.sub.slice(0, 128) : null,
+      username: typeof profile.username === 'string' ? profile.username.slice(0, 50) : '',
+      avatarUrl: typeof profile.avatarUrl === 'string' ? profile.avatarUrl.slice(0, 1024) : null,
+      bio: typeof profile.bio === 'string' ? profile.bio.slice(0, 200) : '',
+    };
+  }
+
+  loadKnownProfiles() {
+    try {
+      const entries = JSON.parse(localStorage.getItem('nightcord-known-profiles') || '[]');
+      if (Array.isArray(entries)) {
+        for (const entry of entries.slice(-1000)) {
+          const profile = this.normalizeProfile(entry?.profile);
+          if (!profile || !Number.isFinite(entry.observedAt)) continue;
+          const existing = this.knownProfiles.get(profile.id);
+          if (!existing || entry.observedAt > existing.observedAt) {
+            this.knownProfiles.set(profile.id, { profile, observedAt: entry.observedAt });
+          }
+        }
+      }
+    } catch { /* Unavailable or malformed storage must not prevent profile display. */ }
+    const entries = [...this.knownProfiles.values()].sort((a, b) => a.observedAt - b.observedAt).slice(-1000);
+    this.knownProfiles = new Map(entries.map(entry => [entry.profile.id, entry]));
+  }
+
+  rememberProfile(value) {
+    const profile = this.normalizeProfile(value);
+    if (!profile) return;
+    // Merge other tabs' observations before writing this tab's live update.
+    this.loadKnownProfiles();
+    this.knownProfiles.delete(profile.id);
+    this.knownProfiles.set(profile.id, { profile, observedAt: Date.now() });
+    if (this.knownProfiles.size > 1000) this.knownProfiles.delete(this.knownProfiles.keys().next().value);
+    try {
+      localStorage.setItem('nightcord-known-profiles', JSON.stringify([...this.knownProfiles.values()]));
+    } catch { /* Retain the in-memory observation even if storage is full or blocked. */ }
+  }
+
+  getKnownProfile(id) {
+    if (typeof id !== 'string' || !id) return null;
+    this.loadKnownProfiles();
+    const profile = this.knownProfiles.get(id)?.profile;
+    return profile ? { ...profile } : null;
+  }
 
   loadMessages(room) {
     try {

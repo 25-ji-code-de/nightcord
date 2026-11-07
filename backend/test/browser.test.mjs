@@ -107,7 +107,8 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     assert.equal(await oldMessage.locator('.message-user').textContent(), 'Shared name');
     await oldMessage.locator('.message-user').click();
     assert.equal(await guest.locator('dialog h2').textContent(), 'Updated profile');
-    assert.equal(await guest.locator('dialog .profile-snapshot-note').count(), 0);
+    assert.equal(await guest.locator('dialog .profile-snapshot-note').textContent(), '发送时昵称：Shared name');
+    assert.equal(await guest.locator('dialog .profile-cache-note').count(), 0);
     assert.equal(await guest.locator('dialog .profile-bio').textContent(), '<img onerror=alert(1)> signature');
     assert.equal(await guest.locator('dialog .profile-actions').count(), 0);
     await guest.keyboard.press('Escape');
@@ -189,11 +190,37 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     // A same-name online guest cannot be substituted for an offline account.
     assert.ok(await guest.evaluate(() => nightcord.ui.roster.some(u => u.name === 'Shared name' && !u.profile.authenticated)));
     await oldMessage.locator('.message-user').click();
-    assert.equal(await guest.locator('dialog h2').textContent(), 'Shared name');
-    assert.equal(await guest.locator('dialog .profile-snapshot-note').textContent(), '发送时昵称');
+    assert.equal(await guest.locator('dialog h2').textContent(), 'Updated profile');
+    assert.equal(await guest.locator('dialog .profile-cache-note').textContent(), '最后已知资料');
+    assert.equal(await guest.locator('dialog .profile-snapshot-note').textContent(), '发送时昵称：Shared name');
+    assert.equal(await guest.locator('dialog .profile-bio').textContent(), '<img onerror=alert(1)> signature');
+    assert.equal(await guest.locator('dialog .profile-avatar img').count(), 1);
     await guest.locator('dialog summary').click();
     assert.equal(await guest.locator('dialog .profile-id').textContent(), 'sekai:stable-subject');
     assert.equal(await oldMessage.locator('.message-user').textContent(), 'Shared name');
+    await guest.keyboard.press('Escape');
+    await guest.locator('dialog').waitFor({ state: 'detached' });
+
+    // Reload replays the old message snapshot, but must retain the newer offline profile.
+    await guest.reload({ waitUntil: 'domcontentloaded' });
+    await guest.waitForFunction(() => nightcord.chatRoom.wsManager.ready);
+    await oldMessage.locator('.avatar').focus();
+    await guest.keyboard.press('Enter');
+    assert.equal(await guest.locator('dialog h2').textContent(), 'Updated profile');
+    assert.equal(await guest.locator('dialog .profile-cache-note').textContent(), '最后已知资料');
+    assert.equal(await oldMessage.locator('.message-user').textContent(), 'Shared name');
+    await guest.keyboard.press('Escape');
+    await guest.locator('dialog').waitFor({ state: 'detached' });
+
+    // Without an observation for this ID, the original message remains a usable fallback.
+    await guest.evaluate(() => {
+      localStorage.removeItem('nightcord-known-profiles');
+      nightcord.ui.storage.knownProfiles.clear();
+    });
+    await oldMessage.locator('.message-user').click();
+    assert.equal(await guest.locator('dialog h2').textContent(), 'Shared name');
+    assert.equal(await guest.locator('dialog .profile-cache-note').count(), 0);
+    assert.equal(await guest.locator('dialog .profile-snapshot-note').textContent(), '发送时昵称');
     await guest.keyboard.press('Escape');
     await guest.locator('dialog').waitFor({ state: 'detached' });
 

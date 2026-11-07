@@ -6,12 +6,19 @@
 
 - 聊天消息（按房间）：
   - Key: `nightcord-messages:<roomname>`
-  - Value: JSON 数组，元素格式为 { user, text, timestamp }
-  - 说明：仅保存最小必要字段（用户名、文本、时间戳）；UI 渲染层会为每条消息生成 avatar、color、time 等显示信息。
+  - Value: JSON 数组，元素格式为 { user, text, timestamp, profile, sender }
+  - 说明：`user` 和 `profile` 保留发送时的昵称与资料快照，`sender` 用于 AI 转发者；UI 渲染层会生成 avatar、color、time 等显示信息。
 
 - 最新消息时间戳（按房间）：
   - Key: `nightcord-lastmsg:<roomname>`
   - Value: 字符串化的整数时间戳（ms since epoch）
+
+- 最后已知资料（跨房间，按唯一用户 ID 区分）：
+  - Key: `nightcord-known-profiles`
+  - Value: JSON 数组，元素格式为 { profile, observedAt }，`observedAt` 是本浏览器收到在线资料的时间。
+  - 只从服务器确认的会话、上线和资料更新事件写入昵称、头像、签名等公开显示字段。历史消息回放、加载本地消息、打开资料卡都不会写入，避免旧快照覆盖新资料。
+  - 资料卡依次使用在线资料、最后已知资料、发送时快照；离线缓存标注“最后已知资料”。消息上的昵称始终保留发送时的名字，资料卡名字不同时另显示“发送时昵称”。
+  - 最多保留最近观察到的 1000 个身份。刷新后保留；清除站点存储会删除。存储不可用时本次页面内仍保留已知资料。
 
 ## 默认与回退
 

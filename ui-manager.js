@@ -1875,6 +1875,7 @@ class UIManager {
    * @param {string} username - 用户名
    */
   addUserToRoster(username, profile) {
+    this.storage?.rememberProfile(profile);
     // Avoid adding duplicate entries for the same username. Server may emit
     // a user:joined after we have locally renamed the user, so skip if
     // username already exists in the roster.

@@ -85,8 +85,9 @@
       // Resolve on activation: old message triggers retain their original snapshot.
       // Only an exact identity match can supply current profile data.
       const current = snapshot.id && this.ui.roster.find(member => member.profile?.id === snapshot.id)?.profile;
-      const profile = current || snapshot;
-      const historical = fromMessage && !current;
+      const known = !current && this.ui.storage?.getKnownProfile(snapshot.id);
+      const profile = current || known || snapshot;
+      const historical = fromMessage && !current && !known;
       if (this.dialog) this.dialog.close();
       const previousFocus = document.activeElement;
       const own = this.ui.currentUser && this.ui.currentUser.id === profile.id;
@@ -143,10 +144,16 @@
       const badge = this.badge(profile);
       if (badge) title.appendChild(badge);
       heading.appendChild(title);
-      if (historical) {
+      if (known) {
+        const context = document.createElement('p');
+        context.className = 'profile-handle profile-cache-note';
+        context.textContent = '最后已知资料';
+        heading.appendChild(context);
+      }
+      if (historical || (fromMessage && snapshot.displayName !== profile.displayName)) {
         const context = document.createElement('p');
         context.className = 'profile-handle profile-snapshot-note';
-        context.textContent = '发送时昵称';
+        context.textContent = historical ? '发送时昵称' : `发送时昵称：${snapshot.displayName}`;
         heading.appendChild(context);
       }
       if (profile.username) {

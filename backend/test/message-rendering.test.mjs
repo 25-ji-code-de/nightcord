@@ -215,4 +215,108 @@ test('message rendering batches updates without losing or duplicating messages',
     });
     assert.deepEqual(result, { rows: ['Message 0', 'Message 1', 'fallback arrival'], indexSize: 3 });
   });
+
+  await t.test('presence updates keep in-flight avatars connected and profile triggers current', async t => {
+    const page = await fixture(t);
+    const avatarUrl = 'https://avatars.test/first.svg';
+    const requests = [];
+    const cancelled = [];
+    let release;
+    const responseReady = new Promise(resolve => { release = resolve; });
+    t.after(release);
+    page.on('requestfailed', request => {
+      if (request.url() === avatarUrl) cancelled.push(request.failure()?.errorText);
+    });
+    await page.route(avatarUrl, async route => {
+      requests.push(route.request().url());
+      await responseReady;
+      await route.fulfill({ contentType: 'image/svg+xml', headers: { 'Cache-Control': 'max-age=0' },
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="purple"/></svg>' });
+    });
+    const started = page.waitForRequest(avatarUrl);
+    await page.evaluate(avatarUrl => {
+      window.member = { id: 'sekai:one', displayName: 'Original', authenticated: true, avatarUrl };
+      ui.addUserToRoster('Earlier guest', { id: 'guest:earlier', displayName: 'Earlier guest' });
+      ui.addUserToRoster(member.displayName, member);
+      window.originalRow = ui.elements.roster.lastElementChild;
+      window.originalImage = originalRow.querySelector('img');
+      window.removals = 0;
+      new MutationObserver(records => {
+        for (const record of records) for (const node of record.removedNodes) {
+          if (node === originalImage || node.contains?.(originalImage)) removals++;
+        }
+      }).observe(ui.elements.roster, { childList: true, subtree: true });
+    }, avatarUrl);
+    await started;
+    const result = await page.evaluate(async () => {
+      for (let i = 0; i < 12; i++) {
+        ui.addUserToRoster(`Guest ${i}`, { id: `guest:${i}`, displayName: `Guest ${i}` });
+        await nextFrame();
+      }
+      member = { ...member, displayName: 'Renamed', bio: 'Updated bio' };
+      ui.addUserToRoster(member.displayName, member);
+      ui.removeUserFromRoster('Earlier guest', 'guest:earlier');
+      await nextFrame();
+      window.openedProfiles = [];
+      ui.profileUI.open = profile => openedProfiles.push(profile);
+      originalRow.click();
+      originalRow.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      return {
+        sameRow: ui.elements.roster.firstElementChild === originalRow,
+        sameImage: originalRow.querySelector('img') === originalImage,
+        connected: originalImage.isConnected, removals,
+        opened: openedProfiles.map(profile => ({ id: profile.id, name: profile.displayName, bio: profile.bio })),
+        label: originalRow.getAttribute('aria-label'),
+      };
+    });
+    assert.equal(result.sameRow, true);
+    assert.equal(result.sameImage, true);
+    assert.equal(result.connected, true);
+    assert.equal(result.removals, 0);
+    assert.deepEqual(result.opened, Array(2).fill({ id: 'sekai:one', name: 'Renamed', bio: 'Updated bio' }));
+    assert.equal(result.label, '查看 Renamed 的资料');
+    release();
+    await page.waitForFunction(() => originalImage.complete && originalImage.naturalWidth === 32);
+    assert.equal(requests.length, 1);
+    assert.deepEqual(cancelled, []);
+    await page.evaluate(() => ui.clearRoster());
+    assert.equal(await page.locator('.voice-user').count(), 0);
+    assert.equal(await page.evaluate(() => ui.rosterElements.size), 0);
+  });
+
+  await t.test('avatar changes replace only that image and stale errors cannot remove its replacement', async t => {
+    const page = await fixture(t);
+    await page.route('https://avatars.test/**', route => route.fulfill({
+      contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"/>',
+    }));
+    const result = await page.evaluate(async () => {
+      const first = { id: 'sekai:one', displayName: 'First', authenticated: true, avatarUrl: 'https://avatars.test/first.svg' };
+      const other = { id: 'sekai:other', displayName: 'Other', authenticated: true, avatarUrl: 'https://avatars.test/other.svg' };
+      ui.addUserToRoster(first.displayName, first);
+      ui.addUserToRoster(other.displayName, other);
+      const row = ui.elements.roster.firstElementChild;
+      const oldImage = row.querySelector('img');
+      const otherImage = ui.elements.roster.lastElementChild.querySelector('img');
+      ui.addUserToRoster('Changed', { ...first, displayName: 'Changed', avatarUrl: 'https://avatars.test/changed.svg' });
+      const replacement = row.querySelector('img');
+      oldImage.dispatchEvent(new Event('error'));
+      const replaced = {
+        sameRow: row === ui.elements.roster.firstElementChild,
+        changedImage: replacement !== oldImage,
+        replacementSurvives: row.querySelector('img') === replacement,
+        sameOtherImage: ui.elements.roster.lastElementChild.querySelector('img') === otherImage,
+        source: replacement.getAttribute('src'),
+      };
+      replacement.dispatchEvent(new Event('error'));
+      const fallback = row.querySelector('.avatar').textContent;
+      ui.addUserToRoster('Unsafe', { ...first, displayName: 'Unsafe', avatarUrl: 'javascript:alert(1)' });
+      return { replaced, fallback, unsafeImages: row.querySelectorAll('img').length,
+        unsafeFallback: row.querySelector('.avatar').textContent };
+    });
+    assert.deepEqual(result.replaced, { sameRow: true, changedImage: true, replacementSurvives: true,
+      sameOtherImage: true, source: 'https://avatars.test/changed.svg' });
+    assert.equal(result.fallback, 'C');
+    assert.equal(result.unsafeImages, 0);
+    assert.equal(result.unsafeFallback, 'U');
+  });
 });

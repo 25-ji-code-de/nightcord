@@ -34,18 +34,32 @@
   }
 
   class NightcordProfileUI {
-    constructor(ui) { this.ui = ui; this.dialog = null; }
+    constructor(ui) {
+      this.ui = ui;
+      this.dialog = null;
+      this.triggers = new WeakMap();
+    }
 
-    avatar(element, profile) {
+    avatar(element, profile, fallback = element.dataset.avatarFallback ?? element.textContent) {
       const source = safeAvatar(profile && profile.avatarUrl);
-      if (!source) return;
-      const fallback = element.textContent;
+      element.dataset.avatarFallback = fallback;
+      const existing = element.querySelector('img');
+      if (!source) {
+        if (existing || element.textContent !== fallback) element.textContent = fallback;
+        return;
+      }
+      if (existing?.getAttribute('src') === source) return;
       const image = document.createElement('img');
-      image.src = source;
       image.alt = '';
       image.loading = 'lazy';
       image.referrerPolicy = 'no-referrer';
-      image.addEventListener('error', () => { element.textContent = fallback; }, { once: true });
+      image.decoding = 'async';
+      image.addEventListener('error', () => {
+        // A superseded request must not remove the user's new avatar.
+        if (image.parentNode === element) element.textContent = element.dataset.avatarFallback;
+      }, { once: true });
+      // Configure loading and referrer policy before assigning the request URL.
+      image.src = source;
       element.replaceChildren(image);
     }
 
@@ -71,14 +85,21 @@
 
     makeTrigger(element, profile, options) {
       if (!profile) return;
+      let trigger = this.triggers.get(element);
+      if (!trigger) {
+        trigger = {};
+        this.triggers.set(element, trigger);
+        element.addEventListener('click', () => this.open(trigger.profile, trigger.options));
+        element.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.open(trigger.profile, trigger.options); }
+        });
+      }
+      trigger.profile = profile;
+      trigger.options = options;
       element.classList.add('profile-trigger');
       element.tabIndex = 0;
       element.setAttribute('role', 'button');
       element.setAttribute('aria-label', `查看 ${profile.displayName} 的资料`);
-      element.addEventListener('click', () => this.open(profile, options));
-      element.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.open(profile, options); }
-      });
     }
 
     open(snapshot, { fromMessage = false } = {}) {

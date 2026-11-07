@@ -110,6 +110,7 @@ class UIManager {
     this.pendingMessageAppends = [];
     this.lastMsgTimestamp = 0;
     this.roster = [];
+    this.rosterElements = new Map();
     this.currentUser = null;
     this.profileUI = new NightcordProfileUI(this);
 
@@ -679,36 +680,59 @@ class UIManager {
    * 渲染语音用户列表
    */
   renderVoiceUsers() {
-    this.elements.roster.innerHTML = '';
+    const rosterElement = this.elements.roster;
+    const keyFor = user => user.profile?.id ? `id:${user.profile.id}` : `name:${user.name}`;
+    const activeKeys = new Set(this.roster.map(keyFor));
+    for (const [key, element] of this.rosterElements) {
+      if (!activeKeys.has(key)) {
+        element.remove();
+        this.rosterElements.delete(key);
+      }
+    }
+    let nextElement = rosterElement.firstElementChild;
     // 获取当前用户名
     let currentName = null;
     try {
       currentName = localStorage.getItem('nightcord-username');
     } catch (e) {}
     this.roster.forEach(user => {
-      const div = document.createElement('div');
-      div.className = 'voice-user';
-      /*
-       * user.name 来自别的用户 —— SEKAI Pass 的 name / preferred_username
-       * claim，那边只校验长度（≤ 50 字符）。不转义的话，
-       * `"><img src=x onerror=alert(1)>` 这样的昵称会在每个看到成员列表的
-       * 人的浏览器里执行。
-       *
-       * color 与 avatar 本来是由 generateAvatar 生成的（固定色板 + 名字首字符），
-       * 但它们跟名字来自同一个对象，一并转义，省得以后有人改了来源还要重新论证。
-       */
-      div.innerHTML = `
+      const key = keyFor(user);
+      let div = this.rosterElements.get(key);
+      if (!div) {
+        div = document.createElement('div');
+        div.className = 'voice-user';
+        this.rosterElements.set(key, div);
+        /*
+         * user.name 来自别的用户 —— SEKAI Pass 的 name / preferred_username
+         * claim，那边只校验长度（≤ 50 字符）。不转义的话，
+         * `"><img src=x onerror=alert(1)>` 这样的昵称会在每个看到成员列表的
+         * 人的浏览器里执行。
+         *
+         * color 与 avatar 本来是由 generateAvatar 生成的（固定色板 + 名字首字符），
+         * 但它们跟名字来自同一个对象，一并转义，省得以后有人改了来源还要重新论证。
+         */
+        div.innerHTML = `
           <div class="voice-user-info">
             <span class="avatar ${escapeHtml(user.color)}">${escapeHtml(user.avatar)}</span>
-            <span style="font-size:14px;">${escapeHtml(user.name)}</span>
+            <span class="voice-user-name" style="font-size:14px;">${escapeHtml(user.name)}</span>
           </div>
         `;
+      }
+      const info = div.querySelector('.voice-user-info');
+      const avatar = info.querySelector('.avatar');
+      avatar.className = `avatar ${user.color}`;
+      info.querySelector('.voice-user-name').textContent = user.name;
+      this.profileUI.avatar(avatar, user.profile, user.avatar);
+      const existingBadge = info.querySelector('.identity-badge');
+      if (user.profile?.authenticated && !existingBadge) {
+        info.appendChild(this.profileUI.badge(user.profile));
+      } else if (!user.profile?.authenticated && existingBadge) {
+        existingBadge.remove();
+      }
       if (user.profile) {
-        this.profileUI.avatar(div.querySelector('.avatar'), user.profile);
-        const badge = this.profileUI.badge(user.profile);
-        if (badge) div.querySelector('.voice-user-info').appendChild(badge);
         this.profileUI.makeTrigger(div, user.profile);
-      } else if (user.name === currentName) {
+      } else if (user.name === currentName && !div.dataset.nameChooserBound) {
+        div.dataset.nameChooserBound = 'true';
         div.style.cursor = 'pointer';
         div.title = '点击修改你的昵称';
         div.addEventListener('click', () => {
@@ -723,7 +747,10 @@ class UIManager {
           }, this.sekaiPassLoginCallback);
         });
       }
-      this.elements.roster.appendChild(div);
+      // Leave unchanged members connected so in-flight avatar loads survive
+      // the burst of individual presence events during room initialization.
+      if (div !== nextElement) rosterElement.insertBefore(div, nextElement);
+      nextElement = div.nextElementSibling;
     });
   }
 

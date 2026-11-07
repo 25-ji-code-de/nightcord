@@ -83,6 +83,43 @@ test('mention composition, delivery and actions', { timeout: 60_000 }, async t =
     assert.deepEqual(result.asks, []);
   });
 
+  await t.test('suggestions show profile avatars with fallbacks and compact AI and everyone icons', async t => {
+    const page = await fixture(t, { width: 375, height: 812 });
+    await page.route('https://avatars.example.test/**', route => route.request().url().endsWith('/broken')
+      ? route.fulfill({ status: 404, body: '' })
+      : route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="24" height="24" fill="#a78bfa"/></svg>' }));
+    await page.evaluate(() => {
+      ui.addUserToRoster(me.displayName, { ...me, avatarUrl: 'https://avatars.example.test/live' });
+      ui.addUserToRoster('Broken', { id: 'sekai:broken', displayName: 'Broken', authenticated: true, avatarUrl: 'https://avatars.example.test/broken' });
+      ui.addUserToRoster('Unsafe', { id: 'sekai:unsafe', displayName: 'Unsafe', authenticated: true, avatarUrl: 'javascript:alert(1)' });
+      const offline = { id: 'sekai:offline', displayName: 'Offline', authenticated: true, avatarUrl: 'https://avatars.example.test/cached' };
+      ui.storage.rememberProfile(offline);
+      ui.messages.push({ user: 'Old name', text: 'old message', profile: { ...offline, avatarUrl: null } });
+    });
+    const input = page.locator('#messageInput');
+    await input.fill('@');
+    await page.waitForFunction(() => ['sekai:one', 'sekai:offline'].every(id => {
+      const image = document.querySelector(`.mention-item[data-id="${id}"] .avatar img`);
+      return image?.complete && image.naturalWidth > 0;
+    }));
+    assert.equal(await page.locator('.mention-item[data-id="sekai:one"] img').getAttribute('referrerpolicy'), 'no-referrer');
+    assert.equal(await page.locator('.mention-item[data-id="sekai:offline"] img').getAttribute('src'), 'https://avatars.example.test/cached');
+    await page.waitForFunction(() => document.querySelector('.mention-item[data-id="sekai:broken"] .avatar')?.textContent === 'B');
+    assert.equal(await page.locator('.mention-item[data-id="sekai:unsafe"] img').count(), 0);
+    assert.equal(await page.locator('.mention-item[data-id="guest:two"] .avatar').textContent(), 'S');
+    for (const viewport of [{ width: 375, height: 812 }, { width: 812, height: 375 }]) {
+      await page.setViewportSize(viewport);
+      const layout = await page.locator('.mention-item[data-type="all"], .mention-item[data-type="ai"]').evaluateAll(items => items.map(item => ({
+        height: item.getBoundingClientRect().height,
+        icon: item.querySelector('.avatar svg')?.getAttribute('aria-hidden'),
+        status: getComputedStyle(item.querySelector('.status-indicator')).display,
+        direction: getComputedStyle(item.querySelector('.mention-identity')).flexDirection,
+      })));
+      assert.equal(layout.length, 5);
+      assert.ok(layout.every(row => row.height === 44 && row.icon === 'true' && row.status === 'none' && row.direction === 'row'));
+    }
+  });
+
   await t.test('keyboard AI selection submits once and incoming messages do not invoke AI', async t => {
     const page = await fixture(t);
     const input = page.locator('#messageInput');

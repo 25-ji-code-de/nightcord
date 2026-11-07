@@ -157,6 +157,7 @@ class UIManager {
         atButton: document.querySelector('.input-btns button[title="@"]'),
         getAllUsers: () => this.getAllUsers(),
         formatMention: mention => this.mentions?.format(mention) || null,
+        renderAvatar: (element, profile) => this.profileUI.avatar(element, profile),
         onError: message => this.showError(message),
         getStickers: () => (this.stickerService ? this.stickerService.getStickers() : []),
         getEmojis: () => (this.emojiService ? this.emojiService.getEmojis() : [])

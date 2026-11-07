@@ -23,7 +23,7 @@
  */
 (function (global) {
   class AutocompleteManager {
-    constructor({ input, list, atButton, getAllUsers, getStickers, getEmojis, formatMention, onError } = {}) {
+    constructor({ input, list, atButton, getAllUsers, getStickers, getEmojis, formatMention, renderAvatar, onError } = {}) {
       this.input = input;
       this.list = list;
       this.atButton = atButton;
@@ -31,6 +31,7 @@
       this.getStickers = getStickers || (() => []);
       this.getEmojis = getEmojis || (() => []);
       this.formatMention = formatMention || (mention => `@${mention.name}`);
+      this.renderAvatar = renderAvatar;
       this.onError = onError || (() => {});
 
       this.autocompleteIndex = 0;
@@ -213,9 +214,9 @@
         };
       });
       allUsers.unshift(
-        { name: 'everyone', type: 'all', id: '', avatar: '@', color: '', label: '所有人' },
+        { name: 'everyone', type: 'all', id: '', avatar: '', color: '', label: '所有人' },
         ...(global.AIConfig?.AI_PERSONAS || []).map(ai => ({
-          name: ai.displayName, type: 'ai', id: ai.persona, avatar: '@', color: '', label: 'AI'
+          name: ai.displayName, type: 'ai', id: ai.persona, avatar: '', color: '', label: 'AI'
         }))
       );
       const lowerQuery = query.toLowerCase();
@@ -235,7 +236,7 @@
        */
       this.renderItems(matches, (u) => `
         <div class="mention-item" data-name="${escapeHtml(u.name)}" data-type="${escapeHtml(u.type || 'user')}" data-id="${escapeHtml(u.id || '')}" data-status="${escapeHtml(u.status || '')}" title="${escapeHtml(u.detailTitle || u.label || '')}">
-          <span class="avatar ${escapeHtml(u.color)}" style="width:24px;height:24px;font-size:12px;line-height:24px;">${escapeHtml(u.avatar)}</span>
+          <span class="avatar ${escapeHtml(u.color)}" aria-hidden="true">${escapeHtml(u.avatar)}</span>
           <span class="mention-identity">
             <span class="mention-name">${escapeHtml(u.name)}</span>
             <span class="mention-detail">${escapeHtml(u.label || u.detail || '')}</span>
@@ -243,6 +244,35 @@
           <div class="status-indicator" title="${escapeHtml(u.label || (u.status === 'online' ? '在线' : '离线'))}"></div>
         </div>
       `, (item) => this.completeMention(item.dataset.name, item.dataset.type, item.dataset.id));
+
+      this.list.querySelectorAll('.mention-item').forEach((item, index) => {
+        const user = matches[index];
+        const avatar = item.querySelector('.avatar');
+        if (user.type === 'user') {
+          this.renderAvatar?.(avatar, user.profile);
+        } else {
+          avatar.classList.add('mention-symbol');
+          avatar.appendChild(this.createMentionIcon(user.type));
+        }
+      });
+    }
+
+    createMentionIcon(type) {
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.setAttribute('viewBox', '0 0 24 24');
+      icon.setAttribute('fill', 'none');
+      icon.setAttribute('stroke', 'currentColor');
+      icon.setAttribute('stroke-width', '1.75');
+      icon.setAttribute('stroke-linecap', 'round');
+      icon.setAttribute('stroke-linejoin', 'round');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.setAttribute('focusable', 'false');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', type === 'all'
+        ? 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-3.87M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z'
+        : 'M12 3v3M10 3h2M4 10H2M22 10h-2M8 18v3M16 18v3M7 6h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3ZM8 10v2M16 10v2M9 15h6');
+      icon.appendChild(path);
+      return icon;
     }
 
     showStickerList(query) {

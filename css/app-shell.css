@@ -686,6 +686,11 @@ body {
   color: #fff;
 }
 
+.mention-item[data-type] {
+  box-sizing: border-box;
+  padding: 6px 10px;
+}
+
 .mention-item .avatar {
   flex-shrink: 0;
   width: 24px;
@@ -694,7 +699,34 @@ body {
   line-height: 24px;
 }
 
+.mention-symbol {
+  border-radius: 6px;
+  color: rgb(var(--sekai-accent, 167 139 250));
+  background: rgb(var(--sekai-accent, 167 139 250) / 0.12);
+}
+
+.mention-symbol svg {
+  width: 18px;
+  height: 18px;
+}
+
+.mention-item:is([data-type="ai"], [data-type="all"]) .mention-identity {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.mention-item:is([data-type="ai"], [data-type="all"]) .mention-detail {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.mention-item:is([data-type="ai"], [data-type="all"]) .status-indicator {
+  display: none;
+}
+
 .mention-item .status-indicator {
+  flex-shrink: 0;
   width: 8px;
   height: 8px;
   border-radius: 50%;

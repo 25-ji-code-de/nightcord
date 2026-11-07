@@ -55,53 +55,43 @@ const AI_PERSONAS = [
 /**
  * 检测消息中的 AI 触发
  * @param {string} message - 用户输入的消息
+ * @param {NightcordMentions} [mentions] - 与渲染器共享分词的提及服务
  * @returns {Object|null} 返回 {persona, displayName, prompt, triggerType} 或 null
  */
-function detectAITrigger(message) {
-  if (!message || typeof message !== 'string') {
-    return null;
-  }
+function detectAITrigger(message, mentions) {
+  if (!message || typeof message !== 'string') return null;
+  mentions ||= window.NightcordMentions ? new window.NightcordMentions() : null;
 
   for (const ai of AI_PERSONAS) {
-    // 1. 检测命令模式: /commandName prompt
-    const commandRegex = new RegExp(`^\\/${ai.commandName}\\s+(.+)`, 'i');
-    const commandMatch = message.match(commandRegex);
-    if (commandMatch) {
+    const match = message.match(new RegExp(`^/${ai.commandName}(?:\\s+([\\s\\S]*))?$`, 'i'));
+    if (match) {
       return {
-        persona: ai.persona,
-        displayName: ai.displayName,
-        prompt: commandMatch[1],
+        persona: ai.persona, displayName: ai.displayName,
+        prompt: mentions ? mentions.prompt(match[1] || '') : match[1] || '',
         triggerType: 'command'
       };
     }
-
-    // 2. 检测 @mention 开头模式: @mentionName prompt
-    const mentionPrefix = `@${ai.mentionName} `;
-    if (message.startsWith(mentionPrefix)) {
-      return {
-        persona: ai.persona,
-        displayName: ai.displayName,
-        prompt: message.substring(mentionPrefix.length),
-        triggerType: 'mention_start'
-      };
-    }
-
-    // 3. 检测句中提及模式: any text @mentionName any text
-    // Escape regex metacharacters in mentionName (e.g. 汤川唯 is fine; keep general)
-    const escapedMention = ai.mentionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const mentionRegex = new RegExp(`@${escapedMention}\\b|@${escapedMention}(?=\\s|$|[，。！？、,.!?])`, 'i');
-    if (mentionRegex.test(message)) {
-      // Prefer strip the mention so the model sees cleaner prompt when possible
-      const prompt = message.replace(new RegExp(`@${escapedMention}`, 'ig'), '').trim() || message;
-      return {
-        persona: ai.persona,
-        displayName: ai.displayName,
-        prompt,
-        triggerType: 'mention_inline'
-      };
-    }
   }
 
+  const parts = mentions ? mentions.parts(message) : [{ type: 'text', content: message }];
+  for (const part of parts) {
+    let ai;
+    if (mentions?.isMention(part) && part.desc.type?.toLowerCase() === 'ai') {
+      const id = part.payload.toLowerCase();
+      ai = AI_PERSONAS.find(config => [config.persona, config.mentionName.toLowerCase()].includes(id));
+    } else if (part.type === 'text') {
+      ai = AI_PERSONAS.find(config => mentions
+        ? mentions.containsText(part.content, config.mentionName)
+        : part.content.startsWith(`@${config.mentionName} `));
+    }
+    if (ai) {
+      const prompt = mentions ? mentions.prompt(message, ai.mentionName)
+        : message.slice(ai.mentionName.length + 2).trim();
+      const triggerType = part.type !== 'text' ? 'mention_token'
+        : message.toLowerCase().startsWith(`@${ai.mentionName.toLowerCase()}`) ? 'mention_start' : 'mention_inline';
+      return { persona: ai.persona, displayName: ai.displayName, prompt, triggerType };
+    }
+  }
   return null;
 }
 

@@ -156,6 +156,8 @@ class UIManager {
         list: document.querySelector('#mention-list'),
         atButton: document.querySelector('.input-btns button[title="@"]'),
         getAllUsers: () => this.getAllUsers(),
+        formatMention: mention => this.mentions?.format(mention) || null,
+        onError: message => this.showError(message),
         getStickers: () => (this.stickerService ? this.stickerService.getStickers() : []),
         getEmojis: () => (this.emojiService ? this.emojiService.getEmojis() : [])
       });
@@ -187,12 +189,14 @@ class UIManager {
         storageBaseUrl: fus
           ? (fus.resourceBaseUrl || fus.baseUrl)
           : 'https://r2.nightcord.de5.net',
-        lookupReply: (ts) => this.lookupReplyMeta(ts)
+        lookupReply: (ts) => this.lookupReplyMeta(ts),
+        bindMention: (element, mention) => this.bindMentionAction(element, mention)
       });
     } else {
       console.warn('SekaiRenderer not available, falling back to basic text rendering');
       this.sekaiRenderer = null;
     }
+    this.mentions = typeof NightcordMentions !== 'undefined' ? new NightcordMentions(this.sekaiRenderer) : null;
 
     // 监听回复跳转事件
     this.setupReplyJumpListener();
@@ -255,6 +259,11 @@ class UIManager {
       );
       if (!exists) {
         this.addChatMessage(data.name, data.message, data.timestamp, undefined, undefined, data.user, data.sender);
+        if (this.mentionsReady && !data.isNako && this.currentUser?.id && data.user?.id
+            && data.user.id !== this.currentUser.id && this.isMentioned(data.message)) {
+          this.showMentionNotice(data);
+          this.eventBus.emit('message:mentioned', data);
+        }
       }
     });
     this.eventBus.on('message:error', (data) => this.showError(data.error));
@@ -262,13 +271,25 @@ class UIManager {
     this.eventBus.on('user:joined', (data) => this.addUserToRoster(data.username, data.user));
     this.eventBus.on('user:quit', (data) => this.removeUserFromRoster(data.username, data.userId));
     this.eventBus.on('session:updated', (data) => {
+      const previousId = this.currentUser?.id;
       this.currentUser = data.user;
       this.addUserToRoster(data.user.displayName, data.user);
+      if (previousId !== data.user.id && this.messages.length && this.elements?.chatlog) this.renderMessages();
     });
     this.eventBus.on('user:profile', (data) => this.addUserToRoster(data.user.displayName, data.user));
     this.eventBus.on('user:rename', (data) => this.handleUserRename(data.oldUsername, data.newUsername));
-    this.eventBus.on('roster:clear', () => this.clearRoster());
+    this.eventBus.on('roster:clear', () => {
+      this.clearRoster();
+      this.mentionsReady = false;
+      this.mentionNotice?.remove();
+    });
+    this.eventBus.on('room:left', () => {
+      this.mentionsReady = false;
+      this.mentionNotice?.remove();
+    });
     this.eventBus.on('room:ready', (data) => {
+      // room:synced also runs after reconnects, when the welcome is already shown.
+      this.mentionsReady = true;
       // data.messages 为服务器返回的最新100条消息，格式应为 [{user, text, timestamp}, ...]
       const room = data.roomname || this.currentRoom || 'nightcord-default';
       this.currentRoom = room;
@@ -308,6 +329,7 @@ class UIManager {
       }
     });
     this.eventBus.on('error', (data) => this.showError(data.message));
+    this.eventBus.on('room:synced', () => { this.mentionsReady = true; });
 
     // Nako AI 事件监听
     this.setupNakoEventListeners();
@@ -995,6 +1017,7 @@ class UIManager {
 
     // Submit message
     chatInput.addEventListener("keydown", async (event) => {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       // 如果提及/贴纸列表正在显示，按 Enter 时不发送消息（交给自动补全处理）
       if (event.key === "Enter" && this.autocomplete && this.autocomplete.isOpen()) {
         return;
@@ -1013,6 +1036,10 @@ class UIManager {
       if (event.key === "Enter" && !event.shiftKey && chatInput.value.trim() !== "") {
         event.preventDefault(); // 阻止 textarea 默认换行行为
         let message = chatInput.value.trim();
+        if (message.length > 256) {
+          this.showError('消息超过 256 字符，请缩短后重试。');
+          return;
+        }
 
         // 检测 /clear 命令（清除 Nako 上下文）
         if (message.match(/^\/clear$/i)) {
@@ -1033,7 +1060,7 @@ class UIManager {
 
         // 检测 AI 触发
         // 使用统一的配置驱动检测，支持：@Nako、@Asagi、@Miku、@汤川唯、/nako、/asagi、/miku、/yui 等
-        const aiTrigger = window.AIConfig.detectAITrigger(message);
+        const aiTrigger = window.AIConfig.detectAITrigger(message, this.mentions);
 
         // 统一处理 AI 调用
         if (aiTrigger) {
@@ -1046,14 +1073,12 @@ class UIManager {
             return;
           }
 
-          // 清空输入框
-          chatInput.value = '';
-          chatInput.style.height = 'auto'; // 重置为单行高度
-
           // 先广播用户的问题（让所有人看到）
-          if (this.onSendMessage) {
-            this.onSendMessage(message);
+          if (!this.onSendMessage || this.onSendMessage(message) === false) {
+            this.showError('消息发送失败，请连接聊天室后重试。');
+            return;
           }
+          this.clearChatInput();
 
           // 触发 AI 调用事件（传递 persona 参数）
           this.eventBus.emit('nako:ask', {
@@ -1107,6 +1132,10 @@ class UIManager {
           // 用户主动发送消息，重置交互时间并标记在底部
           this.isAtBottom = true;
           this.updateUserActivityTime();
+          if (message.length > 256) {
+            this.showError('格式化后的消息超过 256 字符，请缩短后重试。');
+            return;
+          }
           this.onSendMessage(message);
         }
       }
@@ -1961,14 +1990,17 @@ class UIManager {
 
     // 1. 添加在线用户
     this.roster.forEach(u => {
-      allUsers.set(u.name, { name: u.name, status: 'online', avatar: u.avatar, color: u.color });
+      allUsers.set(u.profile?.id || `name:${u.name}`, { ...u, status: 'online' });
     });
 
     // 2. 添加历史消息中的用户（作为离线用户，除非已在线）
-    this.messages.forEach(msg => {
-      if (msg.user && msg.user !== '系统' && !allUsers.has(msg.user)) {
-        const { avatar, color } = this.generateAvatar(msg.user);
-        allUsers.set(msg.user, { name: msg.user, status: 'offline', avatar, color });
+    [...this.messages].reverse().forEach(msg => {
+      const key = msg.profile?.id || `name:${msg.user}`;
+      if (msg.user && msg.user !== '系统' && !allUsers.has(key)) {
+        const profile = this.storage?.getKnownProfile(msg.profile?.id) || msg.profile;
+        const name = profile?.displayName || msg.user;
+        const { avatar, color } = this.generateAvatar(name);
+        allUsers.set(key, { name, profile, status: 'offline', avatar, color });
       }
     });
 
@@ -2101,13 +2133,56 @@ class UIManager {
    * @returns {boolean}
    */
   isMentioned(text) {
-    // 假设当前用户名存储在某个地方，或者通过某种方式获取
-    // 这里暂时简单实现：如果消息包含 "@我的名字"
-    // 由于没有明确的当前用户状态，我们可能需要从 localStorage 或其他地方获取
-    // 暂时假设用户名为 localStorage 中的 'nightcord-username'
-    const myName = localStorage.getItem('nightcord-username');
-    if (!myName) return false;
-    return text.includes(`@${myName}`);
+    let user = this.currentUser;
+    if (!user) {
+      try { user = { displayName: localStorage.getItem('nightcord-username') }; } catch { /* Storage disabled. */ }
+    }
+    return this.mentions?.isMentioned(text, user) || false;
+  }
+
+  bindMentionAction(element, mention) {
+    if (mention.type === 'user' && mention.id) {
+      const profile = this.roster.find(user => user.profile?.id === mention.id)?.profile
+        || this.storage?.getKnownProfile(mention.id)
+        || { id: mention.id, displayName: mention.name };
+      this.profileUI.makeTrigger(element, profile, { fromMessage: true });
+    } else if (mention.type === 'ai' && window.AIConfig.getAIConfig(mention.id)) {
+      element.setAttribute('role', 'button');
+      element.tabIndex = 0;
+      element.setAttribute('aria-label', `向 ${window.AIConfig.getDisplayName(mention.id)} 提问`);
+      const activate = () => this.autocomplete?.insertMention(mention);
+      element.addEventListener('click', activate);
+      element.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(); }
+      });
+    }
+  }
+
+  showMentionNotice(data) {
+    this.mentionNotice?.remove();
+    const notice = document.createElement('div');
+    notice.className = 'mention-notice';
+    notice.setAttribute('role', 'status');
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.textContent = `${data.name} 提到了你 · 查看消息`;
+    open.addEventListener('click', () => {
+      const message = this.messageIndex.get(Number(data.timestamp));
+      if (message) {
+        message.scrollIntoView({ block: 'center' });
+        message.tabIndex = -1;
+        message.focus({ preventScroll: true });
+        notice.remove();
+      }
+    });
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.textContent = '×';
+    dismiss.setAttribute('aria-label', '关闭提及提醒');
+    dismiss.addEventListener('click', () => notice.remove());
+    notice.append(open, dismiss);
+    document.body.appendChild(notice);
+    this.mentionNotice = notice;
   }
 
   /**
@@ -2306,7 +2381,8 @@ class UIManager {
     });
 
     // Mention: keep display name if present
-    plainText = plainText.replace(/<\$SEKAI:Mention:([^>]*):([^>]*)>/gi, (_, desc, payload) => {
+    plainText = plainText.replace(/<\$SEKAI:Mention:([^>:\r\n]*):([^>\r\n]*)>/gi, (_, desc, payload) => {
+      if (/(?:^|;)type=all(?:;|$)/i.test(desc)) return '@everyone';
       const m = /(?:^|;)display=([^;]*)/.exec(desc);
       if (m) {
         try { return '@' + decodeURIComponent(m[1].replace(/\+/g, '%20')); }

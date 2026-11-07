@@ -1125,16 +1125,21 @@
   color: #d4c8ff;
   font-weight: 600;
   font-size: 0.95em;
-  cursor: pointer;
   vertical-align: baseline;
   white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease;
+}
+.sekai-mention[role="button"] {
+  cursor: pointer;
 }
 .sekai-mention:hover,
 .sekai-mention:focus {
   background: rgb(var(--sekai-accent) / 0.45);
   color: #fff;
-  outline: none;
+}
+.sekai-mention:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 .sekai-mention-ai {
   background: rgba(255, 85, 0, 0.22);

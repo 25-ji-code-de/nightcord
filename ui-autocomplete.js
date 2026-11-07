@@ -23,13 +23,15 @@
  */
 (function (global) {
   class AutocompleteManager {
-    constructor({ input, list, atButton, getAllUsers, getStickers, getEmojis } = {}) {
+    constructor({ input, list, atButton, getAllUsers, getStickers, getEmojis, formatMention, onError } = {}) {
       this.input = input;
       this.list = list;
       this.atButton = atButton;
       this.getAllUsers = getAllUsers || (() => []);
       this.getStickers = getStickers || (() => []);
       this.getEmojis = getEmojis || (() => []);
+      this.formatMention = formatMention || (mention => `@${mention.name}`);
+      this.onError = onError || (() => {});
 
       this.autocompleteIndex = 0;
       this.autocompleteType = null; // 'mention' | 'sticker' | 'emoji'
@@ -110,7 +112,7 @@
       const lastAt = text.lastIndexOf('@', cursor - 1);
       if (lastAt !== -1) {
         const query = text.substring(lastAt + 1, cursor);
-        if (!query.includes(' ')) {
+        if (!/[\s<>:]/.test(query) && (lastAt === 0 || /[\s([{，。！？、]/.test(text[lastAt - 1]))) {
           this.autocompleteType = 'mention';
           this.autocompleteStart = lastAt;
           this.showList(query);
@@ -140,6 +142,7 @@
     }
 
     handleNav(e) {
+      if (e.isComposing || e.keyCode === 229) return;
       if (!this.isOpen()) return;
 
       if (e.key === 'Escape') {
@@ -165,7 +168,7 @@
         const selected = items[this.autocompleteIndex];
         if (selected) {
           if (this.autocompleteType === 'mention') {
-            this.completeMention(selected.dataset.name);
+            this.completeMention(selected.dataset.name, selected.dataset.type, selected.dataset.id);
           } else if (this.autocompleteType === 'sticker') {
             this.completeSticker(selected.dataset.code);
           } else if (this.autocompleteType === 'emoji') {
@@ -197,13 +200,20 @@
     }
 
     showMentionList(query) {
-      const allUsers = this.getAllUsers();
+      const allUsers = this.getAllUsers().map(user => ({ ...user, type: 'user', id: user.profile?.id || '' }));
+      allUsers.unshift(
+        { name: 'everyone', type: 'all', id: '', avatar: '@', color: '', label: '所有人' },
+        ...(global.AIConfig?.AI_PERSONAS || []).map(ai => ({
+          name: ai.displayName, type: 'ai', id: ai.persona, avatar: '@', color: '', label: 'AI'
+        }))
+      );
       const lowerQuery = query.toLowerCase();
 
       const matches = allUsers
         .filter(u => u.name.toLowerCase().startsWith(lowerQuery))
         .sort((a, b) => {
-          if (a.status !== b.status) return a.status === 'online' ? -1 : 1;
+          const rank = u => u.type === 'all' ? 0 : u.type === 'ai' ? 1 : u.status === 'online' ? 2 : 3;
+          if (rank(a) !== rank(b)) return rank(a) - rank(b);
           return a.name.localeCompare(b.name);
         });
 
@@ -213,12 +223,13 @@
        * 直接逃出属性上下文 —— 这一处比成员列表那处还危险。
        */
       this.renderItems(matches, (u) => `
-        <div class="mention-item" data-name="${escapeHtml(u.name)}">
+        <div class="mention-item" data-name="${escapeHtml(u.name)}" data-type="${escapeHtml(u.type || 'user')}" data-id="${escapeHtml(u.id || '')}">
           <span class="avatar ${escapeHtml(u.color)}" style="width:24px;height:24px;font-size:12px;line-height:24px;">${escapeHtml(u.avatar)}</span>
-          <span>${escapeHtml(u.name)}</span>
-          <div class="status-indicator" title="${u.status === 'online' ? '在线' : '离线'}"></div>
+          <span class="mention-name">${escapeHtml(u.name)}</span>
+          <span class="mention-detail">${escapeHtml(u.label || u.profile?.username || u.id || '')}</span>
+          <div class="status-indicator" title="${escapeHtml(u.label || (u.status === 'online' ? '在线' : '离线'))}"></div>
         </div>
-      `, (item) => this.completeMention(item.dataset.name));
+      `, (item) => this.completeMention(item.dataset.name, item.dataset.type, item.dataset.id));
     }
 
     showStickerList(query) {
@@ -469,23 +480,31 @@
       this.autocompleteIndex = 0;
     }
 
-    completeMention(username) {
+    completeMention(name, type = 'user', id = '') {
       const input = this.input;
       if (!input) return;
-
       const cursor = input.selectionStart;
-      const text = input.value;
-      const lastAt = text.lastIndexOf('@', cursor - 1);
+      const lastAt = input.value.lastIndexOf('@', cursor - 1);
+      if (lastAt < 0) return;
+      this.insertMention({ name, type, id }, lastAt, cursor);
+    }
 
-      const before = text.substring(0, lastAt);
-      const after = text.substring(cursor);
-
-      input.value = `${before}@${username} ${after}`;
+    insertMention(mention, start = this.input?.selectionStart, end = this.input?.selectionEnd) {
+      const input = this.input;
+      if (!input) return;
+      const token = this.formatMention(mention);
+      const value = input.value.slice(0, start) + token + ' ' + input.value.slice(end);
+      const limit = input.maxLength > 0 ? input.maxLength : 256;
+      if (!token || value.length > limit) {
+        this.onError('消息剩余空间不足，请缩短内容后再添加提及。');
+        return;
+      }
+      input.value = value;
       this.hideList();
       input.focus();
-
-      const newCursorPos = lastAt + username.length + 2;
+      const newCursorPos = start + token.length + 1;
       input.setSelectionRange(newCursorPos, newCursorPos);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     completeSticker(code) {

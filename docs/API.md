@@ -139,6 +139,7 @@ NightcordManager 通过 EventBus 发出以下事件：
 | `user:quit` | `{ username }` | 有用户退出 |
 | `room:joining` | `{ roomname }` | 正在加入房间 |
 | `room:ready` | `{ roomname, isPrivate }` | 房间准备就绪 |
+| `room:synced` | `{ roomname }` | 当前连接的历史与成员同步结束，重连时也触发 |
 | `room:left` | `{ roomname }` | 离开房间 |
 | `message:received` | `{ name, message, timestamp }` | 收到消息 |
 | `message:sent` | `{ message }` | 发送消息 |
@@ -312,6 +313,7 @@ ChatRoomManager 通过 EventBus 发出以下事件：
 | `user:rename` | `{ oldUsername, newUsername }` | 用户重命名 |
 | `room:joining` | `{ roomname }` | 正在加入房间 |
 | `room:ready` | `{ roomname, isPrivate }` | 房间准备就绪 |
+| `room:synced` | `{ roomname }` | 当前连接同步完成，可开始接收实时提及提醒 |
 | `room:left` | `{ roomname }` | 离开房间 |
 | `message:received` | `{ name, message, timestamp }` | 收到消息 |
 | `message:sent` | `{ message }` | 发送消息 |

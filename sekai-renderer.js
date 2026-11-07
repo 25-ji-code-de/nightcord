@@ -100,6 +100,7 @@ class SekaiRenderer {
     this.storageBaseUrl = (options.storageBaseUrl || this.resourceBaseUrl).replace(/\/$/, '');
     // Optional: (timestamp) => { name?: string, preview?: string } | null
     this.lookupReply = typeof options.lookupReply === 'function' ? options.lookupReply : null;
+    this.bindMention = typeof options.bindMention === 'function' ? options.bindMention : null;
 
     // Spec §8.4 caps
     this.maxTokensPerMessage = options.maxTokensPerMessage || 50;
@@ -1255,19 +1256,18 @@ class SekaiRenderer {
   }
 
   /**
-   * Mention chip (render-only this phase).
+   * Mention chip. The host binds identity/profile and composer actions.
    */
   renderMention(desc, payload) {
     const mType = (desc.type || 'user').toLowerCase();
     const display = desc.display || payload || mType;
     const span = document.createElement('span');
     span.className = `sekai-mention sekai-mention-${mType}`;
-    span.setAttribute('role', 'link');
-    span.setAttribute('tabindex', '0');
     span.dataset.mentionType = mType;
     span.dataset.mentionId = payload || '';
     span.textContent = mType === 'all' ? '@everyone' : `@${display}`;
     span.title = mType === 'ai' ? `AI: ${display}` : `Mention: ${display}`;
+    this.bindMention?.(span, { type: mType, id: payload || '', name: display });
     return span;
   }
 

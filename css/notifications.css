@@ -1,5 +1,42 @@
 /* --- Update Toast (Version Checker) --- */
 
+.mention-notice {
+  position: fixed;
+  top: max(72px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 1000;
+  display: flex;
+  max-width: min(420px, calc(100vw - 32px));
+  background: rgb(var(--sekai-surface-raised, 48 40 61));
+  color: rgb(var(--sekai-fg, 255 255 255));
+  border: 1px solid rgb(var(--sekai-accent) / 0.6);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 0.3);
+}
+
+.mention-notice button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.mention-notice button:hover,
+.mention-notice button:active {
+  background: rgb(var(--sekai-accent) / 0.25);
+}
+
+.mention-notice button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -3px;
+}
+
 .sekai-update-toast {
   position: fixed;
   bottom: 24px;

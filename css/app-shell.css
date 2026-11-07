@@ -671,6 +671,7 @@ body {
 
 .mention-item {
   padding: 8px 12px;
+  min-height: 44px;
   cursor: pointer;
   color: #dcddde;
   display: flex;
@@ -686,6 +687,7 @@ body {
 }
 
 .mention-item .avatar {
+  flex-shrink: 0;
   width: 24px;
   height: 24px;
   font-size: 12px;
@@ -697,6 +699,23 @@ body {
   height: 8px;
   border-radius: 50%;
   margin-left: auto;
+}
+
+.mention-detail {
+  margin-left: auto;
+  color: rgb(var(--sekai-fg-muted, 184 176 197));
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 45%;
+}
+
+.mention-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mention-item.online .status-indicator {

@@ -284,7 +284,7 @@ class Nightcord {
     if (success) {
       this.ui.setCurrentRoom(this.chatRoom.roomname);
       this.ui.setupChatRoom((message) => {
-        this.chatRoom.sendMessage(message);
+        return this.chatRoom.sendMessage(message);
       }, (username) => {
         this.chatRoom.setUser(username);
       });

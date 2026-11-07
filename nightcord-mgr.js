@@ -229,6 +229,7 @@ class NightcordManager {
       this.roster.delete(data.userId || data.quit);
       this.eventBus.emit('user:quit', { username: data.quit, userId: data.userId });
     } else if (data.ready) {
+      this.eventBus.emit('room:synced', { roomname: this.roomname });
       if (!this.wroteWelcomeMessages) {
         this.wroteWelcomeMessages = true;
         this.eventBus.emit('room:ready', { 

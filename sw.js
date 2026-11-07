@@ -66,6 +66,7 @@ const PRECACHE = [
   '/emoji-data.js',
   '/emoji-service.js',
   '/sekai-renderer.js',
+  '/mention-service.js',
   '/sekai-image-viewer.js',
   '/ui-autocomplete.js',
   '/user-profile.js',

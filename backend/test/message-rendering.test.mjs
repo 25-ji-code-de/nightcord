@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 
 const scripts = [
   'purify.js', 'sekai-escape.js', 'performance-optimizer.js', 'event-bus.js',
-  'storage-manager.js', 'file-upload-service.js', 'sekai-renderer.js',
+  'ai-config.js', 'storage-manager.js', 'file-upload-service.js', 'sekai-renderer.js',
   'user-profile.js', 'ui-manager.js',
 ];
 
@@ -66,6 +66,127 @@ test('message rendering batches updates without losing or duplicating messages',
     });
     return page;
   }
+
+  await t.test('AI echoes confirm one message through replay and reload', async t => {
+    const page = await fixture(t);
+    const result = await page.evaluate(async () => {
+      ui.currentRoom = 'ai-test';
+      ui.currentUser = { id: 'sekai:one', displayName: '47177171806', authenticated: true };
+      ui.onSendMessage = () => true;
+      const text = '嗯……我在。\n怎么突然@我……是有什么事吗？';
+      ui.eventBus.emit('nako:stream:start', { messageId: 'ai-1', user: '汤川唯' });
+      ui.eventBus.emit('nako:stream:chunk', { messageId: 'ai-1', chunk: text });
+      ui.eventBus.emit('nako:stream:end', { messageId: 'ai-1', user: '汤川唯', fullContent: text, reasoning: 'local detail' });
+      const localTimestamp = ui.messages[0].timestamp;
+      const serverTimestamp = localTimestamp - 1000;
+      const echo = { name: '汤川唯', message: text, timestamp: serverTimestamp, isNako: true, sender: ui.currentUser };
+      ui.eventBus.emit('message:received', echo);
+      await nextFrame();
+      const confirmed = {
+        count: rows().length,
+        timestamp: ui.messages[0].timestamp,
+        sender: ui.messages[0].sender?.id,
+        badge: ui.elements.chatlog.querySelector('.identity-badge')?.textContent,
+        reasoning: ui.elements.chatlog.querySelector('.nako-thinking-icon')?.title,
+        preview: ui.lookupReplyMeta(serverTimestamp),
+        staleIndex: ui.messageIndex.has(localTimestamp),
+      };
+      // A reconnect replays the same server message after temporary UI state is gone.
+      ui.setCurrentRoom('ai-test');
+      await nextFrame();
+      ui.eventBus.emit('message:received', echo);
+      await nextFrame();
+      const stored = ui.storage.loadMessages('ai-test');
+      return { confirmed, rows: rows(), stored, serverTimestamp };
+    });
+    assert.equal(result.confirmed.count, 1);
+    assert.equal(result.confirmed.timestamp, result.serverTimestamp);
+    assert.equal(result.confirmed.sender, 'sekai:one');
+    assert.equal(result.confirmed.badge, '由 47177171806 转发');
+    assert.equal(result.confirmed.reasoning, 'local detail');
+    assert.equal(result.confirmed.preview.name, '汤川唯');
+    assert.equal(result.confirmed.staleIndex, false);
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.stored.length, 1);
+    assert.equal(result.stored[0].timestamp, result.serverTimestamp);
+    assert.equal(result.stored[0].sender.id, 'sekai:one');
+  });
+
+  await t.test('identical AI replies from other senders or personas are kept', async t => {
+    const page = await fixture(t);
+    const result = await page.evaluate(async () => {
+      ui.currentRoom = 'ai-test';
+      ui.currentUser = { id: 'sekai:one', displayName: 'Same', authenticated: true };
+      ui.onSendMessage = () => true;
+      const other = { id: 'guest:two', displayName: 'Same', authenticated: false };
+      const text = '你好';
+      ui.eventBus.emit('nako:stream:start', { messageId: 'ai-1', user: '汤川唯' });
+      ui.eventBus.emit('nako:stream:end', { messageId: 'ai-1', user: '汤川唯', fullContent: text });
+      ui.startStreamingMessage('still-streaming', 'Miku');
+      ui.eventBus.emit('message:received', { name: '汤川唯', message: text, timestamp: 100, isNako: true, sender: other });
+      ui.eventBus.emit('message:received', { name: 'Nako', message: text, timestamp: 101, isNako: true, sender: ui.currentUser });
+      ui.eventBus.emit('message:received', { name: '汤川唯', message: text, timestamp: 102, isNako: true, sender: ui.currentUser });
+      await nextFrame();
+      return {
+        replies: ui.messages.map(m => ({ user: m.user, sender: m.sender?.id, timestamp: m.timestamp })),
+        count: rows().length,
+        streamPresent: !!ui.elements.chatlog.querySelector('[data-message-id="still-streaming"]'),
+      };
+    });
+    assert.equal(result.replies.length, 3);
+    assert.equal(result.count, 3);
+    assert.deepEqual(result.replies.map(m => [m.user, m.sender, m.timestamp]).sort(), [
+      ['汤川唯', 'sekai:one', 102], ['汤川唯', 'guest:two', 100], ['Nako', 'sekai:one', 101],
+    ].sort());
+    assert.equal(result.streamPresent, true);
+  });
+
+  await t.test('unconfirmed AI previews are not persisted or hidden by a short timeout', async t => {
+    const page = await fixture(t);
+    await page.evaluate(async () => {
+      ui.currentRoom = 'ai-test';
+      ui.currentUser = { id: 'sekai:one', displayName: 'User', authenticated: true };
+      ui.onSendMessage = () => true;
+      ui.eventBus.emit('nako:stream:start', { messageId: 'ai-1', user: '汤川唯' });
+      ui.eventBus.emit('nako:stream:end', { messageId: 'ai-1', user: '汤川唯', fullContent: '迟到的回复' });
+      ui.renderMessages();
+      await nextFrame();
+    });
+    assert.equal(await page.evaluate(() => ui.storage.loadMessages('ai-test').length), 0);
+    await page.waitForTimeout(5200);
+    const result = await page.evaluate(async () => {
+      ui.eventBus.emit('message:received', { name: '汤川唯', message: '迟到的回复', timestamp: 103, isNako: true, sender: ui.currentUser });
+      await nextFrame();
+      return { count: rows().length, stored: ui.storage.loadMessages('ai-test'), timestamp: ui.messages[0].timestamp };
+    });
+    assert.equal(result.count, 1);
+    assert.equal(result.stored.length, 1);
+    assert.equal(result.timestamp, 103);
+  });
+
+  await t.test('separate identical calls each receive their own confirmation', async t => {
+    const page = await fixture(t);
+    const result = await page.evaluate(async () => {
+      ui.currentRoom = 'ai-test';
+      ui.currentUser = { id: 'sekai:one', displayName: 'User', authenticated: true };
+      ui.onSendMessage = () => true;
+      for (const messageId of ['ai-1', 'ai-2']) {
+        ui.eventBus.emit('nako:stream:start', { messageId, user: '汤川唯' });
+        ui.eventBus.emit('nako:stream:end', { messageId, user: '汤川唯', fullContent: '你好' });
+      }
+      const echo = { name: '汤川唯', message: '你好', timestamp: 104, isNako: true, sender: ui.currentUser };
+      ui.eventBus.emit('message:received', echo);
+      ui.eventBus.emit('message:received', echo);
+      const afterReplay = ui.storage.loadMessages('ai-test').length;
+      ui.eventBus.emit('message:received', { ...echo, timestamp: 105 });
+      await nextFrame();
+      return { count: rows().length, timestamps: ui.messages.map(m => m.timestamp), stored: ui.storage.loadMessages('ai-test'), afterReplay };
+    });
+    assert.equal(result.afterReplay, 1);
+    assert.equal(result.count, 2);
+    assert.deepEqual(result.timestamps, [104, 105]);
+    assert.deepEqual(result.stored.map(m => m.timestamp), [104, 105]);
+  });
 
   for (const order of ['ready-first', 'message-first']) {
     await t.test(`room readiness and incoming messages in one frame: ${order}`, async t => {

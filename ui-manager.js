@@ -66,8 +66,8 @@ class UIManager {
     this.scrollThreshold = 150; // 距离底部超过此像素数认为在阅读历史消息
     this.interactionTimeWindow = 5000; // 5秒内有用户交互活动则不自动滚动
 
-    // Nako AI 相关：跟踪本地显示的消息，用于去重
-    this.localNakoMessages = new Map(); // fullContent -> { timestamp, messageId }
+    // 未收到服务器确认的 AI 预览；同内容的多次调用分别跟踪。
+    this.localNakoMessages = new Map(); // messageId -> { message, senderId, room }
 
     // 文件上传服务：上传走 storage，公开资源解析走 r2 门面（SEKAI v2）
     this.fileUploadService = new FileUploadService({
@@ -232,38 +232,21 @@ class UIManager {
       // 只存储非系统消息
       if (data.name === '系统') return;
 
-      // 如果是 Nako 消息，检查是否是本地刚发送的
-      if (data.isNako) {
-        const local = this.localNakoMessages.get(data.message);
-        if (local) {
-          // 这是本地刚显示过的 Nako 消息，忽略广播
-          this.localNakoMessages.delete(data.message);
-          return;
-        }
-
-        // 检查是否已经有本地流式消息元素（通过内容匹配）
-        const existingLocalMsg = Array.from(this.elements.chatlog.querySelectorAll('[data-local-nako-message="true"]'))
-          .find(el => {
-            const textEl = el.querySelector('.message-text');
-            return textEl && textEl.textContent.trim() === data.message.trim();
-          });
-
-        if (existingLocalMsg) {
-          return;
-        }
-      }
-
-      // 检查本地是否已存在该消息（通过时间戳和内容简单去重）
+      // 已确认消息的重放不能被误认作下一次同内容调用的回传。
       const exists = this.messages.some(
-        m => m.text === data.message && m.user === data.name && m.profile?.id === data.user?.id && m.timestamp === data.timestamp
+        m => !m.localNakoMessageId && m.text === data.message && m.user === data.name
+          && m.profile?.id === data.user?.id && m.sender?.id === data.sender?.id && m.timestamp === data.timestamp
       );
-      if (!exists) {
-        this.addChatMessage(data.name, data.message, data.timestamp, undefined, undefined, data.user, data.sender);
-        if (this.mentionsReady && !data.isNako && this.currentUser?.id && data.user?.id
-            && data.user.id !== this.currentUser.id && this.isMentioned(data.message)) {
-          this.showMentionNotice(data);
-          this.eventBus.emit('message:mentioned', data);
-        }
+      if (exists) return;
+
+      // 回传确认原预览，使用服务器时间和实际代发者，不能直接丢弃。
+      if (data.isNako && this.confirmLocalNakoMessage(data)) return;
+
+      this.addChatMessage(data.name, data.message, data.timestamp, undefined, undefined, data.user, data.sender);
+      if (this.mentionsReady && !data.isNako && this.currentUser?.id && data.user?.id
+          && data.user.id !== this.currentUser.id && this.isMentioned(data.message)) {
+        this.showMentionNotice(data);
+        this.eventBus.emit('message:mentioned', data);
       }
     });
     this.eventBus.on('message:error', (data) => this.showError(data.error));
@@ -381,12 +364,6 @@ class UIManager {
       const cleanContent = data.fullContent.trim();
       const reasoning = data.reasoning || ''; // 思考过程
 
-      // 标记为本地已显示，用于去重
-      this.localNakoMessages.set(cleanContent, {
-        timestamp: Date.now(),
-        messageId: data.messageId
-      });
-
       // 完成流式显示
       this.finishStreamingMessage(data.messageId, data.user, cleanContent, reasoning);
 
@@ -394,11 +371,6 @@ class UIManager {
       if (this.onSendMessage) {
         this.onSendMessage(`[${data.user}]${cleanContent}`);
       }
-
-      // 5秒后清理去重标记（防止内存泄漏）
-      setTimeout(() => {
-        this.localNakoMessages.delete(cleanContent);
-      }, 5000);
     });
 
     // Nako 错误
@@ -610,6 +582,8 @@ class UIManager {
   }
 
   setCurrentRoom(roomname) {
+    // 下方会从缓存重建模型，未确认预览不跨房间/重新加载保留。
+    this.localNakoMessages.clear();
     this.currentRoom = roomname;
     this.elements.roomName.textContent = roomname;
     // 切换到新房间时，尝试从本地存储加载消息并渲染（若随后有 room:ready 会被覆盖为合并后的消息）
@@ -935,8 +909,8 @@ class UIManager {
       delete msgDiv.dataset.messageId;
       msgDiv.classList.remove('streaming');
 
-      // 标记这个消息元素，避免被 message:received 重复添加
-      msgDiv.dataset.localNakoMessage = 'true';
+      // 确认回传时精确定位预览，不依赖渲染后的 textContent。
+      msgDiv.dataset.localNakoMessageId = messageId;
 
       // 更新消息内容（去掉开头和结尾的空白）
       const textElement = msgDiv.querySelector('.message-text');
@@ -965,17 +939,57 @@ class UIManager {
       }
     }
 
-    // 保存到 messages 数组和 localStorage（使用清理后的内容）
+    // 预览只留在内存中；服务器确认后才保存，避免刷新回放出两条历史。
     const cleanContent = fullContent.trim();
     const messageData = this.createMessageData(user, cleanContent, Date.now());
+    messageData.localNakoMessageId = messageId;
     this.messages.push(messageData);
+    this.localNakoMessages.set(messageId, {
+      message: messageData,
+      senderId: this.currentUser?.id,
+      room: this.currentRoom
+    });
+  }
 
-    const msgObj = {
-      user: user,
-      text: cleanContent,
-      timestamp: messageData.timestamp
-    };
-    this.saveMessageToStorage(msgObj);
+  /** 将自己的 AI 回传合并到原预览，保留其他用户和其他人设的同内容消息。 */
+  confirmLocalNakoMessage(data) {
+    if (!data.sender?.id) return false;
+
+    for (const [messageId, local] of this.localNakoMessages) {
+      const message = local.message;
+      if (local.room !== this.currentRoom || !this.messages.includes(message)) {
+        this.localNakoMessages.delete(messageId);
+        continue;
+      }
+      if (local.senderId !== data.sender.id || message.user !== data.name || message.text !== data.message) continue;
+
+      this.localNakoMessages.delete(messageId);
+      const preview = this.elements.chatlog.querySelector(`[data-local-nako-message-id="${messageId}"]`);
+      const thinkingIcon = preview?.querySelector('.nako-thinking-icon');
+      if (preview) {
+        const oldTimestamp = preview.dataset.timestamp;
+        for (const key of [oldTimestamp, Number(oldTimestamp)]) {
+          if (this.messageIndex.get(key) === preview) {
+            this.messageIndex.delete(key);
+            this.messageMeta.delete(key);
+          }
+        }
+      }
+      message.timestamp = data.timestamp;
+      message.sender = data.sender;
+      delete message.localNakoMessageId;
+      this.saveMessageToStorage({ user: message.user, text: message.text, timestamp: message.timestamp, sender: message.sender });
+
+      if (preview) {
+        const confirmed = this.createMessageElement(message);
+        if (thinkingIcon) confirmed.querySelector('.message-header').appendChild(thinkingIcon);
+        preview.replaceWith(confirmed);
+      } else {
+        this.appendMessageToDOM(message);
+      }
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -2195,6 +2209,7 @@ class UIManager {
   createMessageElement(msg) {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message';
+    if (msg.localNakoMessageId) msgDiv.dataset.localNakoMessageId = msg.localNakoMessageId;
 
     // 存储 timestamp 用于回复跳转 + v2 Reply 预览元数据
     if (msg.timestamp) {

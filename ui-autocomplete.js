@@ -200,7 +200,18 @@
     }
 
     showMentionList(query) {
-      const allUsers = this.getAllUsers().map(user => ({ ...user, type: 'user', id: user.profile?.id || '' }));
+      const allUsers = this.getAllUsers().map(user => {
+        const profile = user.profile;
+        const id = profile?.id || '';
+        const kind = profile ? (profile.authenticated ? '账号' : '访客') : '成员';
+        const identifier = profile?.username ? `@${profile.username}` : id.split(':').slice(1).join(':');
+        const shortIdentifier = profile?.username ? identifier : identifier.slice(-8);
+        return {
+          ...user, type: 'user', id,
+          detail: [kind, shortIdentifier].filter(Boolean).join(' · '),
+          detailTitle: [kind, identifier, user.status === 'online' ? '在线' : '离线'].filter(Boolean).join(' · ')
+        };
+      });
       allUsers.unshift(
         { name: 'everyone', type: 'all', id: '', avatar: '@', color: '', label: '所有人' },
         ...(global.AIConfig?.AI_PERSONAS || []).map(ai => ({
@@ -223,10 +234,12 @@
        * 直接逃出属性上下文 —— 这一处比成员列表那处还危险。
        */
       this.renderItems(matches, (u) => `
-        <div class="mention-item" data-name="${escapeHtml(u.name)}" data-type="${escapeHtml(u.type || 'user')}" data-id="${escapeHtml(u.id || '')}">
+        <div class="mention-item" data-name="${escapeHtml(u.name)}" data-type="${escapeHtml(u.type || 'user')}" data-id="${escapeHtml(u.id || '')}" data-status="${escapeHtml(u.status || '')}" title="${escapeHtml(u.detailTitle || u.label || '')}">
           <span class="avatar ${escapeHtml(u.color)}" style="width:24px;height:24px;font-size:12px;line-height:24px;">${escapeHtml(u.avatar)}</span>
-          <span class="mention-name">${escapeHtml(u.name)}</span>
-          <span class="mention-detail">${escapeHtml(u.label || u.profile?.username || u.id || '')}</span>
+          <span class="mention-identity">
+            <span class="mention-name">${escapeHtml(u.name)}</span>
+            <span class="mention-detail">${escapeHtml(u.label || u.detail || '')}</span>
+          </span>
           <div class="status-indicator" title="${escapeHtml(u.label || (u.status === 'online' ? '在线' : '离线'))}"></div>
         </div>
       `, (item) => this.completeMention(item.dataset.name, item.dataset.type, item.dataset.id));

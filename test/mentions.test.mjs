@@ -93,6 +93,10 @@ test('autocomplete candidates preserve same-name identities and prefer current n
     messages: [
       { user: 'Old', profile: { id: 'sekai:one', displayName: 'Old' } },
       { user: 'Same', profile: { id: 'guest:two', displayName: 'Same' } },
+      { user: 'Same', text: 'Legacy message without identity' },
+      { user: 'Old', text: 'An old alias is not a new person' },
+      { user: 'Nako', text: 'An AI speaker is not a user candidate' },
+      { user: 'Unknown', text: 'No ID to target' },
     ],
   });
   const users = ui.getAllUsers();

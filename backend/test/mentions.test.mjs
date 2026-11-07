@@ -58,8 +58,21 @@ test('mention composition, delivery and actions', { timeout: 60_000 }, async t =
   await t.test('same-name users stay separate and selection emits an intact identity token', async t => {
     const page = await fixture(t);
     const input = page.locator('#messageInput');
+    await page.evaluate(() => {
+      ui.messages.push(
+        { user: 'Same', text: 'legacy without ID' },
+        { user: 'Old name', text: 'legacy alias' },
+        { user: 'Nako', text: 'AI reply' },
+      );
+    });
     await input.fill('@Same');
     assert.equal(await page.locator('.mention-item[data-type="user"]').count(), 2);
+    assert.equal(await page.locator('.mention-item[data-id="sekai:one"] .mention-detail').textContent(), '账号 · @member-one');
+    assert.equal(await page.locator('.mention-item[data-id="guest:two"] .mention-detail').textContent(), '访客 · two');
+    await input.fill('@Nako');
+    assert.equal(await page.locator('.mention-item').count(), 1);
+    assert.equal(await page.locator('.mention-item').getAttribute('data-type'), 'ai');
+    await input.fill('@Same');
     await page.locator('.mention-item[data-id="guest:two"]').click();
     assert.match(await input.inputValue(), /type=user;display=Same:guest:two>/);
     await page.keyboard.insertText('你好');

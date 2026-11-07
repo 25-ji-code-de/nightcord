@@ -701,14 +701,20 @@ body {
   margin-left: auto;
 }
 
+.mention-identity {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .mention-detail {
-  margin-left: auto;
   color: rgb(var(--sekai-fg-muted, 184 176 197));
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 45%;
 }
 
 .mention-name {
@@ -718,7 +724,8 @@ body {
   white-space: nowrap;
 }
 
-.mention-item.online .status-indicator {
+.mention-item.online .status-indicator,
+.mention-item[data-status="online"] .status-indicator {
   background-color: #43b581;
 }
 
@@ -726,7 +733,8 @@ body {
   opacity: 0.6;
 }
 
-.mention-item.offline .status-indicator {
+.mention-item.offline .status-indicator,
+.mention-item[data-status="offline"] .status-indicator {
   background-color: #747f8d;
 }
 

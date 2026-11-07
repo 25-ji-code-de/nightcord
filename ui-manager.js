@@ -1993,9 +1993,11 @@ class UIManager {
       allUsers.set(u.profile?.id || `name:${u.name}`, { ...u, status: 'online' });
     });
 
-    // 2. 添加历史消息中的用户（作为离线用户，除非已在线）
+    // Historical names alone cannot identify a recipient. They also include AI
+    // speakers and aliases from before identity IDs were stored with messages.
     [...this.messages].reverse().forEach(msg => {
-      const key = msg.profile?.id || `name:${msg.user}`;
+      const key = msg.profile?.id;
+      if (!key) return;
       if (msg.user && msg.user !== '系统' && !allUsers.has(key)) {
         const profile = this.storage?.getKnownProfile(msg.profile?.id) || msg.profile;
         const name = profile?.displayName || msg.user;

@@ -38,6 +38,16 @@
 每次发送调用一个 AI，接收消息不会重复调用；`@Nako`、`/nako` 等原有写法仍可使用。
 `role` 类型保留渲染支持，等待自定义身份组功能，不会触发群体提醒。
 
+### Emoji
+
+输入 `::` 可打开表情选择器，也可以输入 `:joy:` 等名称。直接输入或粘贴的 Unicode emoji
+会使用同一套表情图片显示，例如 `😂` 与 `:joy:` 显示相同。复制消息时保留输入的原文，
+所以输入的 `😂` 复制后仍是 `😂`。表情库尚未收录的组合或肤色变体保留原样。
+
+Unicode 映射由 `scripts/generate-emoji-unicode.mjs` 生成。更新表情库后，下载
+[Unicode Emoji 17.0 数据](https://unicode.org/Public/17.0.0/emoji/emoji-test.txt)，
+运行 `node scripts/generate-emoji-unicode.mjs <emoji-test.txt 路径>` 即可更新映射。
+
 ## 📁 项目结构
 
 ```

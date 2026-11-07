@@ -16,6 +16,7 @@ before(() => {
   const window = {};
   const load = (file) => new Function('window', readFileSync(join(root, file), 'utf8'))(window);
   load('emoji-data.js');
+  load('emoji-unicode-data.js');
   load('emoji-service.js');
   EmojiService = window.EmojiService;
 });
@@ -51,5 +52,49 @@ describe('EmojiService', () => {
       tokens.filter((token) => token.type === 'emoji').map((token) => token.emoji.shortcode),
       ['piñata', 'curaçao']
     );
+  });
+
+  test('renders Unicode emoji and shortcodes with the same catalog entry', () => {
+    const service = new EmojiService();
+    const tokens = service.tokenize('你好😂 :joy:🎉');
+    assert.deepEqual(tokens.map(token => token.type), ['text', 'emoji', 'text', 'emoji', 'emoji']);
+    assert.equal(tokens[1].emoji, tokens[3].emoji);
+    assert.equal(tokens[1].raw, '😂');
+    assert.equal(tokens[4].emoji.shortcode, 'tada');
+    assert.equal(tokens.map(token => token.raw || token.content).join(''), '你好😂 :joy:🎉');
+  });
+
+  test('every standard catalog emoji maps back to its own image', () => {
+    const service = new EmojiService();
+    const standard = service.getEmojis().filter(emoji => emoji.unicode);
+    assert.equal(standard.length, 1894);
+    for (const emoji of standard) {
+      const tokens = service.tokenize(emoji.unicode);
+      assert.equal(tokens.length, 1, emoji.shortcode);
+      assert.equal(tokens[0].emoji, emoji, emoji.shortcode);
+      assert.equal(tokens[0].raw, emoji.unicode, emoji.shortcode);
+    }
+  });
+
+  test('recognizes flags, keycaps, and ZWJ sequences as whole emoji', () => {
+    const service = new EmojiService();
+    const tokens = service.tokenize('🇨🇳👨‍👩‍👧‍👦1️⃣1⃣#️⃣*️⃣👩‍💻');
+    assert.deepEqual(tokens.map(token => token.emoji?.shortcode), [
+      'china', 'family_man_woman_girl_boy', 'one', 'one', 'hash', 'asterisk', 'woman_technologist'
+    ]);
+  });
+
+  test('supports emoji presentation variants without changing their source text', () => {
+    const service = new EmojiService();
+    const tokens = service.tokenize('❤❤️☀☀️');
+    assert.deepEqual(tokens.map(token => token.emoji?.shortcode), ['heart', 'heart', 'sun', 'sun']);
+    assert.deepEqual(tokens.map(token => token.raw), ['❤', '❤️', '☀', '☀️']);
+  });
+
+  test('preserves unavailable skin tones, unknown combinations, and text presentation', () => {
+    const service = new EmojiService();
+    const text = '👍🏽 👩🏿‍💻 👩‍🦰‍🚀 ©︎ 123 # * :unknown:';
+    assert.deepEqual(service.tokenize(text), [{ type: 'text', content: text }]);
+    assert.equal(service.tokenize('👍')[0].emoji.shortcode, '+1');
   });
 });

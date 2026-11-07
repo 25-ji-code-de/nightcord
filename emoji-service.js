@@ -5,31 +5,37 @@
 
 (function (global) {
   const SHORTCODE_RE = /:([\p{L}\p{N}_+-]+):/gu;
-  const SKIP_SELECTOR = 'code, a, .sekai-spoiler';
+  const UNICODE_EMOJI_RE = /[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u;
+  const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+  const SKIP_SELECTOR = 'code, pre, a, .sekai-spoiler, .nightcord-emoji';
+  const normalizeUnicode = text => text.replace(/\ufe0f/g, '');
 
   class EmojiService {
-    constructor({ data = global.NightcordEmojiData, baseUrl } = {}) {
+    constructor({ data = global.NightcordEmojiData, unicode = global.NightcordEmojiUnicode, baseUrl } = {}) {
       this.data = data || { categories: {} };
       this.baseUrl = (baseUrl || this.data.baseUrl || 'https://emojis.nightcord.de5.net').replace(/\/$/, '');
       this.emojiByShortcode = new Map();
+      this.emojiByUnicode = new Map();
       this.emojis = [];
 
       for (const [category, shortcodes] of Object.entries(this.data.categories || {})) {
         if (!Array.isArray(shortcodes)) continue;
         for (const shortcode of shortcodes) {
-          const emoji = this._createEntry(shortcode, category, shortcode);
+          const emoji = this._createEntry(shortcode, category, shortcode, unicode?.[shortcode]);
           this.emojiByShortcode.set(shortcode.toLowerCase(), emoji);
+          if (emoji.unicode) this.emojiByUnicode.set(normalizeUnicode(emoji.unicode), emoji);
           this.emojis.push(emoji);
         }
       }
 
     }
 
-    _createEntry(shortcode, category, filename) {
+    _createEntry(shortcode, category, filename, unicode) {
       const path = `${encodeURIComponent(category)}/${encodeURIComponent(filename)}.png`;
       return Object.freeze({
         shortcode,
         category,
+        unicode,
         path,
         url: `${this.baseUrl}/${path}`
       });
@@ -45,9 +51,10 @@
     }
 
     tokenize(text) {
-      if (typeof text !== 'string' || !text.includes(':')) {
+      if (typeof text !== 'string') {
         return [{ type: 'text', content: text || '' }];
       }
+      if (!text.includes(':')) return this._tokenizeUnicode(text);
 
       const tokens = [];
       let lastIndex = 0;
@@ -64,17 +71,36 @@
         lastIndex = SHORTCODE_RE.lastIndex;
       }
 
+      if (lastIndex === 0) return this._tokenizeUnicode(text);
+      if (lastIndex < text.length) tokens.push({ type: 'text', content: text.slice(lastIndex) });
+      return tokens.flatMap(token => token.type === 'text' ? this._tokenizeUnicode(token.content) : token);
+    }
+
+    _tokenizeUnicode(text) {
+      if (!UNICODE_EMOJI_RE.test(text)) return [{ type: 'text', content: text }];
+
+      const tokens = [];
+      let lastIndex = 0;
+      // Resolve whole graphemes so unsupported skin tones and ZWJ sequences
+      // remain intact instead of rendering only part of an emoji.
+      for (const { segment, index } of GRAPHEMES.segment(text)) {
+        const emoji = this.emojiByUnicode.get(normalizeUnicode(segment));
+        if (!emoji) continue;
+        if (index > lastIndex) tokens.push({ type: 'text', content: text.slice(lastIndex, index) });
+        tokens.push({ type: 'emoji', emoji, raw: segment });
+        lastIndex = index + segment.length;
+      }
       if (lastIndex === 0) return [{ type: 'text', content: text }];
       if (lastIndex < text.length) tokens.push({ type: 'text', content: text.slice(lastIndex) });
       return tokens;
     }
 
-    createEmojiNode(emoji, rawShortcode) {
+    createEmojiNode(emoji, rawText) {
       const wrapper = document.createElement('span');
       wrapper.className = 'nightcord-emoji';
-      wrapper.title = rawShortcode;
+      wrapper.title = `:${emoji.shortcode}:`;
       wrapper.setAttribute('role', 'img');
-      wrapper.setAttribute('aria-label', rawShortcode);
+      wrapper.setAttribute('aria-label', rawText);
 
       const image = document.createElement('img');
       image.className = 'nightcord-emoji__image';
@@ -89,10 +115,11 @@
 
       const accessibleText = document.createElement('span');
       accessibleText.className = 'nightcord-emoji__shortcode';
-      accessibleText.textContent = rawShortcode;
+      // Keep the source text in the DOM for native text selection and copying.
+      accessibleText.textContent = rawText;
 
       image.addEventListener('error', () => {
-        wrapper.replaceWith(document.createTextNode(rawShortcode));
+        wrapper.replaceWith(document.createTextNode(rawText));
       }, { once: true });
 
       wrapper.appendChild(image);

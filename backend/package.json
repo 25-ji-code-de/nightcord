@@ -8,7 +8,7 @@
     "check": "npm run types && tsc --noEmit",
     "pretest": "wrangler deploy --dry-run --outdir dist",
     "test": "node --test test/guest.test.mjs test/chat.test.mjs",
-    "test:browser": "node --test test/browser.test.mjs test/message-rendering.test.mjs test/mentions.test.mjs",
+    "test:browser": "node --test test/browser.test.mjs test/message-rendering.test.mjs test/mentions.test.mjs test/emoji.test.mjs",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

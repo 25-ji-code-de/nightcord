@@ -105,6 +105,9 @@ class UIManager {
     this.currentRoom = null;
     // 每条消息对象只保留 user/text/timestamp 存入 localStorage；渲染层会补充 avatar/color，时间由 timestamp 在渲染时计算
     this.messages = [];
+    this.messageRenderFrame = null;
+    this.messageRenderPending = false;
+    this.pendingMessageAppends = [];
     this.lastMsgTimestamp = 0;
     this.roster = [];
     this.currentUser = null;
@@ -725,50 +728,68 @@ class UIManager {
   }
 
   /**
-   * 渲染消息列表（性能优化版本）
+   * 请求重建消息列表；同一帧内的追加会一并从最新 messages 渲染。
    */
   renderMessages() {
-    // Performance optimization: Use PerformanceOptimizer if available
+    this.messageRenderPending = true;
+    // 重建包含所有当前消息，也会淘汰切换房间前尚未提交的追加。
+    this.pendingMessageAppends = [];
+    this.scheduleMessageRender();
+  }
+
+  /**
+   * 全量重建与增量追加共用一个帧任务，避免两者重复绘制同一条消息。
+   * @private
+   */
+  scheduleMessageRender() {
+    if (this.messageRenderFrame !== null) return;
+
     if (typeof PerformanceOptimizer !== 'undefined') {
-      PerformanceOptimizer.mark('renderMessages-start');
-    }
-
-    // Batch DOM operations to avoid layout thrashing
-    const batchOperation = () => {
-      this.elements.chatlog.innerHTML = '';
-
-      // Use DocumentFragment for efficient batch insertion
-      const fragment = document.createDocumentFragment();
-
-      this.messages.forEach(msg => {
-        const msgDiv = this.createMessageElement(msg);
-        fragment.appendChild(msgDiv);
+      this.messageRenderFrame = PerformanceOptimizer.raf(() => {
+        this.messageRenderFrame = null;
+        this.flushMessageRender();
       });
-
-      this.elements.chatlog.appendChild(fragment);
-    };
-
-    // Execute batch operation using RAF if available
-    if (typeof PerformanceOptimizer !== 'undefined') {
-      PerformanceOptimizer.raf(batchOperation);
     } else {
-      batchOperation();
+      this.flushMessageRender();
+    }
+  }
+
+  /**
+   * 提交本帧消息更新，并在全部写入完成后统一滚动。
+   * @private
+   */
+  flushMessageRender() {
+    const rebuild = this.messageRenderPending;
+    const messages = rebuild ? this.messages : this.pendingMessageAppends;
+    this.messageRenderPending = false;
+    this.pendingMessageAppends = [];
+
+    const measureRender = rebuild && typeof PerformanceOptimizer !== 'undefined';
+    if (measureRender) PerformanceOptimizer.mark('renderMessages-start');
+
+    const { chatlog } = this.elements;
+    const shouldAutoScroll = this.shouldAutoScrollToBottom();
+    if (rebuild) {
+      this.messageIndex.clear();
+      this.messageMeta.clear();
     }
 
-    // 智能滚动逻辑（延迟到下一帧避免强制布局）
-    const scrollOperation = () => {
-      const shouldAutoScroll = this.shouldAutoScrollToBottom();
-      if (shouldAutoScroll) {
-        this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
-      }
-    };
+    const fragment = document.createDocumentFragment();
+    messages.forEach(msg => fragment.appendChild(this.createMessageElement(msg)));
 
-    if (typeof PerformanceOptimizer !== 'undefined') {
-      PerformanceOptimizer.raf(scrollOperation);
+    if (rebuild) {
+      chatlog.replaceChildren(fragment);
+    } else {
+      // 保留已有消息节点及其状态，新消息仍排在流式回复之前。
+      chatlog.insertBefore(fragment, chatlog.querySelector('.streaming'));
+    }
+
+    // 这里需要更新后的布局高度；每批只读取一次，不把滚动拖到下一帧。
+    if (shouldAutoScroll) chatlog.scrollTop = chatlog.scrollHeight;
+
+    if (measureRender) {
       PerformanceOptimizer.mark('renderMessages-end');
       PerformanceOptimizer.measure('renderMessages', 'renderMessages-start', 'renderMessages-end');
-    } else {
-      setTimeout(scrollOperation, 0);
     }
   }
 
@@ -1836,30 +1857,9 @@ class UIManager {
    * @private
    */
   appendMessageToDOM(messageData) {
-    // 使用 RAF 优化 DOM 操作
-    const appendOperation = () => {
-      // 直接创建并添加消息元素，而不是重新渲染整个列表
-      const msgDiv = this.createMessageElement(messageData);
-
-      // 如果有正在流式显示的消息，插入到它之前，否则添加到末尾
-      const streamingMsg = this.elements.chatlog.querySelector('.streaming');
-      if (streamingMsg) {
-        this.elements.chatlog.insertBefore(msgDiv, streamingMsg);
-      } else {
-        this.elements.chatlog.appendChild(msgDiv);
-      }
-
-      // 智能滚动
-      if (this.shouldAutoScrollToBottom()) {
-        this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
-      }
-    };
-
-    if (typeof PerformanceOptimizer !== 'undefined') {
-      PerformanceOptimizer.raf(appendOperation);
-    } else {
-      appendOperation();
-    }
+    // 调用方已将 messageData 写入 messages；待执行的全量重建会包含它。
+    if (!this.messageRenderPending) this.pendingMessageAppends.push(messageData);
+    this.scheduleMessageRender();
   }
 
   /**

@@ -7,6 +7,7 @@ export interface Profile {
   issuer: string | null;
   sub: string | null;
   authenticated: boolean;
+  isMobile: boolean;
   displayName: string;
   username: string;
   avatarUrl: string | null;
@@ -17,7 +18,7 @@ function firstString(...values: unknown[]): string {
   return values.find((value): value is string => typeof value === 'string' && !!value.trim())?.trim() || '';
 }
 
-export function profileFromUserInfo(value: unknown): Profile {
+export function profileFromUserInfo(value: unknown, isMobile = false): Profile {
   if (!value || typeof value !== 'object' || !('sub' in value) || typeof value.sub !== 'string' || !value.sub || value.sub.length > 128) {
     throw new Error('Invalid userinfo subject');
   }
@@ -29,7 +30,7 @@ export function profileFromUserInfo(value: unknown): Profile {
     if (url.protocol === 'https:' && !url.username && !url.password && avatar.length <= 1024) avatarUrl = url.href;
   } catch { /* Missing or unsafe avatars use the generated fallback. */ }
   return {
-    id: `sekai:${value.sub}`, sub: value.sub, issuer: ISSUER, authenticated: true,
+    id: `sekai:${value.sub}`, sub: value.sub, issuer: ISSUER, authenticated: true, isMobile,
     displayName: firstString(info.name, info.display_name, info.preferred_username, info.username, value.sub).slice(0, 50),
     username: firstString(info.preferred_username, info.username).slice(0, 50), avatarUrl,
     // SEKAI Pass calls its existing bio field “个性签名” in account settings.
@@ -37,7 +38,7 @@ export function profileFromUserInfo(value: unknown): Profile {
   };
 }
 
-export function guestProfile(name: string, id: string): Profile {
-  return { id, issuer: null, sub: null, authenticated: false,
+export function guestProfile(name: string, id: string, isMobile = false): Profile {
+  return { id, issuer: null, sub: null, authenticated: false, isMobile,
     displayName: name, username: '', avatarUrl: null, bio: '' };
 }

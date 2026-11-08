@@ -62,6 +62,8 @@ Its build publishes browser assets only; do not upload the repository root.
 - `GET /api/room/<name-or-id>/websocket`: WebSocket upgrade.
 - First client frame: `{"name":"nickname"}` for guests, or
   `{"accessToken":"..."}` for SEKAI Pass. Later frames: `{"message":"text"}`.
+  Clients may include boolean `isMobile` in the first frame; Android/native apps
+  should send `isMobile: true` when their WebSocket library uses a generic User-Agent.
 - The backend calls SEKAI Pass `/oauth/userinfo` through a service binding;
   opaque tokens are validated by Pass against its database and expiry.
   Browser-supplied names, IDs, avatars and authentication claims are ignored.
@@ -81,6 +83,15 @@ Its build publishes browser assets only; do not upload the repository root.
 - Profile carries displayName, username, HTTPS avatarUrl and bio. Pass calls bio
   “个性签名”; profiles are edited in Pass settings and synced from your own profile card.
   Historical messages retain the profile verified at send time.
+- `user.isMobile` is a boolean device hint for both guests and Pass accounts.
+  The browser reports mobile device information (including iPad desktop mode),
+  and the server also checks the upgrade's User-Agent and Sec-CH-UA-Mobile headers.
+  Missing hints default to false. It is informational, not an authentication claim.
+  Session/ready frames describe that connection; messages retain the sending
+  connection's flag. Presence aggregates active connections: true while any
+  connection for that identity is mobile, updated when connections join or leave.
+  Authentication refresh and guest rename preserve each connection's device flag.
+  Historical profiles without the field are returned with false.
 - Authentication leases last five minutes; clients refresh after four minutes
   with `{"type":"auth","accessToken":"..."}`. Invalid/revoked tokens close the
   connection with 4001; sending after lease expiry requires revalidation.

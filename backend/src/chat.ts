@@ -6,6 +6,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { AUTH_LEASE_MS, guestProfile, ISSUER, profileFromUserInfo, type Profile } from './identity';
 import { allowedOrigin, corsHeaders, guestSession, verifyGuest, type ChatEnv, type GuestIdentity } from './guest';
+import { isMobileRequest } from './device';
 
 const HISTORY_LIMIT = 100;
 const STORED_MESSAGE_LIMIT = 1000;
@@ -13,6 +14,7 @@ interface Session {
   limiterId: string;
   user: Profile | null;
   authExpiresAt: number;
+  isMobile?: boolean;
   guest?: GuestIdentity | null;
   userLimiterId?: string;
   busy?: boolean;
@@ -86,7 +88,7 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     this.ctx.acceptWebSocket(pair[1]);
     pair[1].serializeAttachment({
       limiterId: this.env.LIMITERS.idFromName(`ip:${request.headers.get('CF-Connecting-IP') || 'local'}`).toString(),
-      user: null, authExpiresAt: 0, guest,
+      user: null, authExpiresAt: 0, guest, isMobile: isMobileRequest(request),
     } satisfies Session);
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
@@ -117,6 +119,8 @@ export class ChatRoom extends DurableObject<ChatEnv> {
       if (!initial.user || frame.type === 'auth') {
         let user: Profile;
         let authExpiresAt = 0;
+        // Device hints are connection metadata, independent of account identity.
+        const isMobile = initial.isMobile === true || initial.user?.isMobile === true || (!initial.user && frame.isMobile === true);
         if ('accessToken' in frame) {
           if (typeof frame.accessToken !== 'string' || !frame.accessToken || frame.accessToken.length > 4096) return this.authFailure(ws);
           // Bearer tokens stay on the service-binding path and are never stored or broadcast.
@@ -127,19 +131,19 @@ export class ChatRoom extends DurableObject<ChatEnv> {
             if (result.status === 401 || result.status === 403) return this.authFailure(ws);
             return this.reject(ws, 'SEKAI Pass is temporarily unavailable.', 'auth_unavailable');
           }
-          user = profileFromUserInfo(await result.json());
+          user = profileFromUserInfo(await result.json(), isMobile);
           if (initial.user?.authenticated && initial.user.id !== user.id) return this.authFailure(ws);
           authExpiresAt = Date.now() + AUTH_LEASE_MS;
         } else {
           if (frame.type === 'auth' || initial.user?.authenticated) return this.authFailure(ws);
           if (!initial.guest || initial.guest.expiresAt <= Date.now()) return this.guestFailure(ws);
           if (typeof frame.name !== 'string' || !frame.name.trim() || frame.name.length > 32) return this.reject(ws, 'Name must contain 1 to 32 characters.');
-          user = guestProfile(frame.name.trim(), initial.guest.id);
+          user = guestProfile(frame.name.trim(), initial.guest.id, isMobile);
         }
         if ((ws.deserializeAttachment() as Session).closed) return;
         if (initial.user && initial.user.id !== user.id) this.removeSession(ws);
         ws.serializeAttachment({
-          ...initial, user, authExpiresAt, busy: true, closed: false,
+          ...initial, user, authExpiresAt, isMobile, busy: true, closed: false,
           userLimiterId: this.env.LIMITERS.idFromName(`user:${user.id}`).toString(),
         } satisfies Session);
         const guestExpiresAt = user.authenticated ? 0 : initial.guest!.expiresAt;
@@ -151,27 +155,30 @@ export class ChatRoom extends DurableObject<ChatEnv> {
         });
         if (!user.authenticated && sameIdentity.length) {
           for (const other of sameIdentity) {
-            other.serializeAttachment({ ...other.deserializeAttachment(), user });
-            other.send(JSON.stringify({ type: 'session', user, authExpiresAt: 0, guestExpiresAt: (other.deserializeAttachment() as Session).guest?.expiresAt || 0 }));
+            const member = other.deserializeAttachment() as Session;
+            const otherUser = { ...user, isMobile: member.user?.isMobile === true };
+            other.serializeAttachment({ ...member, user: otherUser });
+            other.send(JSON.stringify({ type: 'session', user: otherUser, authExpiresAt: 0, guestExpiresAt: member.guest?.expiresAt || 0 }));
           }
         }
+        const presenceUser = this.presenceProfile(user);
         if (initial.user) {
-          this.broadcast(initial.user.id === user.id ? { type: 'profile', user } : { joined: user.displayName, user });
+          this.broadcast(initial.user.id === user.id ? { type: 'profile', user: presenceUser } : { joined: user.displayName, user: presenceUser });
           return;
         }
         const history = this.ctx.storage.sql.exec<StoredMessage>(
           'SELECT name, message, timestamp, profile FROM messages ORDER BY id DESC LIMIT ?', HISTORY_LIMIT,
         ).toArray().reverse();
-        for (const entry of history) ws.send(JSON.stringify({ name: entry.name, message: entry.message, timestamp: entry.timestamp, user: JSON.parse(entry.profile) }));
+        for (const entry of history) ws.send(JSON.stringify({ name: entry.name, message: entry.message, timestamp: entry.timestamp, user: { isMobile: false, ...JSON.parse(entry.profile) } }));
         const seen = new Set<string>();
         for (const other of this.ctx.getWebSockets()) {
           const member = other.deserializeAttachment() as Session;
           if (other !== ws && member.user && !member.closed && !seen.has(member.user.id)) {
             seen.add(member.user.id);
-            ws.send(JSON.stringify({ joined: member.user.displayName, user: member.user }));
+            ws.send(JSON.stringify({ joined: member.user.displayName, user: this.presenceProfile(member.user) }));
           }
         }
-        this.broadcast(sameIdentity.length ? { type: 'profile', user } : { joined: user.displayName, user });
+        this.broadcast(sameIdentity.length ? { type: 'profile', user: presenceUser } : { joined: user.displayName, user: presenceUser });
         ws.send(JSON.stringify({ ready: true, user, authExpiresAt, guestExpiresAt }));
         return;
       }
@@ -180,7 +187,7 @@ export class ChatRoom extends DurableObject<ChatEnv> {
       if (!initial.user.authenticated && (!initial.guest || Date.now() >= initial.guest.expiresAt)) return this.guestFailure(ws);
       const previous = this.ctx.storage.sql.exec<{ timestamp: number }>('SELECT timestamp FROM messages ORDER BY id DESC LIMIT 1').toArray()[0];
       const entry: ChatMessage = {
-        name: initial.user.displayName, message: frame.message as string, user: initial.user,
+        name: initial.user.displayName, message: frame.message as string, user: { ...initial.user, isMobile: initial.user.isMobile === true },
         timestamp: Math.max(Date.now(), (previous?.timestamp || 0) + 1),
       };
       const inserted = this.ctx.storage.sql.exec<{ id: number }>(
@@ -214,16 +221,23 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     this.removeSession(ws);
     ws.close(4002, 'Guest credential required');
   }
+  private presenceProfile(user: Profile): Profile {
+    return { ...user, isMobile: this.ctx.getWebSockets().some(other => {
+      const member = other.deserializeAttachment() as Session;
+      return !member.closed && member.user?.id === user.id && member.user.isMobile === true;
+    }) };
+  }
   private removeSession(ws: WebSocket): void {
     const session = ws.deserializeAttachment() as Session;
     if (session.closed) return;
     ws.serializeAttachment({ ...session, closed: true });
     if (!session.user) return;
-    const anotherConnection = this.ctx.getWebSockets().some((other) => {
+    const anotherConnection = this.ctx.getWebSockets().find((other) => {
       const member = other.deserializeAttachment() as Session;
       return other !== ws && !member.closed && member.user?.id === session.user?.id;
     });
     if (!anotherConnection) this.broadcast({ quit: session.user.displayName, userId: session.user.id });
+    else this.broadcast({ type: 'profile', user: this.presenceProfile((anotherConnection.deserializeAttachment() as Session).user!) });
   }
   private broadcast(data: ChatMessage | Presence): void {
     const text = JSON.stringify(data);

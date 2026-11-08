@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 
-function websocketHarness(getAccessToken) {
+function websocketHarness(getAccessToken, navigator) {
   class Socket {
     static OPEN = 1;
     static CLOSED = 3;
@@ -15,7 +15,7 @@ function websocketHarness(getAccessToken) {
     message(value) { this.events.message({ data: JSON.stringify(value) }); }
   }
   const Manager = vm.runInNewContext(readFileSync(new URL('../websocket-mgr.js', import.meta.url), 'utf8') + '\nWebSocketManager', {
-    WebSocket: Socket, console: { log() {}, warn() {} }, setTimeout, clearTimeout, AbortSignal,
+    WebSocket: Socket, console: { log() {}, warn() {} }, setTimeout, clearTimeout, AbortSignal, navigator,
   });
   const errors = [];
   const guestErrors = [];
@@ -84,12 +84,37 @@ test('guest initialization precedes the socket and only the cookie carries crede
   assert.equal(fetches[0].options.method, 'POST');
   assert.equal(fetches[0].options.cache, 'no-store');
   await manager.ws.events.open({});
-  assert.equal(JSON.stringify(manager.ws.sent), '[{"name":"Visitor"}]');
+  assert.equal(JSON.stringify(manager.ws.sent), '[{"name":"Visitor","isMobile":false}]');
   assert.equal(manager.ws.url.includes('guest:'), false);
   manager.ws.message({ type: 'session', user: { id: 'guest:one', displayName: 'Visitor' }, guestExpiresAt: Date.now() + 180 * 86400000 });
   manager.ws.message({ ready: true });
   assert.equal(manager.send({ message: 'ready' }), true);
   manager.disconnect();
+});
+
+test('guest and Pass handshakes identify mobile browsers, WebViews and iPad desktop mode', async () => {
+  const devices = [
+    [undefined, false],
+    [{ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', maxTouchPoints: 10 }, false],
+    [{ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', maxTouchPoints: 0 }, false],
+    [{ userAgent: 'Mozilla/5.0 (Linux; Android 15; Pixel 9) Mobile' }, true],
+    [{ userAgent: 'Mozilla/5.0 (Linux; Android 15; tablet; wv)', userAgentData: { mobile: false } }, true],
+    [{ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' }, true],
+    [{ userAgent: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)' }, true],
+    [{ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', maxTouchPoints: 5 }, true],
+    [{ userAgent: 'Reduced browser UA', userAgentData: { mobile: true } }, true],
+  ];
+  for (const [device, expected] of devices) {
+    for (const token of [null, 'test-bearer']) {
+      const { manager } = websocketHarness(async () => token, device);
+      try {
+        await manager.connect('device-test', 'Visitor');
+        await manager.ws.events.open({});
+        assert.equal(manager.ws.sent[0].isMobile, expected, JSON.stringify({ device, token }));
+        assert.equal(token ? manager.ws.sent[0].accessToken : manager.ws.sent[0].name, token || 'Visitor');
+      } finally { manager.disconnect(); }
+    }
+  }
 });
 
 test('blocked guest cookie stops after one recovery instead of looping', async () => {

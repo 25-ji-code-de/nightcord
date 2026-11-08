@@ -34,7 +34,7 @@ async function connect(room, name, firstFrame, options = {}) {
   const url = new URL(`/api/room/${room}/websocket`, base);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   const cookie = options.cookie || (!firstFrame?.accessToken ? (await bootstrap('', options.ip)).cookie : '');
-  const socket = new WebSocket(url, { headers: { Origin: origin, Cookie: cookie, ...(options.ip ? { 'CF-Connecting-IP': options.ip } : {}) } });
+  const socket = new WebSocket(url, { headers: { Origin: origin, Cookie: cookie, ...(options.ip ? { 'CF-Connecting-IP': options.ip } : {}), ...options.headers } });
   sockets.push(socket);
   const messages = [];
   const watchers = new Set();
@@ -180,6 +180,77 @@ test('invalid bearer token cannot receive history or claim an authenticated sess
   assert.equal(code, 4001);
   assert.ok(messages.some(value => value.code === 'auth_invalid'));
   assert.ok(!messages.some(value => value.ready || value.type === 'session' || value.message));
+});
+
+test('mobile hints support browsers, native clients and old clients for guest and Pass sessions', { skip: !!process.env.CHAT_BASE_URL, timeout: 30_000 }, async () => {
+  const devices = [
+    [{}, {}, false],
+    [{ 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }, { isMobile: 'true' }, false],
+    [{ 'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 9) Mobile' }, { isMobile: false }, true],
+    [{ 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' }, {}, true],
+    [{ 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)' }, {}, true],
+    [{ 'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 15)' }, {}, true],
+    [{ 'User-Agent': 'Reduced browser UA', 'Sec-CH-UA-Mobile': '?1' }, {}, true],
+    [{ 'User-Agent': 'okhttp/4.12.0' }, { isMobile: true }, true],
+  ];
+  for (const [index, [headers, hint, expected]] of devices.entries()) {
+    for (const authenticated of [false, true]) {
+      const frame = { ...(authenticated ? { accessToken: 'local-test-token' } : { name: 'Visitor' }), ...hint };
+      const peer = await connect(`device-${index}-${authenticated}`, 'Visitor', frame, { headers, ip: `device-${index}-${authenticated}` });
+      for (const value of peer.messages.filter(v => v.type === 'session' || v.ready || v.joined)) {
+        assert.equal(value.user.isMobile, expected, JSON.stringify({ headers, hint, authenticated }));
+      }
+    }
+  }
+});
+
+test('mobile account metadata survives refresh, aggregates presence and stays specific to the sender', { skip: !!process.env.CHAT_BASE_URL, timeout: 30_000 }, async () => {
+  const room = `mobile-${crypto.randomUUID().slice(0, 12)}`;
+  const desktop = await connect(room, 'ignored', { accessToken: 'local-test-token' }, { ip: 'mobile-desktop' });
+  assert.equal(desktop.messages.find(v => v.type === 'session').user.isMobile, false);
+  const mobile = await connect(room, 'ignored', { accessToken: 'local-test-token', isMobile: true }, { ip: 'mobile-native', headers: { 'User-Agent': 'okhttp/4.12.0' } });
+  const initialSession = mobile.messages.find(v => v.type === 'session');
+  assert.equal(initialSession.user.isMobile, true);
+  await desktop.waitFor(v => v.type === 'profile' && v.user.isMobile === true);
+  mobile.send({ type: 'auth', accessToken: 'local-test-token', isMobile: false });
+  await mobile.waitFor(v => v.type === 'session' && v.user.isMobile && v !== initialSession);
+  desktop.send({ message: 'from desktop', isMobile: true });
+  assert.equal((await mobile.waitFor(v => v.message === 'from desktop')).user.isMobile, false);
+  mobile.send({ message: 'from mobile', isMobile: false });
+  assert.equal((await desktop.waitFor(v => v.message === 'from mobile')).user.isMobile, true);
+  const observer = await connect(room, 'Observer', null, { ip: 'mobile-observer' });
+  assert.equal(observer.messages.find(v => v.joined === 'Shared name').user.isMobile, true);
+  assert.equal(observer.messages.find(v => v.message === 'from mobile').user.isMobile, true);
+  assert.equal(observer.messages.find(v => v.message === 'from desktop').user.isMobile, false);
+  mobile.socket.close(1000, 'mobile disconnected');
+  await once(mobile.socket, 'close');
+  await observer.waitFor(v => v.type === 'profile' && v.user.id === 'sekai:stable-subject' && v.user.isMobile === false);
+  assert.ok(!observer.messages.some(v => v.quit && v.userId === 'sekai:stable-subject'));
+  const beforeReconnect = observer.messages.length;
+  const reconnected = await connect(room, 'ignored', { accessToken: 'local-test-token', isMobile: true }, { ip: 'mobile-reconnected' });
+  assert.equal(reconnected.messages.find(v => v.type === 'session').user.isMobile, true);
+  await observer.waitFor(v => v.type === 'profile' && v.user.isMobile === true && observer.messages.indexOf(v) >= beforeReconnect);
+});
+
+test('guest rename preserves device flags across mixed-device connections', { skip: !!process.env.CHAT_BASE_URL, timeout: 30_000 }, async () => {
+  const identity = await bootstrap('', 'mobile-guest-bootstrap');
+  const room = `mobile-guest-${crypto.randomUUID().slice(0, 12)}`;
+  const mobile = await connect(room, 'Original', null, { cookie: identity.cookie, ip: 'mobile-guest', headers: { 'User-Agent': 'Android 15' } });
+  mobile.send({ message: 'before rename' });
+  await mobile.waitFor(v => v.message === 'before rename');
+  const observer = await connect(room, 'Observer', null, { ip: 'mobile-guest-observer' });
+  const desktop = await connect(room, 'Renamed', null, { cookie: identity.cookie, ip: 'desktop-guest' });
+  assert.equal(desktop.messages.find(v => v.type === 'session').user.isMobile, false);
+  assert.equal((await mobile.waitFor(v => v.type === 'session' && v.user.displayName === 'Renamed')).user.isMobile, true);
+  assert.equal((await observer.waitFor(v => v.type === 'profile' && v.user.displayName === 'Renamed')).user.isMobile, true);
+  desktop.send({ message: 'guest desktop' });
+  assert.equal((await mobile.waitFor(v => v.message === 'guest desktop')).user.isMobile, false);
+  mobile.send({ message: 'guest mobile' });
+  assert.equal((await desktop.waitFor(v => v.message === 'guest mobile')).user.isMobile, true);
+  assert.equal(desktop.messages.find(v => v.message === 'before rename').user.isMobile, true);
+  mobile.socket.close(1000, 'mobile guest disconnected');
+  await once(mobile.socket, 'close');
+  await observer.waitFor(v => v.type === 'profile' && v.user.id === identity.id && v.user.isMobile === false);
 });
 
 test('guest credential survives rename, tabs, rooms and Pass login without rewriting historical identity', { skip: !!process.env.CHAT_BASE_URL, timeout: 30_000 }, async () => {

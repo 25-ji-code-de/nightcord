@@ -33,6 +33,13 @@
  */
 class WebSocketManager {
   static guestRequests = new Map();
+
+  static isMobileDevice() {
+    const device = globalThis.navigator;
+    return device?.userAgentData?.mobile === true
+      || /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini|BlackBerry|webOS|Kindle|Silk|Dalvik|HarmonyOS/i.test(device?.userAgent || '')
+      || (/Macintosh/i.test(device?.userAgent || '') && device?.maxTouchPoints > 1);
+  }
   /**
    * 创建 WebSocket 管理器实例
    * @param {Object} config - 配置对象
@@ -164,7 +171,7 @@ class WebSocketManager {
 
     ws.addEventListener('open', async (event) => {
       if (gen !== this._gen || this.ws !== ws) return;
-      ws.send(JSON.stringify(token ? { accessToken: token } : { name: username }));
+      ws.send(JSON.stringify({ ...(token ? { accessToken: token } : { name: username }), isMobile: WebSocketManager.isMobileDevice() }));
       this.onOpen(event);
     });
 

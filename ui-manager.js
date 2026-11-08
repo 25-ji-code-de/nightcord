@@ -821,14 +821,23 @@ class UIManager {
    * 全量重建与增量追加共用一个帧任务，避免两者重复绘制同一条消息。
    * @private
    */
-  scheduleMessageRender() {
+  scheduleMessageRender(continueBuild = false) {
     if (this.messageRenderFrame !== null) return;
 
     if (typeof PerformanceOptimizer !== 'undefined') {
-      this.messageRenderFrame = PerformanceOptimizer.raf(() => {
+      const flush = () => {
         this.messageRenderFrame = null;
         this.flushMessageRender();
-      });
+      };
+      // Yield between history chunks so input can run, without waiting for a
+      // whole display frame for every chunk. Live appends still share one RAF.
+      if (continueBuild) {
+        this.messageRenderFrame = globalThis.scheduler?.postTask
+          ? scheduler.postTask(flush, { priority: 'user-visible' })
+          : setTimeout(flush, 0);
+      } else {
+        this.messageRenderFrame = PerformanceOptimizer.raf(flush);
+      }
     } else {
       this.flushMessageRender();
     }
@@ -878,7 +887,7 @@ class UIManager {
         this.messageMeta = liveMeta;
       }
       if (build.cursor < build.messages.length) {
-        this.scheduleMessageRender();
+        this.scheduleMessageRender(true);
         return;
       }
       // A new stream can start while the detached history is being built.
@@ -1484,8 +1493,10 @@ class UIManager {
       </div>
     `;
     document.body.appendChild(overlay);
+    const hasFiles = event => Array.from(event.dataTransfer?.types || []).includes('Files');
 
     dropZone.addEventListener('dragenter', (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
       e.stopPropagation();
       dragCounter++;
@@ -1498,26 +1509,29 @@ class UIManager {
     });
 
     dropZone.addEventListener('dragleave', (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
       e.stopPropagation();
-      dragCounter--;
+      dragCounter = Math.max(0, dragCounter - 1);
       if (dragCounter === 0) {
         overlay.classList.remove('visible');
-        setTimeout(() => overlay.classList.add('hidden'), 200);
+        setTimeout(() => { if (dragCounter === 0) overlay.classList.add('hidden'); }, 200);
       }
     });
 
     dropZone.addEventListener('dragover', (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
       e.stopPropagation();
     });
 
     dropZone.addEventListener('drop', (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
       e.stopPropagation();
       dragCounter = 0;
       overlay.classList.remove('visible');
-      setTimeout(() => overlay.classList.add('hidden'), 200);
+      setTimeout(() => { if (dragCounter === 0) overlay.classList.add('hidden'); }, 200);
 
       const files = e.dataTransfer.files;
       if (files.length > 0) {
@@ -1540,9 +1554,9 @@ class UIManager {
         if (!items) return;
         for (const item of items) {
           if (item.kind === 'file') {
-            e.preventDefault();
             const file = item.getAsFile();
             if (!file) continue;
+            e.preventDefault();
             let type = 'file';
             if (file.type.startsWith('image/')) {
               type = 'image';
@@ -1584,9 +1598,10 @@ class UIManager {
   _insertPlaceholder(chatInput, placeholder) {
     if (!chatInput) return false;
 
-    const cursorPos = chatInput.selectionStart || chatInput.value.length;
+    const cursorPos = chatInput.selectionStart ?? chatInput.value.length;
+    const selectionEnd = chatInput.selectionEnd ?? cursorPos;
     const textBefore = chatInput.value.substring(0, cursorPos);
-    const textAfter = chatInput.value.substring(cursorPos);
+    const textAfter = chatInput.value.substring(selectionEnd);
 
     chatInput.value = textBefore + placeholder + textAfter;
 
@@ -1718,14 +1733,15 @@ class UIManager {
     if (maxEncoded <= 0) return '';
     if (this._sekaiEncode(s).length <= maxEncoded) return s;
 
+    const characters = Array.from(s);
     let lo = 0;
-    let hi = s.length;
+    let hi = characters.length;
     while (lo < hi) {
       const mid = Math.ceil((lo + hi) / 2);
-      if (this._sekaiEncode(s.slice(0, mid)).length <= maxEncoded) lo = mid;
+      if (this._sekaiEncode(characters.slice(0, mid).join('')).length <= maxEncoded) lo = mid;
       else hi = mid - 1;
     }
-    return s.slice(0, lo);
+    return characters.slice(0, lo).join('');
   }
 
   /**

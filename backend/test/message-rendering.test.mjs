@@ -17,7 +17,7 @@ test('message rendering batches updates without losing or duplicating messages',
     file, content: await readFile(new URL(`../../${file}`, import.meta.url), 'utf8'),
   })));
 
-  async function fixture(t, { optimizer = true } = {}) {
+  async function fixture(t, { optimizer = true, taskScheduler = true } = {}) {
     const context = await browser.newContext({ serviceWorkers: 'block' });
     t.after(() => context.close());
     const page = await context.newPage();
@@ -34,6 +34,7 @@ test('message rendering batches updates without losing or duplicating messages',
       <div id="messages"></div><textarea id="messageInput"></textarea>
       <div id="voice-users"></div>` }));
     await page.goto('http://nightcord-rendering.test/');
+    if (!taskScheduler) await page.evaluate(() => Object.defineProperty(window, 'scheduler', { value: undefined, configurable: true }));
     for (const { file, content } of sources) {
       if (!optimizer && file === 'performance-optimizer.js') continue;
       await page.addScriptTag({ content });
@@ -436,6 +437,19 @@ test('message rendering batches updates without losing or duplicating messages',
       return { rows: rows(), indexSize: ui.messageIndex.size };
     });
     assert.deepEqual(result, { rows: ['Message 0', 'Message 1', 'fallback arrival'], indexSize: 3 });
+  });
+
+  await t.test('histories complete with timer yields when the task scheduler is unavailable', async t => {
+    const page = await fixture(t, { taskScheduler: false });
+    const result = await page.evaluate(async () => {
+      seed(120); await nextFrame();
+      const pending = !!ui.messageBuild;
+      ui.addSystemMessage('timer arrival', 1700000999999);
+      await renderComplete();
+      return { pending, rows: rows().length, arrival: rows().filter(text => text === 'timer arrival').length,
+        connected: [...ui.messageIndex.values()].every(row => row.isConnected) };
+    });
+    assert.deepEqual(result, { pending: true, rows: 121, arrival: 1, connected: true });
   });
 
   await t.test('presence updates keep in-flight avatars connected and profile triggers current', async t => {

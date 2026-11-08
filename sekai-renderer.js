@@ -232,6 +232,62 @@ class SekaiRenderer {
     return `${mins}:${secs}`;
   }
 
+  /** Bind a local slider without retaining detached players on document. */
+  _bindAudioSlider(element, { label, value, input, commit, vertical = false }) {
+    element.tabIndex = 0;
+    element.setAttribute('role', 'slider');
+    element.setAttribute('aria-label', label);
+    element.setAttribute('aria-valuemin', '0');
+    element.setAttribute('aria-valuemax', '100');
+    if (vertical) element.setAttribute('aria-orientation', 'vertical');
+    element.style.touchAction = 'none';
+    const sync = (ratio = value()) => element.setAttribute('aria-valuenow', String(Math.round(ratio * 100)));
+    const update = ratio => {
+      ratio = Math.max(0, Math.min(1, ratio));
+      input(ratio);
+      sync(ratio);
+      return ratio;
+    };
+    const position = event => {
+      const rect = element.getBoundingClientRect();
+      return vertical ? 1 - (event.clientY - rect.top) / rect.height : (event.clientX - rect.left) / rect.width;
+    };
+    let pointer = null;
+    let preview = 0;
+    element.addEventListener('pointerdown', event => {
+      if (!event.isPrimary || event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      element.focus({ preventScroll: true });
+      pointer = event.pointerId;
+      element.setPointerCapture(pointer);
+      preview = update(position(event));
+    });
+    element.addEventListener('pointermove', event => {
+      if (event.pointerId === pointer) preview = update(position(event));
+    });
+    element.addEventListener('pointerup', event => {
+      if (event.pointerId !== pointer) return;
+      preview = update(position(event));
+      commit?.(preview);
+      pointer = null;
+      if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
+    });
+    const cancel = () => { pointer = null; sync(); };
+    element.addEventListener('pointercancel', cancel);
+    element.addEventListener('lostpointercapture', cancel);
+    element.addEventListener('keydown', event => {
+      const steps = { ArrowRight: 0.05, ArrowUp: 0.05, ArrowLeft: -0.05, ArrowDown: -0.05, PageUp: 0.1, PageDown: -0.1 };
+      if (!(event.key in steps) && event.key !== 'Home' && event.key !== 'End') return;
+      event.preventDefault();
+      event.stopPropagation();
+      const ratio = update(event.key === 'Home' ? 0 : event.key === 'End' ? 1 : value() + steps[event.key]);
+      commit?.(ratio);
+    });
+    sync();
+    return sync;
+  }
+
   /**
    * Setup audio analysis for visualization
    * @private
@@ -697,7 +753,7 @@ class SekaiRenderer {
   percentEncode(str) {
     if (str == null) return '';
     // Must encode: ; = : < > % and whitespace; leave other unreserved/safe chars
-    return String(str).replace(/[^A-Za-z0-9\-._~/@!$&'()*+,]/g, (ch) => {
+    return String(str).replace(/[^A-Za-z0-9\-._~/@!$&'()*+,]/gu, (ch) => {
       if (ch === ' ') return '%20';
       const hex = ch.charCodeAt(0).toString(16).toUpperCase();
       if (ch.charCodeAt(0) < 0x80) {
@@ -1319,11 +1375,15 @@ class SekaiRenderer {
         toggle.className = 'sekai-code-toggle';
         toggle.type = 'button';
         toggle.setAttribute('aria-label', 'Expand code');
+        toggle.setAttribute('aria-expanded', 'false');
         toggle.textContent = 'Expand';
         toggle.addEventListener('click', (e) => {
           e.stopPropagation();
           wrapper.classList.toggle('collapsed');
-          toggle.textContent = wrapper.classList.contains('collapsed') ? 'Expand' : 'Collapse';
+          const collapsed = wrapper.classList.contains('collapsed');
+          toggle.textContent = collapsed ? 'Expand' : 'Collapse';
+          toggle.setAttribute('aria-label', collapsed ? 'Expand code' : 'Collapse code');
+          toggle.setAttribute('aria-expanded', String(!collapsed));
         });
         header.appendChild(toggle);
       }
@@ -1527,6 +1587,7 @@ class SekaiRenderer {
     faderCap.className = 'sekai-fader-cap';
     faderCap.title = 'Volume';
     faderCap.style.top = '20%'; // Default 80% volume
+    audio.volume = 0.8;
 
     faderTrack.appendChild(faderCap);
     auxModule.appendChild(faderTrack);
@@ -1639,7 +1700,6 @@ class SekaiRenderer {
 
     // --- Logic ---
     let isDragging = false;
-    let isFaderDragging = false;
     let animationId;
 
     // Audio Analysis Setup - Use helper method
@@ -1655,6 +1715,7 @@ class SekaiRenderer {
         // progress: 0 to 1
         const pct = progress * 100;
         progressFill.style.width = `${pct}%`;
+        scrubber.setAttribute('aria-valuenow', String(Math.round(pct)));
 
         // Update buffered progress
         if (audio.buffered.length > 0) {
@@ -1676,34 +1737,34 @@ class SekaiRenderer {
         }
     };
 
-    const togglePlay = () => {
+    const togglePlay = async () => {
       if (audio.paused) {
-        // Setup audio analysis on first play
-        if (!analysisContext) {
-            setupAudioAnalysis();
+        try {
+          await audio.play();
+        } catch {
+          setPlaying(false);
+          timeDisplay.textContent = '无法播放，点击重试';
         }
-
-        audio.play().then(() => {
-            playBtn.innerHTML = ICONS.PAUSE;
-            playBtn.classList.add('active'); // Physical latch
-            container.classList.add('playing');
-            statusBox.querySelector('.sekai-led').classList.add('active'); // LED On
-
-            // Start Viz Animation
-            animationId = requestAnimationFrame(animateViz);
-        }).catch(err => {
-            console.error("Audio playback failed:", err);
-            playBtn.classList.remove('active');
-        });
       } else {
         audio.pause();
-        playBtn.innerHTML = ICONS.PLAY;
-        playBtn.classList.remove('active');
-        container.classList.remove('playing');
-        statusBox.querySelector('.sekai-led').classList.remove('active'); // LED Off
-        cancelAnimationFrame(animationId);
       }
     };
+
+    const setPlaying = playing => {
+      playBtn.innerHTML = playing ? ICONS.PAUSE : ICONS.PLAY;
+      playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+      playBtn.classList.toggle('active', playing);
+      container.classList.toggle('playing', playing);
+      statusBox.querySelector('.sekai-led').classList.toggle('active', playing);
+      cancelAnimationFrame(animationId);
+      if (playing) {
+        if (!analysisContext) setupAudioAnalysis();
+        animationId = requestAnimationFrame(animateViz);
+      }
+    };
+    audio.onplay = () => setPlaying(true);
+    audio.onpause = () => setPlaying(false);
+    audio.onerror = () => { setPlaying(false); timeDisplay.textContent = '无法播放，点击重试'; };
 
     const animateViz = () => {
         if (audio.paused) return;
@@ -1731,10 +1792,7 @@ class SekaiRenderer {
         e.stopPropagation();
         audio.pause();
         audio.currentTime = 0;
-        playBtn.innerHTML = ICONS.PLAY;
-        playBtn.classList.remove('active');
-        container.classList.remove('playing');
-        statusBox.querySelector('.sekai-led').classList.remove('active');
+        setPlaying(false);
         updateTape(0);
         // Reset Viz
         bars.forEach(b => b.style.transform = `scaleY(0.1)`);
@@ -1764,101 +1822,31 @@ class SekaiRenderer {
         setTimeout(() => ffBtn.classList.remove('active'), 150);
     };
 
-    // Scrubber Seeking (Click and Drag with Preview)
-    let previewPosition = 0;
-
-    const handleScrubPreview = (e) => {
-        e.stopPropagation();
-        if (!audio.duration) return;
-        const rect = scrubber.getBoundingClientRect();
-        const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-
-        // Store preview position
-        previewPosition = pos;
-
-        // Only update visual progress, not actual audio time
-        const pct = pos * 100;
-        progressFill.style.width = `${pct}%`;
-
-        // Update time display to show preview time
-        const previewTime = pos * audio.duration;
-        const currentM = Math.floor(previewTime / 60);
-        const currentS = Math.floor(previewTime % 60);
-        const totalM = Math.floor(audio.duration / 60);
-        const totalS = Math.floor(audio.duration % 60);
-        timeDisplay.textContent = `${currentM}:${currentS.toString().padStart(2,'0')} / ${totalM}:${totalS.toString().padStart(2,'0')}`;
-    };
-
-    scrubber.onmousedown = (e) => {
+    // Pointer capture supports mouse and touch without document listeners.
+    this._bindAudioSlider(scrubber, {
+      label: '播放进度',
+      value: () => Number.isFinite(audio.duration) && audio.duration > 0 ? audio.currentTime / audio.duration : 0,
+      input: ratio => {
         isDragging = true;
-        handleScrubPreview(e);
-
-        const onMouseMove = (moveEvent) => {
-            if (!isDragging) return;
-            handleScrubPreview(moveEvent);
-        };
-
-        const onMouseUp = () => {
-            isDragging = false;
-
-            // On mouse up, actually seek to the position
-            if (audio.duration) {
-                audio.currentTime = previewPosition * audio.duration;
-            }
-
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        };
-
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-    };
-
-    // Fader Interaction
-    // Allow clicking on track to jump
-    faderTrack.onmousedown = (e) => {
-        if(e.target === faderCap || faderCap.contains(e.target)) return;
-        const rect = faderTrack.getBoundingClientRect();
-        let y = (e.clientY - rect.top) / rect.height;
-        y = Math.max(0, Math.min(1, y));
-        faderCap.style.top = `${y * 100}%`;
-        audio.volume = 1 - y;
-    };
-
-    faderCap.onmousedown = (e) => {
-        isFaderDragging = true;
-        e.preventDefault(); 
-        e.stopPropagation(); 
-        
-        const startY = e.clientY;
-        const rect = faderTrack.getBoundingClientRect(); // Track dimensions
-        
-        // Calculate initial ratio based on current visual position
-        // Top style is percentage string like "20%"
-        let currentTopPct = parseFloat(faderCap.style.top);
-        if (isNaN(currentTopPct)) currentTopPct = 0;
-        const currentYRatio = currentTopPct / 100;
-        
-        const onMove = (moveEvent) => {
-            const dy = moveEvent.clientY - startY; 
-            const dRatio = dy / rect.height; 
-            
-            let newRatio = currentYRatio + dRatio;
-            newRatio = Math.max(0, Math.min(1, newRatio));
-            
-            faderCap.style.top = `${newRatio * 100}%`;
-            audio.volume = 1 - newRatio;
-        };
-        
-        const onUp = () => {
-             isFaderDragging = false;
-             document.removeEventListener('mousemove', onMove);
-             document.removeEventListener('mouseup', onUp);
-        };
-        
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-    };
+        progressFill.style.width = `${ratio * 100}%`;
+        if (Number.isFinite(audio.duration) && audio.duration > 0) {
+          timeDisplay.textContent = `${this._formatTime(ratio * audio.duration)} / ${this._formatTime(audio.duration)}`;
+        }
+      },
+      commit: ratio => {
+        isDragging = false;
+        if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = ratio * audio.duration;
+      }
+    });
+    const cancelScrub = () => { isDragging = false; updateTape(audio.duration ? audio.currentTime / audio.duration : 0); };
+    scrubber.addEventListener('pointercancel', cancelScrub);
+    scrubber.addEventListener('lostpointercapture', cancelScrub);
+    const syncVolume = this._bindAudioSlider(faderTrack, {
+      label: '音量', vertical: true,
+      value: () => audio.volume,
+      input: ratio => { audio.volume = ratio; }
+    });
+    audio.onvolumechange = () => { faderCap.style.top = `${(1 - audio.volume) * 100}%`; syncVolume(); };
 
     audio.ontimeupdate = () => {
        if (isDragging) return;
@@ -1868,12 +1856,8 @@ class SekaiRenderer {
     };
     
     audio.onended = () => {
-        playBtn.innerHTML = ICONS.PLAY; 
-        playBtn.classList.remove('active');
-        container.classList.remove('playing');
-        statusBox.querySelector('.sekai-led').classList.remove('active');
+        setPlaying(false);
         updateTape(1);
-        cancelAnimationFrame(animationId);
     };
 
     return container;
@@ -2061,15 +2045,22 @@ class SekaiRenderer {
         }
     };
 
-    playBtn.onclick = () => {
+    playBtn.onclick = async () => {
         if (audio.paused) {
-            audio.play();
-            updatePlayState(true);
+            try {
+                await audio.play();
+            } catch {
+                updatePlayState(false);
+                timeDisplay.textContent = '无法播放，点击重试';
+            }
         } else {
             audio.pause();
-            updatePlayState(false);
         }
     };
+
+    audio.onplay = () => updatePlayState(true);
+    audio.onpause = () => updatePlayState(false);
+    audio.onerror = () => { updatePlayState(false); timeDisplay.textContent = '无法播放，点击重试'; };
 
     audio.ontimeupdate = () => {
       const current = audio.currentTime;
@@ -2077,44 +2068,19 @@ class SekaiRenderer {
 
       if (total > 0) {
         progressFill.style.width = `${(current / total) * 100}%`;
+        progressBar.setAttribute('aria-valuenow', String(Math.round((current / total) * 100)));
         timeDisplay.textContent = `${this._formatTime(current)} / ${this._formatTime(total)}`;
       }
     };
 
-    let isDragging = false;
-
-    const seek = (e) => {
-      const rect = progressBar.getBoundingClientRect();
-      const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      if (audio.duration) {
-        audio.currentTime = percent * audio.duration;
-      }
-    };
-
-    progressBar.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      seek(e);
-    });
-
-    document.addEventListener('mousemove', (e) => {
-      if (isDragging) {
-        seek(e);
-      }
-    });
-
-    document.addEventListener('mouseup', () => {
-      isDragging = false;
-    });
-
-    progressBar.addEventListener('click', seek);
-
-    progressBar.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      const rect = progressBar.getBoundingClientRect();
-      const percent = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
-      if (audio.duration) {
-        audio.currentTime = percent * audio.duration;
+    this._bindAudioSlider(progressBar, {
+      label: '播放进度',
+      value: () => Number.isFinite(audio.duration) && audio.duration > 0 ? audio.currentTime / audio.duration : 0,
+      input: ratio => {
+        if (Number.isFinite(audio.duration) && audio.duration > 0) {
+          audio.currentTime = ratio * audio.duration;
+          audio.ontimeupdate();
+        }
       }
     });
 
@@ -2123,16 +2089,7 @@ class SekaiRenderer {
         progressFill.style.width = '0%';
         audio.currentTime = 0;
 
-        bars.forEach(bar => {
-          bar.style.height = '2px';
-        });
-    };
-
-    audio.onpause = () => {
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
-      }
+        progressBar.setAttribute('aria-valuenow', '0');
     };
 
     container.appendChild(audio);

@@ -364,6 +364,11 @@
   position: relative;
 }
 
+:is(.sekai-fader-track, .sekai-tape-scrubber, .sekai-audio-progress-bar):focus-visible {
+  outline: 2px solid #d1c1f2;
+  outline-offset: 4px;
+}
+
 .sekai-fader-cap {
   position: absolute;
   left: 50%;

@@ -47,6 +47,7 @@ const PRECACHE = [
   '/css/notifications.css',
   '/css/image-viewer.css',
   '/css/attachments.css',
+  '/css/voice.css',
   // index.html 中的脚本
   '/purify.js',
   '/sekai-escape.js',
@@ -72,6 +73,8 @@ const PRECACHE = [
   '/ui-autocomplete.js',
   '/user-profile.js',
   '/ui-manager.js',
+  '/voice-manager.js',
+  '/voice-ui.js',
   '/nightcord.js',
   '/boot.js',
   '/pangu.js',

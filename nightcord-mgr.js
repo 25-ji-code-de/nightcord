@@ -208,6 +208,10 @@ class NightcordManager {
    * @fires message:received
    */
   handleMessage(data) {
+    if (data.type === 'voice:ticket' || data.type === 'voice:state') {
+      this.eventBus.emit(data.type, data);
+      return;
+    }
     if (data.type === 'session') {
       this.currentUser = data.user;
       this.username = data.user.displayName;

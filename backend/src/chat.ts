@@ -7,6 +7,8 @@ import { DurableObject } from 'cloudflare:workers';
 import { AUTH_LEASE_MS, guestProfile, ISSUER, profileFromUserInfo, type Profile } from './identity';
 import { allowedOrigin, corsHeaders, guestSession, verifyGuest, type ChatEnv, type GuestIdentity } from './guest';
 import { isMobileRequest } from './device';
+import { configuration, readJson, record, VoiceError } from './voice/protocol';
+export { VoiceRoom } from './voice/room';
 
 const HISTORY_LIMIT = 100;
 const STORED_MESSAGE_LIMIT = 1000;
@@ -19,6 +21,10 @@ interface Session {
   userLimiterId?: string;
   busy?: boolean;
   closed?: boolean;
+  connectionId?: string;
+  roomName?: string;
+  voiceTicketAt?: number;
+  voiceUsed?: boolean;
 }
 type StoredMessage = { name: string; message: string; timestamp: number; profile: string };
 type ChatMessage = { name: string; message: string; timestamp: number; user: Profile };
@@ -39,6 +45,23 @@ export default {
     }
     const origin = allowedOrigin(request, env);
     if (!origin) return response('Origin is not allowed', 403);
+    const voiceRoute = /^\/api\/room\/([a-z0-9-]{1,32}|[0-9a-f]{64})\/voice\/([a-z/]+)$/.exec(url.pathname);
+    if (voiceRoute) {
+      const headers = { ...corsHeaders(origin), 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' };
+      if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+      if (voiceRoute[2] === 'config' && request.method === 'GET') return Response.json(configuration(env, voiceRoute[1]), { headers });
+      if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers });
+      const token = /^Bearer ([a-f0-9]{64})$/.exec(request.headers.get('Authorization') || '')?.[1];
+      if (!token) return Response.json({ code: 'invalid_token' }, { status: 401, headers });
+      try {
+        const input = record(await readJson(request));
+        const chatId = voiceRoute[1].length === 64 ? env.ROOMS.idFromString(voiceRoute[1]) : env.ROOMS.idFromName(voiceRoute[1]);
+        const result = await env.VOICE_ROOMS.getByName(`voice:${chatId}`).handle(voiceRoute[1], voiceRoute[2], token, JSON.stringify(input));
+        return new Response(result.json, { status: result.status, headers: { ...headers, 'Content-Type': 'application/json' } });
+      } catch (error) {
+        return Response.json({ code: error instanceof VoiceError ? error.code : 'voice_unavailable' }, { status: error instanceof VoiceError ? error.status : 503, headers });
+      }
+    }
     if (url.pathname === '/api/guest/session' || url.pathname === '/api/room') {
       const headers = corsHeaders(origin);
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: {
@@ -88,7 +111,8 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     this.ctx.acceptWebSocket(pair[1]);
     pair[1].serializeAttachment({
       limiterId: this.env.LIMITERS.idFromName(`ip:${request.headers.get('CF-Connecting-IP') || 'local'}`).toString(),
-      user: null, authExpiresAt: 0, guest, isMobile: isMobileRequest(request),
+      user: null, authExpiresAt: 0, guest, isMobile: isMobileRequest(request), connectionId: crypto.randomUUID(),
+      roomName: /^\/api\/room\/([^/]+)\/websocket$/.exec(new URL(request.url).pathname)?.[1],
     } satisfies Session);
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
@@ -101,6 +125,23 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     const frame = data as Record<string, unknown>;
     const initial = ws.deserializeAttachment() as Session;
     if (initial.closed) return;
+    if (frame.type === 'voice:ticket') {
+      const requestId = typeof frame.requestId === 'string' && /^[a-zA-Z0-9_-]{16,80}$/.test(frame.requestId) ? frame.requestId : null;
+      if (!requestId) return;
+      const send = (value: Record<string, unknown>) => { try { ws.send(JSON.stringify({ type: 'voice:ticket', requestId, ...value })); } catch { /* Socket left. */ } };
+      const user = initial.user;
+      const authUntil = user?.authenticated ? initial.authExpiresAt
+        : user && initial.guest?.id === user.id ? initial.guest.expiresAt : 0;
+      if (!user || authUntil <= Date.now() || (!user.authenticated && this.env.VOICE_REQUIRE_PASS !== 'false')) { send({ code: 'login_required' }); return; }
+      if (Date.now() - (initial.voiceTicketAt || 0) < 1000) { send({ code: 'rate_limited' }); return; }
+      ws.serializeAttachment({ ...initial, voiceTicketAt: Date.now(), voiceUsed: true });
+      try {
+        const result = await this.env.VOICE_ROOMS.getByName(`voice:${this.ctx.id}`).issueTicket(initial.roomName || '', this.ctx.id.toString(), initial.connectionId!, user, authUntil);
+        if ((ws.deserializeAttachment() as Session).closed) return;
+        send({ ticket: result.ticket, code: result.code });
+      } catch { send({ code: 'voice_unavailable' }); }
+      return;
+    }
     if (initial.busy) return this.reject(ws, 'Please wait for the previous action.');
     if (initial.user && frame.type !== 'auth' && (typeof frame.message !== 'string' || frame.message.length > 256)) {
       return this.reject(ws, 'Message must be a string of at most 256 characters.');
@@ -231,6 +272,7 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     const session = ws.deserializeAttachment() as Session;
     if (session.closed) return;
     ws.serializeAttachment({ ...session, closed: true });
+    if (session.voiceUsed && session.connectionId) this.ctx.waitUntil(this.env.VOICE_ROOMS.getByName(`voice:${this.ctx.id}`).disconnect(session.connectionId).catch(() => {}));
     if (!session.user) return;
     const anotherConnection = this.ctx.getWebSockets().find((other) => {
       const member = other.deserializeAttachment() as Session;
@@ -238,6 +280,14 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     });
     if (!anotherConnection) this.broadcast({ quit: session.user.displayName, userId: session.user.id });
     else this.broadcast({ type: 'profile', user: this.presenceProfile((anotherConnection.deserializeAttachment() as Session).user!) });
+  }
+  voiceChanged(snapshot: { revision: number; members: unknown[] }): void {
+    const text = JSON.stringify({ type: 'voice:state', snapshot });
+    for (const ws of this.ctx.getWebSockets()) {
+      const session = ws.deserializeAttachment() as Session;
+      if (!session.user || session.closed) continue;
+      try { ws.send(text); } catch { this.removeSession(ws); }
+    }
   }
   private broadcast(data: ChatMessage | Presence): void {
     const text = JSON.stringify(data);

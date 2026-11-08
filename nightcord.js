@@ -29,6 +29,8 @@ class Nightcord {
       eventBus: this.eventBus
     });
     this.ui = new UIManager(this.eventBus);
+    this.voice = new VoiceManager({ eventBus: this.eventBus, chatRoom: this.chatRoom });
+    this.voiceUI = new VoiceUI(this.voice, this.eventBus);
 
     // 初始化 SEKAI Pass OAuth 客户端（需要在 Nako 之前初始化）
     const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -411,6 +413,8 @@ class Nightcord {
    * 销毁应用实例
    */
   destroy() {
+    this.voice.destroy();
+    this.voiceUI.destroy();
     // 停止事件上报
     if (this.analytics) {
       this.analytics.stopOnlineTracking();

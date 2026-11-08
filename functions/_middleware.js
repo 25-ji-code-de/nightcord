@@ -44,7 +44,7 @@ export async function onRequest(context) {
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   headers.set('X-Frame-Options', 'DENY');
-  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  headers.set('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
   headers.delete('ETag');
   headers.delete('Last-Modified');
   return new Response(response.body, {

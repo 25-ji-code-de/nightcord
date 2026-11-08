@@ -1,0 +1,40 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+.voice-panel {
+  --voice-accent: #c8a3e0;
+  --voice-muted: #c5bfd1;
+  flex: 0 0 auto;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(200, 163, 224, .2);
+  background: #302b40;
+  color: #f4eff8;
+  font-size: 14px;
+}
+.voice-panel[hidden], .voice-panel [hidden] { display: none; }
+.voice-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.voice-status { flex: 1 1 180px; margin: 0; line-height: 1.5; }
+.voice-panel button, .voice-panel select {
+  min-height: 44px; padding: 8px 12px; border: 1px solid rgba(200, 163, 224, .35);
+  border-radius: 8px; background: #443951; color: #f4eff8; font: inherit;
+}
+.voice-panel button { cursor: pointer; }
+.voice-panel button:hover { background: #554562; }
+.voice-panel button[aria-pressed="true"] { border-color: var(--voice-accent); background: #5e426b; }
+.voice-panel button:disabled { opacity: .65; cursor: progress; }
+.voice-panel :is(button, select, input, summary):focus-visible { outline: 2px solid var(--voice-accent); outline-offset: 3px; }
+.voice-panel summary { min-height: 44px; padding-block: 12px; cursor: pointer; color: var(--voice-muted); }
+.voice-members { list-style: none; margin: 0 0 12px; padding: 0; max-height: 180px; overflow: auto; }
+.voice-member { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px; border-left: 3px solid transparent; }
+.voice-member-name { flex: 1 1 100px; min-width: 0; overflow-wrap: anywhere; }
+.voice-member small { color: var(--voice-muted); }
+.voice-member.is-speaking { border-left-color: var(--voice-accent); background: rgba(200, 163, 224, .1); }
+.voice-volume { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.voice-volume input { width: 90px; min-height: 36px; accent-color: var(--voice-accent); }
+.voice-device { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.voice-device select { min-width: 0; max-width: 100%; }
+#voice-audio { display: none; }
+@media (max-width: 768px) {
+  .voice-panel { padding: 8px 12px; }
+  .voice-status { flex-basis: 100%; }
+  .voice-controls button { flex: 1 1 auto; }
+  .voice-members { max-height: 120px; }
+}

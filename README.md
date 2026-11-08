@@ -26,6 +26,7 @@
 - 🤖 **AI 集成** - 内置 Nako AI 助手，支持流式对话
 - 🔐 **SSO 认证** - 集成 SEKAI Pass 单点登录
 - 📊 **数据上报** - 自动上报用户活动到 SEKAI Platform
+- 🎙️ **房间语音（测试）** - 原生 WebRTC + Cloudflare SFU/TURN，最多 8 人；当前仅在 `/?test` 房间开放，需 SEKAI Pass 登录
 
 ### @ 提及
 

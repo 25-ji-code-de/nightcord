@@ -4,6 +4,15 @@ Cloudflare Worker + SQLite Durable Objects, compatible with the JSON/WebSocket
 protocol used by [workers-chat-demo](https://github.com/cloudflare/workers-chat-demo).
 Production hostname: `chat.nightcord.de5.net`, Worker: `nightcord-chat`.
 
+Optional room voice uses a separate SQLite `VoiceRoom` with Cloudflare Realtime
+SFU/TURN. It currently enables only `nightcord-test`, supports up to eight
+members, and keeps media credentials on the server. `VOICE_REQUIRE_PASS=true`
+requires SEKAI Pass; setting it to `false` explicitly allows verified cookie
+guests for development tests. Start new
+installations with `VOICE_MODE=off` until credentials are configured. See
+[voice setup and validation](../docs/VOICE_SETUP.md) for secrets, deployment,
+local browser media tests, rollback and current limitations.
+
 ## Development and deployment
 
 ```sh

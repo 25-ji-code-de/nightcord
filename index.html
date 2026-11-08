@@ -31,6 +31,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
   <link rel="stylesheet" href="/css/notifications.css">
   <link rel="stylesheet" href="/css/image-viewer.css">
   <link rel="stylesheet" href="/css/attachments.css">
+  <link rel="stylesheet" href="/css/voice.css">
 </head>
 
 <body>
@@ -120,6 +121,22 @@ Copyright (C) 2025 The 25-ji-code-de Team
           <i class="window-btn red"></i>
         </div>
       </div>
+      <section id="voice-panel" class="voice-panel" aria-label="房间语音" hidden>
+        <div class="voice-controls">
+          <p class="voice-status" data-voice-status role="status" aria-live="polite">语音 · 加入后默认只听</p>
+          <button type="button" data-voice-join>加入语音</button>
+          <button type="button" data-voice-mic aria-pressed="false" hidden>开启麦克风</button>
+          <button type="button" data-voice-play hidden>启用声音</button>
+          <button type="button" data-voice-recover hidden>恢复连接</button>
+          <button type="button" data-voice-leave hidden>退出语音</button>
+        </div>
+        <details hidden>
+          <summary>语音成员 0 / 8</summary>
+          <ul class="voice-members" data-voice-members></ul>
+          <label class="voice-device">麦克风设备 <select data-voice-device><option value="">系统默认麦克风</option></select></label>
+        </details>
+        <div id="voice-audio" aria-hidden="true"></div>
+      </section>
       <div class="messages sekai-messages" id="messages"></div>
       <div class="input-area">
         <div class="input-box">
@@ -285,6 +302,8 @@ document.addEventListener('DOMContentLoaded', () => {
   <script src="/ui-autocomplete.js"></script>
   <script src="/user-profile.js"></script>
   <script src="/ui-manager.js"></script>
+  <script src="/voice-manager.js"></script>
+  <script src="/voice-ui.js"></script>
   <script src="/nightcord.js"></script>
   <script src="/boot.js"></script>
   <script src="/pangu.js"></script>

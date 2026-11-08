@@ -35,7 +35,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
 
 <body>
   <!-- Name Chooser Overlay -->
-  <div id="name-chooser" class="name-chooser hidden">
+  <div id="name-chooser" class="name-chooser hidden" role="dialog" aria-modal="true" aria-labelledby="chooser-title" aria-describedby="chooser-subtitle" tabindex="-1">
     <div class="name-chooser-content">
       <div class="logo-area">
         <!-- Nightcord mark：48 整数网格；viewBox 保留现有紧凑留白。 -->
@@ -47,9 +47,9 @@ Copyright (C) 2025 The 25-ji-code-de Team
       <p id="chooser-subtitle" class="subtitle">请输入你的昵称以加入</p>
       
       <div class="input-wrapper">
-        <input type="text" id="name-input" class="name-input" placeholder="昵称" maxlength="32" autocomplete="off">
+        <input type="text" id="name-input" class="name-input" placeholder="昵称" maxlength="32" autocomplete="off" aria-label="昵称" aria-describedby="name-error" aria-invalid="false">
         <div class="input-focus-border"></div>
-        <div id="name-error" class="input-error"></div>
+        <div id="name-error" class="input-error" aria-live="polite"></div>
       </div>
       
       <button id="name-submit" class="name-submit">
@@ -80,7 +80,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
   </div>
   <div class="chat-root">
     <!-- Sidebar -->
-    <div class="sidebar">
+    <div class="sidebar" id="member-sidebar">
       <div class="server-header">
         <img class="server-logotype" src="/icons/nightcord-logotype.svg" alt="Nightcord" width="856" height="216">
         <svg class="server-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -102,14 +102,18 @@ Copyright (C) 2025 The 25-ji-code-de Team
       </div>
     </div>
     <!-- Main Chat Area -->
-    <div class="main">
+    <main class="main">
       <div class="chat-header">
+        <button type="button" class="sidebar-toggle" aria-label="切换成员列表" aria-controls="member-sidebar" aria-expanded="false">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
         <div class="channel-icon"><svg width="24" height="24" viewBox="8 7 34 34" xmlns="http://www.w3.org/2000/svg">
             <path
               d="M41 24A16 16 0 1 1 9 24A16 16 0 1 1 41 24ZM41 24A12 12 0 1 1 17 24A12 12 0 1 1 41 24ZM27 24A2 2 0 1 1 23 24A2 2 0 1 1 27 24ZM35 24A2 2 0 1 1 31 24A2 2 0 1 1 35 24Z"
               fill="white" fill-rule="evenodd"></path>
           </svg></div>
         <span style="font-weight:600;">聊天</span>
+        <span id="connection-status" class="connection-status" role="status" hidden></span>
         <div class="window-buttons sekai-window-dots">
           <i class="window-btn blue"></i>
           <i class="window-btn yellow"></i>
@@ -172,7 +176,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
           </div>
         </div>
       </div>
-    </div>
+    </main>
   </div>
   <!-- <script>
 const users = [

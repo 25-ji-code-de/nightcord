@@ -199,7 +199,7 @@ class Nightcord {
 
     // 检查是否是 OAuth 回调（通过 URL 参数判断）
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('code') && urlParams.has('state')) {
+    if ((urlParams.has('code') && urlParams.has('state')) || urlParams.has('error')) {
       this.handleOAuthCallback(roomname);
       return;
     }
@@ -242,6 +242,12 @@ class Nightcord {
    */
   async handleOAuthCallback(roomname) {
     try {
+      const savedRoom = sessionStorage.getItem('nightcord-oauth-room');
+      if (!roomname && savedRoom === 'nightcord-test') roomname = savedRoom;
+      sessionStorage.removeItem('nightcord-oauth-room');
+    } catch (e) {}
+    const returnPath = roomname === 'nightcord-test' ? '/?test' : '/';
+    try {
       const userInfo = await this.sekaiPassAuth.handleCallback();
 
       // 优先使用 name，其次 preferred_username，最后 sub
@@ -252,7 +258,7 @@ class Nightcord {
       this.broadcastIdentityChange();
 
       // 清理 URL（移除查询参数）
-      window.history.replaceState({}, document.title, '/');
+      window.history.replaceState({}, document.title, returnPath);
 
       // 加入房间
       this.joinRoom(roomname || 'nightcord-default');
@@ -266,7 +272,7 @@ class Nightcord {
       });
 
       // 清理 URL 并回到名称选择
-      window.history.replaceState({}, document.title, '/');
+      window.history.replaceState({}, document.title, returnPath);
       this.init(roomname);
     }
   }

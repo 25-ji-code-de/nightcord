@@ -833,6 +833,20 @@ class SekaiRenderer {
   }
 
   renderText(content) {
+    // Most chat messages are ordinary text. Avoid DOMPurify, innerHTML and the
+    // sticker tree walk for that common path; rich syntax still follows
+    // the full renderer below. This keeps history replay cheap without changing
+    // the resulting text semantics or the rich-text security boundary.
+    const plain = String(content ?? '');
+    const mayHaveRichContent = /[<>&`*~|\r\n\[\]]|https?:\/\//.test(plain);
+    if (!mayHaveRichContent) {
+      const span = this._getElement('span');
+      span.className = 'sekai-text-node';
+      span.textContent = plain;
+      if (this.emojiService) this.emojiService.processElement(span);
+      return span;
+    }
+
     // Apply basic markdown formatting here
     // We process this line by line to handle block elements if needed,
     // but for now we focus on inline formatting.
@@ -887,6 +901,7 @@ class SekaiRenderer {
     const span = this._getElement('span');
     span.className = 'sekai-text-node';
     span.innerHTML = html;
+    span.querySelectorAll('img:not([alt])').forEach(image => { image.alt = '图片'; });
 
     // Wire spoiler interaction without inline handlers
     this._bindSpoilers(span);

@@ -31,9 +31,11 @@
     }
 
     loadAutocompleteData(url) {
-      const primary = url || 'https://sticker.nightcord.de5.net/autocomplete.json';
-      // Gateway proxy as fallback (CDN / origin issues)
-      const fallback = 'https://api.nightcord.de5.net/sekai/stickers/autocomplete.json';
+      const direct = 'https://sticker.nightcord.de5.net/autocomplete.json';
+      const gateway = 'https://api.nightcord.de5.net/sekai/stickers/autocomplete.json';
+      const primary = url || direct;
+      // The UI starts with the gateway, so its fallback must use the direct host.
+      const fallback = primary === gateway ? direct : gateway;
 
       const load = (targetUrl) =>
         this.fetcher(targetUrl)
@@ -63,7 +65,7 @@
           });
 
       return load(primary).catch((e) => {
-        console.warn('Sticker autocomplete primary failed, trying gateway:', e);
+        console.warn('Sticker autocomplete primary failed, trying fallback:', e);
         return load(fallback).catch((e2) => {
           console.error('Failed to load sticker autocomplete data', e2);
           this.stickers = [];

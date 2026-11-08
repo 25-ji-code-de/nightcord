@@ -78,7 +78,7 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     assert.equal(await member.evaluate(() => nightcord.ui.currentUser.id), 'sekai:stable-subject');
     async function openOwnProfile(page) {
       if (page.viewportSize().width <= 768 && !await page.locator('.sidebar').evaluate(el => el.classList.contains('show'))) {
-        await page.locator('.chat-header').click({ position: { x: 10, y: 20 } });
+        await page.getByRole('button', { name: '切换成员列表' }).click();
       }
       const index = await page.evaluate(() => nightcord.ui.roster.findIndex(user => user.profile?.id === nightcord.ui.currentUser.id));
       await page.locator('#voice-users .voice-user').nth(index).click();

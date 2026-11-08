@@ -256,6 +256,16 @@ describe('login 与 logout', () => {
     assert.ok(session.getItem('sekai_pass_code_verifier'));
   });
 
+  test('test 房间登录保存当前标签页的目的地，不改已注册的回调地址', async () => {
+    search = '?test';
+    await auth.login();
+    assert.equal(session.getItem('nightcord-oauth-room'), 'nightcord-test');
+    assert.equal(new URL(redirectedTo).searchParams.get('redirect_uri'), 'https://nightcord.de5.net/auth/callback');
+    search = '';
+    await auth.login();
+    assert.equal(session.getItem('nightcord-oauth-room'), 'nightcord-default');
+  });
+
   test('logout 清空全部本地状态且不跳转', async () => {
     local.setItem('sekai_pass_access_token', 'AT');
     local.setItem('sekai_pass_refresh_token', 'RT');

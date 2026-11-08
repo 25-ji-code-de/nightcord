@@ -302,7 +302,7 @@
   --accent-on: #ff5500;       /* Walkman Orange / Rec Red */
   --accent-dim: #552b11;
   --text-main: #d0d0d0;
-  --text-dim: #505050;
+  --text-dim: #96969a;
   --border-color: #333333;
   
   display: flex;
@@ -314,7 +314,7 @@
   margin: 12px 0;
   width: fit-content;
   min-width: 400px;
-  height: 96px; 
+  min-height: 120px;
   font-family: 'JetBrains Mono', 'Consolas', monospace; /* Monospaced for tech feel */
   user-select: none;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
@@ -613,6 +613,7 @@
 
 .sekai-transport-btn {
   flex: 1;
+  min-height: 24px;
   background: #333;
   border: none;
   border-radius: 2px;
@@ -1051,7 +1052,7 @@
   padding: 3px 8px 3px 6px;
   border-radius: 4px;
   font-size: 0.85em;
-  color: #a0a0a0;
+  color: #b8b8bd;
   cursor: pointer;
   border-left: 3px solid #7c6fac;
   transition: all 0.2s ease;
@@ -1122,7 +1123,7 @@
   margin: 0 1px;
   border-radius: 4px;
   background: rgb(var(--sekai-accent) / 0.28);
-  color: #d4c8ff;
+  color: #eee8ff;
   font-weight: 600;
   font-size: 0.95em;
   vertical-align: baseline;
@@ -1260,6 +1261,26 @@
     min-width: 100%;
     max-width: 100%;
   }
+  .sekai-audio-player {
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+  }
+  .sekai-audio-player .sekai-console-module {
+    flex: 0 0 36px;
+    box-sizing: border-box;
+  }
+  .sekai-audio-player .sekai-audio-content {
+    min-width: 0;
+    height: 96px;
+  }
+  .sekai-audio-player .sekai-walkman-transport {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .sekai-audio-player .sekai-transport-btn { min-height: 44px; }
 }
 
 /* Additional SEKAI Fixes */

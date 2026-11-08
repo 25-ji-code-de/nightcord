@@ -77,6 +77,12 @@
 
     /** 开始 OAuth 授权流程。 */
     async login() {
+      // OAuth returns to a fixed callback URL without the room query string.
+      // Keep this tab's destination separate from the SDK's PKCE state.
+      try {
+        global.sessionStorage.setItem('nightcord-oauth-room',
+          new URLSearchParams(global.location.search).has('test') ? 'nightcord-test' : 'nightcord-default');
+      } catch (e) {}
       return this._auth.login();
     }
 

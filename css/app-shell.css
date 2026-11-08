@@ -262,6 +262,18 @@ body {
   height: 24px;
   font-size: 13px;
 }
+.sidebar-toggle { display: none; }
+.connection-status {
+  margin-left: auto;
+  padding-left: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgb(var(--sekai-fg));
+  font-size: 12px;
+}
+.connection-status[hidden] { display: none; }
 .messages {
   scrollbar-width: thin;
   border-radius: 10px;
@@ -1001,8 +1013,13 @@ body {
   background: #2b2633;
   border-radius: 24px;
   padding: 48px;
-  width: 100%;
-  max-width: 380px;
+  box-sizing: border-box;
+  width: calc(100% - 32px);
+  max-width: 478px;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   text-align: center;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1227,6 +1244,20 @@ body {
   display: none;
 }
 
+.name-chooser :is(input, button):focus-visible {
+  outline: 2px solid rgb(var(--sekai-accent));
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .name-chooser, .name-chooser-content, .name-chooser .logo-area svg {
+    animation: none;
+  }
+  .name-chooser *, .name-chooser *::before, .name-chooser *::after {
+    transition: none;
+  }
+}
+
 /* ==================== Mobile Responsive Styles ==================== */
 
 /* 移动端适配 - 针对平板和小屏设备 */
@@ -1283,24 +1314,28 @@ body {
     position: relative;
   }
   
-  .chat-header::before {
-    content: '☰';
-    position: absolute;
-    left: 16px;
-    font-size: 24px;
+  .sidebar-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    margin: 0 4px 0 -8px;
+    padding: 0;
+    border: 0;
+    color: inherit;
+    background: transparent;
     cursor: pointer;
-    z-index: 1;
-    padding: 4px 8px;
     border-radius: 4px;
     transition: background 0.2s;
   }
-  
-  .chat-header::before:hover {
+  .sidebar-toggle:hover {
     background: rgba(255, 255, 255, 0.1);
   }
-  
-  .chat-header .channel-icon {
-    margin-left: 48px;
+  .sidebar-toggle:focus-visible {
+    outline: 2px solid #d1c1f2;
+    outline-offset: -2px;
   }
   
   /* 窗口按钮在移动端隐藏 */
@@ -1342,8 +1377,6 @@ body {
   /* 名称选择器优化 */
   .name-chooser-content {
     padding: 36px 24px;
-    max-width: 90%;
-    margin: 0 16px;
   }
 }
 
@@ -1508,11 +1541,6 @@ body {
   .chat-root {
     height: 100vh;
     height: 100dvh;
-  }
-  
-  .name-chooser-content {
-    max-height: 90vh;
-    overflow-y: auto;
   }
   
   /* 减小头部高度 */

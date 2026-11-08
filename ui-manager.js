@@ -108,6 +108,7 @@ class UIManager {
     this.messageRenderFrame = null;
     this.messageRenderPending = false;
     this.pendingMessageAppends = [];
+    this.messageBuild = null;
     this.lastMsgTimestamp = 0;
     this.roster = [];
     this.rosterElements = new Map();
@@ -270,8 +271,13 @@ class UIManager {
     this.eventBus.on('room:left', () => {
       this.mentionsReady = false;
       this.mentionNotice?.remove();
+      this.setConnectionStatus('已断开连接');
     });
+    this.eventBus.on('room:joining', () => this.setConnectionStatus('正在连接…'));
+    this.eventBus.on('connection:error', () => this.setConnectionStatus('连接失败，正在重试…'));
+    this.eventBus.on('connection:close', () => this.setConnectionStatus('连接中断，正在重试…'));
     this.eventBus.on('room:ready', (data) => {
+      this.setConnectionStatus('');
       // room:synced also runs after reconnects, when the welcome is already shown.
       this.mentionsReady = true;
       // data.messages 为服务器返回的最新100条消息，格式应为 [{user, text, timestamp}, ...]
@@ -313,7 +319,7 @@ class UIManager {
       }
     });
     this.eventBus.on('error', (data) => this.showError(data.message));
-    this.eventBus.on('room:synced', () => { this.mentionsReady = true; });
+    this.eventBus.on('room:synced', () => { this.mentionsReady = true; this.setConnectionStatus(''); });
 
     // Nako AI 事件监听
     this.setupNakoEventListeners();
@@ -419,6 +425,7 @@ class UIManager {
 
     // Reset UI state
     nameInput.classList.remove('error');
+    nameInput.setAttribute('aria-invalid', 'false');
     if (nameError) {
       nameError.classList.remove('visible');
       nameError.textContent = '';
@@ -444,11 +451,20 @@ class UIManager {
       } catch (e) {}
     }
 
-    // Show Dialog
+    if (nameChooser.classList.contains('hidden')) {
+      this.nameChooserReturnFocus = document.activeElement;
+      this.nameChooserBackground = document.querySelector('.chat-root');
+      this.nameChooserBackgroundWasInert = this.nameChooserBackground?.inert;
+    }
+
+    // Keep keyboard and screen-reader navigation inside the dialog.
+    if (this.nameChooserBackground) this.nameChooserBackground.inert = true;
     nameChooser.classList.remove('hidden');
     // 移动设备上不自动聚焦，避免虚拟键盘自动弹出
     if (window.innerWidth > 768) {
-      setTimeout(() => nameInput.focus(), 100);
+      nameInput.focus();
+    } else {
+      nameChooser.focus({ preventScroll: true });
     }
 
     // Save callback for the event handler
@@ -473,7 +489,11 @@ class UIManager {
 
     const closeDialog = () => {
       nameChooser.classList.add('hidden');
-      nameInput.blur();
+      if (this.nameChooserBackground) this.nameChooserBackground.inert = this.nameChooserBackgroundWasInert;
+      const target = this.nameChooserReturnFocus;
+      if (target?.isConnected && target !== document.body) target.focus({ preventScroll: true });
+      else if (window.innerWidth > 768) this.elements.chatInput?.focus({ preventScroll: true });
+      else nameInput.blur();
     };
 
     const showInputError = (msg) => {
@@ -482,9 +502,10 @@ class UIManager {
         nameError.classList.add('visible');
       }
       nameInput.classList.add('error');
+      nameInput.setAttribute('aria-invalid', 'true');
       // Animation
       const content = document.querySelector('.name-chooser-content');
-      if (content) {
+      if (content && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         content.animate([
           { transform: 'translateX(0)' }, { transform: 'translateX(-10px)' },
           { transform: 'translateX(10px)' }, { transform: 'translateX(-10px)' },
@@ -494,14 +515,16 @@ class UIManager {
     };
 
     const clearInputError = () => {
-      if (nameError) nameError.classList.remove('visible');
+      if (nameError) {
+        nameError.classList.remove('visible');
+        nameError.textContent = '';
+      }
       nameInput.classList.remove('error');
+      nameInput.setAttribute('aria-invalid', 'false');
     };
 
     const submit = () => {
       const username = nameInput.value.trim();
-      const currentMode = this.nameChooserMode || 'init';
-
       if (!username) {
         showInputError('请输入昵称');
         if (window.innerWidth > 768) nameInput.focus();
@@ -530,6 +553,7 @@ class UIManager {
 
     // Events
     nameInput.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
       if (e.key === 'Enter') {
         e.preventDefault();
         submit();
@@ -539,6 +563,26 @@ class UIManager {
     });
 
     nameInput.addEventListener('input', clearInputError);
+
+    nameChooser.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === 'Escape' && this.nameChooserMode === 'change') {
+        e.preventDefault();
+        closeDialog();
+      } else if (e.key === 'Tab') {
+        const controls = [...nameChooser.querySelectorAll('input, button')]
+          .filter(el => !el.disabled && el.getClientRects().length);
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (e.shiftKey && (document.activeElement === first || document.activeElement === nameChooser)) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && (document.activeElement === last || document.activeElement === nameChooser)) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    });
 
     if (nameSubmit) {
       nameSubmit.addEventListener('click', (e) => {
@@ -642,6 +686,13 @@ class UIManager {
     this.currentUser = null;
   }
 
+  setConnectionStatus(message) {
+    const status = document.querySelector('#connection-status');
+    if (!status) return;
+    status.textContent = message;
+    status.hidden = !message;
+  }
+
   generateAvatar(username) {
     const colors = ['bg-pink-500', 'bg-purple-400', 'bg-teal-400', 'bg-pink-400', 'bg-purple-600', 'bg-green-600', 'bg-red-600', 'bg-default'];
     const bucket = this.fnv1a(username);
@@ -717,6 +768,7 @@ class UIManager {
       }
       const info = div.querySelector('.voice-user-info');
       const avatar = info.querySelector('.avatar');
+      avatar.setAttribute('aria-hidden', 'true');
       avatar.className = `avatar ${user.color}`;
       info.querySelector('.voice-user-name').textContent = user.name;
       this.profileUI.avatar(avatar, user.profile, user.avatar);
@@ -728,6 +780,9 @@ class UIManager {
       }
       if (user.profile) {
         this.profileUI.makeTrigger(div, user.profile);
+        // Include the visible avatar initial in the spoken label too, so voice
+        // control can match the complete text shown on the member button.
+        div.setAttribute('aria-label', `${user.avatar} ${user.name}，查看资料`);
       } else if (user.name === currentName && !div.dataset.nameChooserBound) {
         div.dataset.nameChooserBound = 'true';
         div.style.cursor = 'pointer';
@@ -756,6 +811,7 @@ class UIManager {
    */
   renderMessages() {
     this.messageRenderPending = true;
+    this.messageBuild = null;
     // 重建包含所有当前消息，也会淘汰切换房间前尚未提交的追加。
     this.pendingMessageAppends = [];
     this.scheduleMessageRender();
@@ -791,6 +847,57 @@ class UIManager {
     const measureRender = rebuild && typeof PerformanceOptimizer !== 'undefined';
     if (measureRender) PerformanceOptimizer.mark('renderMessages-start');
 
+    // Build larger histories off the live document in short frame budgets.
+    // Keep the existing list in place until the replacement is complete, so
+    // readers never see a half-built history and scroll position stays stable.
+    if (rebuild && messages.length > 40 && typeof PerformanceOptimizer !== 'undefined') {
+      this.messageBuild = {
+        messages: messages.slice(), cursor: 0, sourceLength: messages.length,
+        fragment: document.createDocumentFragment(),
+        index: new Map(), meta: new Map()
+      };
+    }
+    if (this.messageBuild) {
+      const build = this.messageBuild;
+      // New arrivals during the build are appended in the same replacement.
+      build.messages.push(...this.messages.slice(build.sourceLength));
+      build.sourceLength = this.messages.length;
+      const liveIndex = this.messageIndex;
+      const liveMeta = this.messageMeta;
+      this.messageIndex = build.index;
+      this.messageMeta = build.meta;
+      const deadline = performance.now() + 6;
+      let created = 0;
+      try {
+        while (build.cursor < build.messages.length && created < 20) {
+          build.fragment.appendChild(this.createMessageElement(build.messages[build.cursor++]));
+          if (++created >= 4 && performance.now() >= deadline) break;
+        }
+      } finally {
+        this.messageIndex = liveIndex;
+        this.messageMeta = liveMeta;
+      }
+      if (build.cursor < build.messages.length) {
+        this.scheduleMessageRender();
+        return;
+      }
+      // A new stream can start while the detached history is being built.
+      const streams = [...this.elements.chatlog.querySelectorAll('.streaming')];
+      for (const [key, node] of liveIndex) {
+        if (!node.classList.contains('streaming')) continue;
+        build.index.set(key, node);
+        if (liveMeta.has(key)) build.meta.set(key, liveMeta.get(key));
+      }
+      this.messageIndex = build.index;
+      this.messageMeta = build.meta;
+      this.elements.chatlog.replaceChildren(build.fragment, ...streams);
+      this.messageBuild = null;
+      if (this.shouldAutoScrollToBottom()) this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+      PerformanceOptimizer.mark('renderMessages-end');
+      PerformanceOptimizer.measure('renderMessages', 'renderMessages-start', 'renderMessages-end');
+      return;
+    }
+
     const { chatlog } = this.elements;
     const shouldAutoScroll = this.shouldAutoScrollToBottom();
     if (rebuild) {
@@ -808,7 +915,8 @@ class UIManager {
       chatlog.insertBefore(fragment, chatlog.querySelector('.streaming'));
     }
 
-    // 这里需要更新后的布局高度；每批只读取一次，不把滚动拖到下一帧。
+    // Read the final height once per batch so new messages are visible without
+    // delaying the scroll until another frame.
     if (shouldAutoScroll) chatlog.scrollTop = chatlog.scrollHeight;
 
     if (measureRender) {
@@ -980,6 +1088,13 @@ class UIManager {
       message.sender = data.sender;
       delete message.localNakoMessageId;
       this.saveMessageToStorage({ user: message.user, text: message.text, timestamp: message.timestamp, sender: message.sender });
+
+      if (this.messageBuild) {
+        // A detached row may still contain the provisional timestamp/sender.
+        // Restart the pending replacement from the now-confirmed model.
+        this.renderMessages();
+        return true;
+      }
 
       if (preview) {
         const confirmed = this.createMessageElement(message);
@@ -1293,6 +1408,7 @@ class UIManager {
       if (emojiBtn) {
         emojiBtn.addEventListener('click', (e) => {
           e.preventDefault();
+          e.stopPropagation();
           const input = this.elements.chatInput;
           if (!input) return;
           handleLeftBracket(input);
@@ -1420,11 +1536,13 @@ class UIManager {
     // 粘贴上传支持
     if (chatInput) {
       chatInput.addEventListener('paste', (e) => {
-        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+        if (!items) return;
         for (const item of items) {
           if (item.kind === 'file') {
             e.preventDefault();
             const file = item.getAsFile();
+            if (!file) continue;
             let type = 'file';
             if (file.type.startsWith('image/')) {
               type = 'image';
@@ -2513,36 +2631,39 @@ class UIManager {
   setupMobileMenu() {
     const sidebar = document.querySelector('.sidebar');
     const chatHeader = document.querySelector('.chat-header');
-    
-    if (!sidebar || !chatHeader) return;
-    
-    // 点击头部左侧区域切换侧边栏
-    chatHeader.addEventListener('click', (e) => {
-      // 只在点击左侧区域时触发（前50px）
-      if (e.clientX < 50) {
-        sidebar.classList.toggle('show');
-      }
-    });
+    const toggle = document.querySelector('.sidebar-toggle');
+    if (!sidebar || !chatHeader || !toggle) return;
+    const mobile = window.matchMedia('(max-width: 768px)');
+    const sync = () => {
+      const open = !mobile.matches || sidebar.classList.contains('show');
+      sidebar.inert = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+    };
+    const close = () => { sidebar.classList.remove('show'); sync(); };
+    toggle.addEventListener('click', () => { sidebar.classList.toggle('show'); sync(); });
+    mobile.addEventListener('change', () => { close(); });
+    sync();
     
     // 点击侧边栏外部区域关闭侧边栏
     document.addEventListener('click', (e) => {
       if (sidebar.classList.contains('show')) {
         // 检查点击是否在侧边栏外部且不是头部按钮
         if (!sidebar.contains(e.target) && !e.target.closest('.chat-header')) {
-          sidebar.classList.remove('show');
+          close();
         }
       }
     });
     
-    // 点击侧边栏内的频道时关闭侧边栏（移动端）
-    const channels = sidebar.querySelectorAll('.channel, .voice-user');
-    channels.forEach(channel => {
-      channel.addEventListener('click', () => {
-        // 只在移动端关闭（通过检测窗口宽度）
-        if (window.innerWidth <= 768) {
-          sidebar.classList.remove('show');
-        }
-      });
+    // Selecting the channel closes navigation; profile cards keep their trigger
+    // available so keyboard focus can return to the member after dismissal.
+    sidebar.addEventListener('click', (event) => {
+      if (mobile.matches && event.target.closest('.channel')) close();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && mobile.matches && sidebar.classList.contains('show') && !document.querySelector('dialog[open]')) {
+        close();
+        toggle.focus();
+      }
     });
   }
 }

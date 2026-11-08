@@ -41,6 +41,9 @@ test('message rendering batches updates without losing or duplicating messages',
     await page.evaluate(() => {
       window.ui = new UIManager(new EventBus());
       window.nextFrame = () => new Promise(requestAnimationFrame);
+      window.renderComplete = async () => {
+        do { await nextFrame(); } while (ui.messageRenderFrame !== null || ui.messageBuild);
+      };
       window.counts = { created: 0, heightReads: 0, scrollWrites: 0 };
       const create = ui.createMessageElement;
       ui.createMessageElement = function (message) {
@@ -216,7 +219,7 @@ test('message rendering batches updates without losing or duplicating messages',
       ui.renderMessages();
       ui.renderMessages();
       const before = { rows: rows().length, measures: performance.getEntriesByName('renderMessages').length };
-      await nextFrame();
+      await renderComplete();
       const measure = performance.getEntriesByName('renderMessages')[0];
       return {
         before, rows: rows().length, counts,
@@ -256,6 +259,104 @@ test('message rendering batches updates without losing or duplicating messages',
     assert.equal(result.rows.length, 65);
     assert.deepEqual(result.rows.slice(-25), Array.from({ length: 25 }, (_, i) => `burst ${i}`));
     assert.deepEqual(result.counts, { created: 25, heightReads: 1, scrollWrites: 1 });
+  });
+
+  await t.test('large history yields to input, includes arrivals and keeps the active stream', async t => {
+    const page = await fixture(t);
+    const partial = await page.evaluate(async () => {
+      seed(3); await renderComplete();
+      window.previousRows = [...ui.elements.chatlog.children];
+      counts.created = counts.heightReads = counts.scrollWrites = 0;
+      seed(600); await nextFrame();
+      ui.addSystemMessage('arrived during history', 1700000020000);
+      window.activeStream = ui.startStreamingMessage('during-history', 'Nako');
+      document.querySelector('#messageInput').addEventListener('input', () => window.inputDuringBuild = !!ui.messageBuild);
+      return { pending: !!ui.messageBuild, created: counts.created,
+        oldRowsConnected: previousRows.every(row => row.isConnected) };
+    });
+    assert.equal(partial.pending, true);
+    assert.ok(partial.created > 0 && partial.created < 600);
+    assert.equal(partial.oldRowsConnected, true);
+    await page.locator('#messageInput').fill('draft while loading');
+    const result = await page.evaluate(async () => {
+      await renderComplete();
+      const log = ui.elements.chatlog;
+      return { rows: rows(), inputDuringBuild, stream: log.lastElementChild === activeStream,
+        indexesConnected: [...ui.messageIndex.values()].every(row => row.isConnected),
+        bottom: log.scrollHeight - log.clientHeight - log.scrollTop < 1 };
+    });
+    assert.equal(result.inputDuringBuild, true);
+    assert.equal(await page.locator('#messageInput').inputValue(), 'draft while loading');
+    assert.equal(result.rows.length, 601);
+    assert.equal(result.rows.filter(text => text === 'arrived during history').length, 1);
+    assert.equal(result.stream, true);
+    assert.equal(result.indexesConnected, true);
+    assert.equal(result.bottom, true);
+  });
+
+  await t.test('switching rooms cancels unfinished history before it can replace the new room', async t => {
+    const page = await fixture(t);
+    const result = await page.evaluate(async () => {
+      seed(120); await nextFrame();
+      const pending = !!ui.messageBuild;
+      ui.storage.saveMessages('replacement', [{ user: 'Other', text: 'replacement room', timestamp: 1700000090000 }]);
+      ui.setCurrentRoom('replacement');
+      await renderComplete();
+      await nextFrame();
+      return { pending, rows: rows(), index: [...ui.messageMeta.values()].map(m => m.text) };
+    });
+    assert.equal(result.pending, true);
+    assert.deepEqual(result.rows, ['replacement room']);
+    assert.deepEqual(result.index, ['replacement room']);
+  });
+
+  await t.test('AI confirmation during a history build keeps one reply and its server identity', async t => {
+    const page = await fixture(t);
+    const result = await page.evaluate(async () => {
+      ui.currentRoom = 'ai-history';
+      ui.currentUser = { id: 'sekai:one', displayName: 'User', authenticated: true };
+      ui.onSendMessage = () => true;
+      ui.startStreamingMessage('ai-history', 'Nako');
+      ui.finishStreamingMessage('ai-history', 'Nako', 'confirmed during build');
+      const local = ui.messages[0];
+      const localTimestamp = local.timestamp;
+      const history = Array.from({ length: 120 }, (_, i) => ui.createMessageData('User', `History ${i}`, 1700000000000 + i));
+      ui.messages = [local, ...history];
+      ui.renderMessages(); await nextFrame();
+      const pending = !!ui.messageBuild;
+      const serverTimestamp = 1700000090000;
+      ui.eventBus.emit('message:received', { name: 'Nako', message: local.text, timestamp: serverTimestamp, isNako: true, sender: ui.currentUser });
+      await renderComplete();
+      const confirmed = ui.messageIndex.get(serverTimestamp);
+      return { pending, replies: rows().filter(text => text === local.text).length,
+        total: rows().length, sender: ui.messages.find(message => message.timestamp === serverTimestamp)?.sender?.id,
+        timestamp: confirmed?.dataset.timestamp, connected: confirmed?.isConnected,
+        staleIndex: ui.messageIndex.has(localTimestamp), unconfirmed: ui.localNakoMessages.size };
+    });
+    assert.equal(result.pending, true);
+    assert.equal(result.replies, 1);
+    assert.equal(result.total, 121);
+    assert.equal(result.timestamp, '1700000090000');
+    assert.equal(result.sender, 'sekai:one');
+    assert.equal(result.connected, true);
+    assert.equal(result.staleIndex, false);
+    assert.equal(result.unconfirmed, 0);
+  });
+
+  await t.test('plain text stays literal while markup and entities retain sanitization', async t => {
+    const page = await fixture(t);
+    const result = await page.evaluate(() => {
+      const renderer = new SekaiRenderer();
+      const literal = renderer.render('中文 English 普通文本');
+      const rich = renderer.render('<img src=x onerror="window.compromised=true"> &amp; **bold**');
+      return { literal: literal.textContent, text: rich.textContent,
+        bold: rich.querySelector('strong')?.textContent,
+        unsafe: !!rich.querySelector('[onerror],script') };
+    });
+    assert.equal(result.literal, '中文 English 普通文本');
+    assert.equal(result.text, ' & bold');
+    assert.equal(result.bold, 'bold');
+    assert.equal(result.unsafe, false);
   });
 
   await t.test('room changes discard pending old messages and rebuild reply indexes', async t => {
@@ -298,7 +399,7 @@ test('message rendering batches updates without losing or duplicating messages',
       ui.lastUserActivityTime = Date.now();
       await nextFrame();
       const reading = { top: ui.elements.chatlog.scrollTop, writes: counts.scrollWrites, reads: counts.heightReads };
-      ui.renderMessages(); await nextFrame();
+      ui.renderMessages(); await renderComplete();
       const rebuilt = { top: ui.elements.chatlog.scrollTop, writes: counts.scrollWrites };
       ui.isAtBottom = true;
       ui.addSystemMessage('follow again', 1700000010001);
@@ -395,7 +496,7 @@ test('message rendering batches updates without losing or duplicating messages',
     assert.equal(result.connected, true);
     assert.equal(result.removals, 0);
     assert.deepEqual(result.opened, Array(2).fill({ id: 'sekai:one', name: 'Renamed', bio: 'Updated bio' }));
-    assert.equal(result.label, '查看 Renamed 的资料');
+    assert.equal(result.label, 'R Renamed，查看资料');
     release();
     await page.waitForFunction(() => originalImage.complete && originalImage.naturalWidth === 32);
     assert.equal(requests.length, 1);

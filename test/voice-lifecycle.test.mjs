@@ -6,11 +6,20 @@ import vm from 'node:vm';
 
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
 function capture() {
-  const track = { stopped: false, enabled: true, stop() { this.stopped = true; }, addEventListener() {} };
+  const track = { kind: 'audio', readyState: 'live', stopped: false, enabled: true, stop() { this.stopped = true; this.readyState = 'ended'; }, addEventListener() {} };
   return { track, getTracks: () => [track], getAudioTracks: () => [track] };
 }
 function harness() {
-  const context = vm.createContext({ crypto, AbortSignal, Uint8Array, setTimeout, clearTimeout, setInterval, clearInterval, navigator: {}, document: { hidden: false }, RTCPeerConnection: class {} });
+  const audioContexts = [];
+  class AudioContext {
+    constructor() { this.state = 'running'; audioContexts.push(this); }
+    createMediaStreamDestination() { this.stream = capture(); return { stream: this.stream }; }
+    createConstantSource() { return { offset: { value: 1 }, connect() {}, start() {}, stop() {} }; }
+    resume() { return Promise.resolve(); }
+    close() { this.state = 'closed'; return Promise.resolve(); }
+    addEventListener(name, listener) { if (name === 'statechange') this.stateChanged = listener; }
+  }
+  const context = vm.createContext({ crypto, AbortSignal, Uint8Array, setTimeout, clearTimeout, setInterval, clearInterval, AudioContext, navigator: {}, document: { hidden: false }, RTCPeerConnection: class {} });
   for (const file of ['event-bus.js', 'voice-manager.js']) vm.runInContext(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), context);
   const bus = vm.runInContext('new EventBus()', context);
   const chat = { roomname: 'test', currentUser: { authenticated: true, id: 'one' }, wsManager: { hostname: 'chat.test' } };
@@ -21,8 +30,131 @@ function harness() {
   manager.request = async (action, input, membership) => { calls.push({ action, input, membership }); return {}; };
   manager.membership = { memberId: 'member', base: 'https://chat.test/voice', token: 'secret' };
   manager.state.joined = true;
-  return { manager, bus, chat, permission, calls };
+  return { manager, bus, chat, permission, calls, audioContexts };
 }
+
+async function publishing({ silence = true } = {}) {
+  const h = harness(), stream = capture(), peers = [];
+  if (!silence) h.manager.audioContextFactory = () => { throw new Error('Web Audio unavailable'); };
+  h.manager.ice = async () => ({ iceServers: [] }); h.manager.gather = async () => {};
+  h.manager.peerFactory = () => {
+    const pc = {
+      connectionState: 'connected', localDescription: { type: 'offer', sdp: 'v=0\r\n' },
+      sender: { getParameters: () => ({}), track: null, async replaceTrack(track) { this.track = track; } },
+      addTransceiver(track) { this.sender.track = track; return { mid: '0', sender: this.sender }; },
+      createOffer: async () => ({}), setLocalDescription: async () => {},
+      async setRemoteDescription(description) { this.remoteDescription = description; },
+      addEventListener() {}, close() { this.connectionState = 'closed'; },
+    };
+    peers.push(pc); return pc;
+  };
+  h.manager.request = async (action, input, membership) => {
+    h.calls.push({ action, input, membership });
+    if (action === 'publisher/start') return { operationId: input.mutationId, generation: 1, sessionDescription: { type: 'answer', sdp: 'v=0\r\na=rtpmap:111 opus/48000/2\r\na=fmtp:111 minptime=10;useinbandfec=1\r\n' } };
+    return {};
+  };
+  const pending = h.manager.microphone(); h.permission.resolve(stream); await pending;
+  assert.equal(h.manager.state.microphone, true);
+  return { ...h, stream, peers };
+}
+
+test('mute stops real capture and reopening reuses publisher, operation and DTX silence', async () => {
+  const h = await publishing();
+  const pc = h.manager.publisher, attempt = h.manager.publisherAttempt;
+  assert.match(pc.remoteDescription.sdp, /useinbandfec=1;usedtx=1/);
+  h.manager.mute(); await attempt.replacing;
+  assert.equal(h.stream.track.readyState, 'ended'); assert.equal(h.manager.capture, null);
+  assert.equal(pc.sender.track, attempt.silence.track); assert.equal(pc.connectionState, 'connected');
+  const resumed = capture(); h.manager.mediaDevices.getUserMedia = async () => resumed;
+  await h.manager.microphone();
+  assert.equal(h.manager.publisher, pc); assert.equal(pc.sender.track, resumed.track);
+  assert.equal(h.manager.state.microphone, true); assert.equal(h.peers.length, 1);
+  assert.deepEqual(h.calls.filter(call => call.action === 'publisher/state').map(call => [call.input.sequence, call.input.microphone]), [[1, false], [2, true]]);
+  assert.equal(h.calls.filter(call => call.action === 'publisher/start').length, 1);
+  assert.equal(h.calls.filter(call => call.action === 'publisher/stop').length, 0);
+  await h.manager.leave();
+  assert.equal(resumed.track.readyState, 'ended'); assert.equal(attempt.silence.track.readyState, 'ended');
+  assert.equal(attempt.silence.context.state, 'closed'); assert.equal(pc.connectionState, 'closed');
+});
+
+test('canceling a warm microphone prompt leaves silence and stops the late capture', async () => {
+  const h = await publishing(); h.manager.mute();
+  const attempt = h.manager.publisherAttempt, permission = deferred(), stream = capture();
+  h.manager.mediaDevices.getUserMedia = () => permission.promise;
+  const pending = h.manager.microphone(); h.manager.mute();
+  permission.resolve(stream); await pending; await attempt.replacing;
+  assert.equal(stream.track.readyState, 'ended'); assert.equal(h.manager.state.microphone, false);
+  assert.equal(attempt.sender.track, attempt.silence.track);
+  assert.ok(h.calls.filter(call => call.action === 'publisher/state').every(call => !call.input.microphone));
+  h.manager.destroy();
+});
+
+test('mute wins a delayed warm track replacement and a newer unmute can follow it', async () => {
+  const h = await publishing(); h.manager.mute(); await h.manager.publisherAttempt.replacing;
+  const attempt = h.manager.publisherAttempt, response = deferred(), replacing = deferred(), stream = capture();
+  h.manager.mediaDevices.getUserMedia = async () => stream;
+  attempt.sender.replaceTrack = async function (track) {
+    if (track === stream.track) { replacing.resolve(); await response.promise; }
+    this.track = track;
+  };
+  const pending = h.manager.microphone(); await replacing.promise;
+  h.manager.mute(); response.resolve(); await pending; await attempt.replacing;
+  assert.equal(stream.track.readyState, 'ended'); assert.equal(attempt.sender.track, attempt.silence.track);
+  assert.equal(h.manager.state.microphone, false);
+  const newer = capture(); h.manager.mediaDevices.getUserMedia = async () => newer;
+  await h.manager.microphone(); assert.equal(attempt.sender.track, newer.track);
+  assert.equal(h.manager.state.microphone, true); h.manager.destroy();
+});
+
+test('an old mute sync failure also stops a newer capture before dropping that shared publisher', async () => {
+  const h = await publishing(), response = deferred(), original = h.manager.request;
+  h.manager.request = async (...args) => args[0] === 'publisher/state' && !args[1].microphone ? response.promise : original(...args);
+  h.manager.mute();
+  const resumed = capture(); h.manager.mediaDevices.getUserMedia = async () => resumed;
+  await h.manager.microphone(); assert.equal(h.manager.state.microphone, true);
+  response.resolve(Promise.reject(Object.assign(new Error('network'), { code: 'upstream_unavailable' })));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(resumed.track.readyState, 'ended'); assert.equal(h.manager.state.microphone, false);
+  assert.equal(h.manager.publisher, null); h.manager.destroy();
+});
+
+test('suspended silence falls back to releasing the publication instead of keeping a dead audio graph', async () => {
+  const h = await publishing(); h.manager.mute();
+  const attempt = h.manager.publisherAttempt;
+  attempt.silence.context.state = 'suspended'; attempt.silence.context.stateChanged();
+  assert.equal(h.manager.publisher, null); assert.equal(attempt.pc.connectionState, 'closed');
+  assert.equal(attempt.silence.track.readyState, 'ended'); h.manager.destroy();
+});
+
+test('without Web Audio, mute stops capture and retires the publisher before a cold reopen', async () => {
+  const h = await publishing({ silence: false }), old = h.manager.publisher;
+  h.manager.mute();
+  assert.equal(h.stream.track.readyState, 'ended'); assert.equal(old.connectionState, 'closed');
+  assert.equal(h.manager.publisher, null);
+  const resumed = capture(); h.manager.mediaDevices.getUserMedia = async () => resumed;
+  await h.manager.microphone();
+  assert.equal(h.manager.state.microphone, true); assert.notEqual(h.manager.publisher, old);
+  assert.equal(h.calls.filter(call => call.action === 'publisher/start').length, 2);
+  assert.equal(h.calls.filter(call => call.action === 'publisher/stop').length, 1);
+  h.manager.destroy();
+});
+
+test('room and identity changes close a warm publisher and reject a late warm capture', async () => {
+  for (const event of ['room:joining', 'room:left', 'auth:required', 'session:updated']) {
+    const h = await publishing(), attempt = h.manager.publisherAttempt;
+    h.manager.identity = 'one'; h.manager.mute();
+    const permission = deferred(), stream = capture();
+    h.manager.mediaDevices.getUserMedia = () => permission.promise;
+    const pending = h.manager.microphone();
+    h.bus.emit(event, { user: { id: 'other' } });
+    assert.equal(h.manager.membership, null, event); assert.equal(attempt.pc.connectionState, 'closed', event);
+    assert.equal(attempt.silence.context.state, 'closed', event); assert.equal(attempt.silence.track.readyState, 'ended', event);
+    permission.resolve(stream); await pending;
+    assert.equal(stream.track.readyState, 'ended', event); assert.equal(h.manager.capture, null, event);
+    assert.ok(h.calls.filter(call => call.action === 'publisher/state').every(call => !call.input.microphone), event);
+    h.manager.destroy();
+  }
+});
 
 test('canceling a pending microphone prompt stops the late stream without publishing', async () => {
   const h = harness(), stream = capture();

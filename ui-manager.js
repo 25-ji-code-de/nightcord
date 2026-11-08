@@ -830,7 +830,7 @@ class UIManager {
       presence.setAttribute('aria-label', presenceState);
       const mic = div.querySelector('.member-microphone');
       mic.hidden = !user.voice;
-      const microphone = user.voice && (user.voice.memberId === this.localVoice?.memberId ? this.localVoice.microphone : user.voice.publishing);
+      const microphone = user.voice && (user.voice.memberId === this.localVoice?.memberId ? this.localVoice.microphone : user.voice.microphone ?? user.voice.publishing);
       const micState = microphone ? '麦克风已开启' : '麦克风已关闭';
       if (user.voice && mic.dataset.microphone !== String(microphone)) {
         mic.dataset.microphone = String(microphone);

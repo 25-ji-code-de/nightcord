@@ -10,7 +10,7 @@ type Member = {
   clientId: string; joinRequestId: string; chatId: string; chatConnectionId: string;
   authUntil: number; expiresAt: number; heartbeatAt: number; nextMutationAt: number;
   leaving: boolean; tombstoneUntil?: number; disconnectUntil?: number; generations: { publisher: number; receiver: number };
-  publication?: { sessionId: string; trackName: string; version: string };
+  publication?: { sessionId: string; trackName: string; version: string; microphone?: boolean; microphoneSequence?: number };
   turnUsers: string[]; ice?: Record<string, unknown>;
 };
 type Ticket = { user: Member['user']; chatConnectionId: string; chatId: string; authUntil: number; expiresAt: number };
@@ -38,6 +38,7 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
     const now = Date.now();
     return { revision: this.revision(), members: this.members().filter(member => !member.leaving && this.expiry(member) > now).map(member => ({
       memberId: member.id, user: member.user, publishing: !!member.publication, publicationVersion: member.publication?.version || null,
+      microphone: !!member.publication && member.publication.microphone !== false,
     })) };
   }
   getPresence() { return this.snapshot(); }
@@ -152,7 +153,7 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
         if (!cached.result) return fail('reconnect_required', 409);
         return { ok: true, value: JSON.parse(cached.result) };
       }
-      if (!['publisher/ready', 'renegotiate', 'publisher/stop'].includes(action)) {
+      if (!['publisher/ready', 'renegotiate', 'publisher/stop', 'publisher/state'].includes(action)) {
         if (Date.now() < member.nextMutationAt) return fail('rate_limited', 429);
         member.nextMutationAt = Date.now() + 400; this.save(member);
       }
@@ -200,6 +201,22 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
     }
   }
   private async media(member: Member, action: string, requestId: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
+    if (action === 'publisher/state') {
+      if (typeof input.microphone !== 'boolean' || !Number.isSafeInteger(input.sequence) || (input.sequence as number) < 1) return fail('invalid_request');
+      const operationId = identifier(input.operationId);
+      const session = this.sessions().find(value => value.memberId === member.id && value.direction === 'publisher'
+        && value.operationId === operationId && value.generation === input.generation && value.phase === 'ready' && !value.retired);
+      if (!session || member.publication?.version !== session.id) return fail('stale_generation', 409);
+      this.assertSession(member.id, session.id);
+      const previous = member.publication.microphoneSequence || 0;
+      if (input.sequence === previous && member.publication.microphone !== input.microphone) return fail('invalid_request');
+      if ((input.sequence as number) > previous) {
+        member.publication.microphoneSequence = input.sequence as number;
+        member.publication.microphone = input.microphone;
+        this.save(member); this.changed();
+      }
+      return { microphone: member.publication.microphone !== false, sequence: member.publication.microphoneSequence || 0, snapshot: this.snapshot() };
+    }
     if (action === 'publisher/stop') {
       const operationId = identifier(input.operationId);
       const sessions = this.sessions().filter(value => value.memberId === member.id && value.direction === 'publisher' && value.operationId === operationId);
@@ -225,7 +242,7 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
       session.phase = 'ready'; session.deadline = Number.MAX_SAFE_INTEGER; this.saveSession(session);
       if (action === 'publisher/ready') {
         member = this.valid(this.latest(member.id));
-        member.publication = { sessionId: session.providerId!, trackName: `mic-${session.id}`, version: session.id }; this.save(member); this.changed();
+        member.publication = { sessionId: session.providerId!, trackName: `mic-${session.id}`, version: session.id, microphone: true, microphoneSequence: 0 }; this.save(member); this.changed();
       }
       return { ready: true, snapshot: this.snapshot() };
     }

@@ -84,7 +84,7 @@ test('message rendering batches updates without losing or duplicating messages',
       ui.addUserToRoster(guest.displayName, guest);
       const row = ui.elements.roster.firstElementChild;
       const initial = groups();
-      const members = [{ memberId: 'voice-one', user: pass, publishing: true }, { memberId: 'voice-two', user: guest, publishing: false }];
+      const members = [{ memberId: 'voice-one', user: pass, publishing: true }, { memberId: 'voice-two', user: guest, publishing: true, microphone: false }];
       ui.eventBus.emit('voice:state', { snapshot: { revision: 1, members } });
       const voice = groups();
       const mobile = row.querySelector('.member-presence').dataset.presence;

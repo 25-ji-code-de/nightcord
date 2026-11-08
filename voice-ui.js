@@ -182,7 +182,7 @@ class VoiceUI {
       const line = document.createElement(self ? 'div' : 'button'); line.className = 'voice-member-line';
       const info = document.createElement('span'); info.className = 'voice-member-info';
       const name = document.createElement('span'); name.className = 'voice-member-name'; name.textContent = member.user.displayName + (self ? '（您）' : ''); name.title = name.textContent;
-      const status = document.createElement('small'); status.dataset.speaking = ''; row.dataset.state = (self ? state.microphone : member.publishing) ? '麦克风已开启' : '仅收听模式'; status.textContent = row.dataset.state;
+      const status = document.createElement('small'); status.dataset.speaking = ''; row.dataset.state = (self ? state.microphone : member.microphone ?? member.publishing) ? '麦克风已开启' : '仅收听模式'; status.textContent = row.dataset.state;
       info.append(name, status); line.append(this.memberAvatar(member.user), info);
       if (!self) {
         line.type = 'button'; line.dataset.voiceMember = member.memberId;

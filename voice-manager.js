@@ -2,12 +2,14 @@
 
 // One owner for captures, PeerConnections and asynchronous lifecycle generations.
 class VoiceManager {
-  constructor({ eventBus, chatRoom, fetch: fetcher = (...args) => fetch(...args), peerFactory = config => new RTCPeerConnection(config), mediaDevices = navigator.mediaDevices } = {}) {
+  constructor({ eventBus, chatRoom, fetch: fetcher = (...args) => fetch(...args), peerFactory = config => new RTCPeerConnection(config), mediaDevices = navigator.mediaDevices,
+    audioContextFactory = () => new (globalThis.AudioContext || globalThis.webkitAudioContext)({ sampleRate: 48000 }) } = {}) {
     this.bus = eventBus;
     this.chat = chatRoom;
     this.fetch = fetcher;
     this.peerFactory = peerFactory;
     this.mediaDevices = mediaDevices;
+    this.audioContextFactory = audioContextFactory;
     this.state = { available: false, loginRequired: true, joined: false, busy: false, microphone: false, message: '', members: [], speaking: [] };
     this.generation = 0;
     this.micGeneration = 0;
@@ -228,44 +230,138 @@ class VoiceManager {
     this.receiverTimer = setTimeout(() => { void this.reconcile(); }, 1000 * 2 ** (this.receiverFailures - 1) + Math.random() * 300);
   }
   recover() { this.receiverFailures = 0; this.state.recoveryNeeded = false; this.receiverSignature = null; void this.reconcile(); this.emit(); }
+  opusDtx(description) {
+    // usedtx is a receive preference: the SFU answer configures our encoder.
+    // Merely adding it to our local offer does not enable outgoing DTX.
+    const lines = description.sdp.split(/\r?\n/);
+    const payloads = new Set(lines.flatMap(line => /^a=rtpmap:(\d+) opus\/48000/i.exec(line)?.slice(1) || []));
+    const configured = new Set();
+    for (let index = 0; index < lines.length; index++) {
+      const match = /^a=fmtp:(\d+) (.*)$/.exec(lines[index]);
+      if (!match || !payloads.has(match[1])) continue;
+      const parameters = match[2].split(';').map(value => value.trim()).filter(value => value && !/^usedtx\s*=/i.test(value));
+      lines[index] = `a=fmtp:${match[1]} ${[...parameters, 'usedtx=1'].join(';')}`;
+      configured.add(match[1]);
+    }
+    for (const payload of payloads) if (!configured.has(payload)) {
+      const index = lines.findIndex(line => line.startsWith(`a=rtpmap:${payload} `));
+      lines.splice(index + 1, 0, `a=fmtp:${payload} usedtx=1`);
+    }
+    return { type: description.type, sdp: lines.join('\r\n') };
+  }
+  prepareSilence(attempt) {
+    let context;
+    try {
+      // Resume inside the click, before awaiting capture permission or networking.
+      context = this.audioContextFactory();
+      const destination = context.createMediaStreamDestination();
+      destination.channelCount = 1; destination.channelCountMode = 'explicit';
+      const source = context.createConstantSource(); source.offset.value = 0;
+      source.connect(destination); source.start();
+      attempt.silence = { context, source, track: destination.stream.getAudioTracks()[0] };
+      void context.resume().catch(() => {});
+      context.addEventListener?.('statechange', () => {
+        // A suspended Web Audio graph cannot keep the publication alive reliably.
+        if (this.publisherAttempt === attempt && attempt.ready && !this.state.microphone && !this.capturePending && context.state !== 'running') this.releasePublisher(attempt);
+      });
+    } catch {
+      void context?.close().catch(() => {});
+      // Browsers without a usable Web Audio graph retain the cold mute path.
+    }
+  }
+  warmPublisher() {
+    const attempt = this.publisherAttempt;
+    return attempt?.ready && !attempt.closed && this.publisher === attempt.pc && attempt.pc.connectionState === 'connected'
+      && attempt.silence?.context.state === 'running' && attempt.silence.track.readyState !== 'ended' ? attempt : null;
+  }
+  replaceTrack(attempt, track, generation) {
+    // Serialize replacements, including a mute arriving during an unmute.
+    const current = () => this.publisherAttempt === attempt && !attempt.closed && this.publisher === attempt.pc
+      && (generation === undefined || generation === this.micGeneration);
+    const operation = Promise.resolve(attempt.replacing).catch(() => {}).then(async () => {
+      if (!current()) return false;
+      await attempt.sender.replaceTrack(track);
+      return current();
+    });
+    attempt.replacing = operation.catch(() => {});
+    return operation;
+  }
+  async syncMicrophone(attempt, microphone) {
+    const input = { operationId: attempt.operationId, generation: attempt.generation, sequence: ++attempt.sequence, microphone, mutationId: crypto.randomUUID() };
+    let result;
+    for (let retry = 0; retry < 2; retry++) {
+      try { result = await this.request('publisher/state', input, attempt.membership); break; }
+      catch (error) { if (retry || error.code) throw error; }
+    }
+    if (this.publisherAttempt === attempt && this.membership === attempt.membership) this.applySnapshot(result.snapshot);
+  }
+  releasePublisher(attempt = this.publisherAttempt, notify = true) {
+    if (!attempt || attempt.closed) return;
+    attempt.closed = true;
+    if (this.publisherAttempt === attempt) { this.publisherAttempt = null; this.publisher = null; }
+    attempt.pc?.close();
+    if (attempt.silence) {
+      attempt.silence.track.stop(); attempt.silence.source.stop();
+      void attempt.silence.context.close().catch(() => {});
+    }
+    if (notify && attempt.started) void this.stopPublisher(attempt);
+  }
   async microphone(deviceId = '') {
-    if (this.publisher || this.capturePending) { this.mute(); return; }
+    if (this.state.microphone || this.capturePending) { this.mute(); return; }
     const membership = this.membership;
     if (!membership) return;
     const generation = ++this.micGeneration;
-    const attempt = { membership, operationId: crypto.randomUUID() };
+    const warm = this.warmPublisher();
+    if (!warm) this.releasePublisher();
+    const attempt = warm || { membership, operationId: crypto.randomUUID(), sequence: 0 };
     this.publisherAttempt = attempt;
     this.capturePending = true; this.state.message = '正在启用麦克风……'; this.emit();
-    let stream, pc;
+    let stream;
     try {
       // Keep the permission request inside the user's click, before network awaits.
-      stream = await this.mediaDevices.getUserMedia({ video: false, audio: { channelCount: { ideal: 1 }, echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) } });
+      const permission = this.mediaDevices.getUserMedia({ video: false, audio: { channelCount: { ideal: 1 }, echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) } });
+      if (!warm) this.prepareSilence(attempt);
+      stream = await permission;
       if (generation !== this.micGeneration || this.membership !== membership) { stream.getTracks().forEach(track => track.stop()); return; }
       this.capture = stream;
-      const ice = await this.ice(membership);
-      if (generation !== this.micGeneration || this.membership !== membership) return;
-      pc = this.peerFactory({ iceServers: ice.iceServers }); this.publisher = pc;
-      const transceiver = pc.addTransceiver(stream.getAudioTracks()[0], { direction: 'sendonly' });
-      const opus = globalThis.RTCRtpSender?.getCapabilities?.('audio')?.codecs.filter(codec => codec.mimeType.toLowerCase() === 'audio/opus');
-      if (opus?.length && transceiver.setCodecPreferences) transceiver.setCodecPreferences(opus);
-      const params = transceiver.sender.getParameters();
-      if (params.encodings?.length) { params.encodings[0].maxBitrate = 40000; await transceiver.sender.setParameters(params).catch(() => {}); }
-      await pc.setLocalDescription(await pc.createOffer()); await this.gather(pc);
-      if (generation !== this.micGeneration || this.membership !== membership) return;
-      const result = await this.request('publisher/start', { sessionDescription: pc.localDescription, mid: transceiver.mid, mutationId: attempt.operationId }, membership);
-      if (generation !== this.micGeneration || this.membership !== membership) { void this.stopPublisher(attempt); return; }
-      await pc.setRemoteDescription(result.sessionDescription); await this.connected(pc);
-      await this.request('publisher/ready', { operationId: result.operationId, generation: result.generation, mutationId: crypto.randomUUID() }, membership);
-      if (generation !== this.micGeneration || this.membership !== membership) { void this.stopPublisher(attempt); return; }
-      this.state.microphone = true; this.state.message = '麦克风已开启';
-      stream.getAudioTracks()[0].addEventListener('ended', () => { if (this.capture === stream) { this.mute(); this.state.message = '麦克风已断开，请检查设备后重新开启。'; this.emit(); } });
-      pc.addEventListener('connectionstatechange', () => { if (this.publisher === pc && ['failed', 'disconnected'].includes(pc.connectionState)) { this.mute(); this.state.message = '麦克风连接中断，请重新开启。'; this.emit(); } });
+      const track = stream.getAudioTracks()[0];
+      track.addEventListener('ended', () => { if (this.capture === stream) { this.mute(); this.state.message = '麦克风已断开，请检查设备后重新开启。'; this.emit(); } });
+      if (warm) {
+        track.enabled = false;
+        if (!await this.replaceTrack(attempt, track, generation)) return;
+        track.enabled = true;
+        await this.syncMicrophone(attempt, true);
+        if (generation !== this.micGeneration || this.membership !== membership) return;
+      } else {
+        const ice = await this.ice(membership);
+        if (generation !== this.micGeneration || this.membership !== membership) return;
+        const pc = this.peerFactory({ iceServers: ice.iceServers }); this.publisher = pc; attempt.pc = pc;
+        const transceiver = pc.addTransceiver(track, { direction: 'sendonly' }); attempt.sender = transceiver.sender;
+        const opus = globalThis.RTCRtpSender?.getCapabilities?.('audio')?.codecs.filter(codec => codec.mimeType.toLowerCase() === 'audio/opus');
+        if (opus?.length && transceiver.setCodecPreferences) transceiver.setCodecPreferences(opus);
+        const params = transceiver.sender.getParameters();
+        if (params.encodings?.length) { params.encodings[0].maxBitrate = 40000; await transceiver.sender.setParameters(params).catch(() => {}); }
+        await pc.setLocalDescription(await pc.createOffer()); await this.gather(pc);
+        if (generation !== this.micGeneration || this.membership !== membership) return;
+        attempt.started = true;
+        const result = await this.request('publisher/start', { sessionDescription: pc.localDescription, mid: transceiver.mid, mutationId: attempt.operationId }, membership);
+        if (generation !== this.micGeneration || this.membership !== membership) { void this.stopPublisher(attempt); return; }
+        await pc.setRemoteDescription(this.opusDtx(result.sessionDescription)); await this.connected(pc);
+        await this.request('publisher/ready', { operationId: result.operationId, generation: result.generation, mutationId: crypto.randomUUID() }, membership);
+        if (generation !== this.micGeneration || this.membership !== membership) { void this.stopPublisher(attempt); return; }
+        attempt.ready = true; attempt.generation = result.generation;
+        pc.addEventListener('connectionstatechange', () => { if (this.publisher === pc && ['failed', 'disconnected'].includes(pc.connectionState)) { this.mute(); this.state.message = '麦克风连接中断，请重新开启。'; this.emit(); } });
+      }
+      this.state.microphone = true; this.state.message = '麦克风已开启'; this.emit();
       const devices = await this.mediaDevices.enumerateDevices();
       if (generation === this.micGeneration && this.membership === membership) this.state.devices = devices.filter(device => device.kind === 'audioinput').map(device => ({ deviceId: device.deviceId, label: device.label }));
     } catch (error) {
       if (generation === this.micGeneration && this.membership === membership) { this.mute(); this.handleError(error); }
     } finally {
-      if (generation !== this.micGeneration || this.membership !== membership) { stream?.getTracks().forEach(track => track.stop()); pc?.close(); }
+      if (generation !== this.micGeneration || this.membership !== membership || this.publisherAttempt !== attempt) {
+        stream?.getTracks().forEach(track => track.stop());
+        if (this.capture === stream) this.capture = null;
+      }
       if (generation === this.micGeneration) this.capturePending = false;
       this.emit();
     }
@@ -280,9 +376,16 @@ class VoiceManager {
   mute() {
     ++this.micGeneration; this.capturePending = false;
     this.capture?.getTracks().forEach(track => { track.enabled = false; track.stop(); }); this.capture = null;
-    this.publisher?.close(); this.publisher = null;
     this.state.microphone = false; this.state.message = '已加入 · 麦克风已关闭'; this.emit();
-    if (this.publisherAttempt) { void this.stopPublisher(this.publisherAttempt); this.publisherAttempt = null; }
+    const attempt = this.warmPublisher();
+    if (!attempt) { this.releasePublisher(); return; }
+    const failed = error => {
+      if (this.publisherAttempt !== attempt) return;
+      this.releasePublisher(attempt);
+      this.mute(); this.handleError(error);
+    };
+    void this.replaceTrack(attempt, attempt.silence.track).catch(failed);
+    void this.syncMicrophone(attempt, false).catch(failed);
   }
   setVolume(memberId, volume) { const value = Math.max(0, Math.min(1, volume)); this.volumes.set(memberId, value); const player = this.playbacks.get(memberId); if (player) player.audio.volume = value; }
   async enablePlayback() {
@@ -300,8 +403,8 @@ class VoiceManager {
         if (!pc || pc.connectionState !== 'connected') continue;
         const stats = await pc.getStats();
         for (const stat of stats.values()) if (stat.kind === 'audio' && stat.audioLevel > 0.02) {
-          if (own && stat.type === 'media-source') speaking.add(this.membership?.memberId);
-          if (!own && stat.type === 'inbound-rtp') for (const [memberId, player] of this.playbacks) if (player.mid === stat.mid) speaking.add(memberId);
+          if (own && this.state.microphone && stat.type === 'media-source') speaking.add(this.membership?.memberId);
+          if (!own && stat.type === 'inbound-rtp') for (const [memberId, player] of this.playbacks) if (player.mid === stat.mid && this.state.members.find(member => member.memberId === memberId)?.microphone !== false) speaking.add(memberId);
         }
       }
       if (generation === this.generation) { this.state.speaking = [...speaking].filter(Boolean); this.bus.emit('voice:activity', this.state.speaking); }
@@ -318,7 +421,7 @@ class VoiceManager {
     ++this.generation; ++this.micGeneration;
     clearInterval(this.heartbeatTimer); clearInterval(this.statsTimer); clearTimeout(this.iceTimer); clearTimeout(this.receiverTimer);
     this.capture?.getTracks().forEach(track => track.stop()); this.capture = null;
-    this.publisher?.close(); this.publisher = null; this.capturePending = false; this.publisherAttempt = null;
+    this.releasePublisher(this.publisherAttempt, false); this.publisher = null; this.capturePending = false; this.publisherAttempt = null;
     this.closeReceiver(); this.iceConfig = null;
     this.volumes.clear();
     this.state = { ...this.state, joined: false, busy: false, microphone: false, message: '', members: [], speaking: [], recoveryNeeded: false, playbackBlocked: false };

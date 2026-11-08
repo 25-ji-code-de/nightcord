@@ -125,6 +125,47 @@ test('voice authorization, join idempotency, SFU publish/subscribe ordering, and
   } finally { await f.close(); }
 });
 
+test('microphone state is ordered, owned and persistent without replacing or closing publications', { timeout: 20000 }, async () => {
+  const f = await fixture();
+  try {
+    const a = await f.join(await f.connect('one')), b = await f.join(await f.connect('two'));
+    const started = await f.api('publisher/start', a.credential, { mutationId: crypto.randomUUID(), mid: '0', sessionDescription: offer });
+    const operation = { operationId: started.value.operationId, generation: started.value.generation };
+    const ready = await f.api('publisher/ready', a.credential, { ...operation, mutationId: crypto.randomUUID() });
+    const original = ready.value.snapshot.members.find(member => member.memberId === a.memberId);
+    assert.equal(original.microphone, true);
+    const calls = f.provider.calls.length;
+    const mute = { ...operation, microphone: false, sequence: 2, mutationId: crypto.randomUUID() };
+    const muted = await f.api('publisher/state', a.credential, mute);
+    assert.equal(muted.status, 200);
+    const publication = muted.value.snapshot.members.find(member => member.memberId === a.memberId);
+    assert.equal(publication.microphone, false); assert.equal(publication.publishing, true);
+    assert.equal(publication.publicationVersion, original.publicationVersion);
+    assert.equal((await f.api('publisher/state', a.credential, mute)).status, 200, 'identical retry is idempotent');
+    const late = await f.api('publisher/state', a.credential, { ...operation, microphone: true, sequence: 1, mutationId: crypto.randomUUID() });
+    assert.equal(late.value.microphone, false, 'late unmute cannot undo a newer mute');
+    assert.equal(late.value.sequence, 2);
+    assert.equal((await f.api('publisher/state', a.credential, { ...mute, microphone: true, mutationId: crypto.randomUUID() })).status, 400, 'a sequence cannot describe two different states');
+    assert.equal((await f.api('publisher/state', b.credential, { ...mute, mutationId: crypto.randomUUID() })).status, 409, 'another member cannot update this publisher');
+    assert.equal((await f.api('publisher/state', a.credential, { ...mute, microphone: 'false', mutationId: crypto.randomUUID() })).status, 400);
+    assert.equal(f.provider.calls.length, calls, 'mute state does not allocate or retire any SFU resources');
+    const [id] = await f.runtime.listDurableObjectIds('VOICE_ROOMS');
+    await f.runtime.unsafeEvictDurableObject('nightcord-chat', 'VoiceRoom', { id });
+    const restored = await f.api('heartbeat', a.credential);
+    assert.equal(restored.value.snapshot.members.find(member => member.memberId === a.memberId).microphone, false);
+    const resumed = await f.api('publisher/state', a.credential, { ...operation, microphone: true, sequence: 3, mutationId: crypto.randomUUID() });
+    assert.equal(resumed.value.microphone, true);
+    assert.equal(resumed.value.snapshot.members.find(member => member.memberId === a.memberId).publicationVersion, original.publicationVersion);
+    assert.equal(f.provider.calls.length, calls);
+    await delay(450);
+    const replacement = await f.api('publisher/start', a.credential, { mutationId: crypto.randomUUID(), mid: '0', sessionDescription: offer });
+    assert.equal(replacement.status, 200);
+    await f.api('publisher/ready', a.credential, { operationId: replacement.value.operationId, generation: replacement.value.generation, mutationId: crypto.randomUUID() });
+    assert.equal((await f.api('publisher/state', a.credential, { ...operation, microphone: false, sequence: 100, mutationId: crypto.randomUUID() })).status, 409, 'old publication state cannot mute a replacement');
+    await f.api('leave', a.credential); await f.api('leave', b.credential);
+  } finally { await f.close(); }
+});
+
 test('guest voice is opt-in and uses verified cookie identity, expiry and room-scoped tickets', { timeout: 20000 }, async () => {
   const locked = await fixture({ bindings: { VOICE_REQUIRE_PASS: 'true' } });
   try {

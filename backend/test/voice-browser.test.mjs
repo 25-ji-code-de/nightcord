@@ -14,7 +14,7 @@ const live = process.env.NIGHTCORD_REALTIME_LIVE === '1';
 const relayOnly = process.env.NIGHTCORD_REALTIME_RELAY === '1';
 // This is a local protocol fixture with real browser RTP, not a Cloudflare
 // connectivity test unless NIGHTCORD_REALTIME_LIVE=1 explicitly enables it.
-test('two browsers carry audio through signaling, mute/reopen, and clean up on room change', { timeout: 120000 }, async () => {
+test('two browsers carry audio, keep DTX subscriptions across mute, and clean up on room change', { timeout: 180000 }, async () => {
   const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
   const artifacts = join(root, '.qa-artifacts', live ? relayOnly ? 'voice-cloudflare-turn' : 'voice-cloudflare' : 'voice');
   const secrets = live ? Object.fromEntries((await readFile(join(root, 'backend/.dev.vars'), 'utf8')).split(/\r?\n/).map(line => /^(REALTIME_[A-Z_]+)=(.*)$/.exec(line)).filter(Boolean).map(match => [match[1], match[2]])) : {};
@@ -278,17 +278,53 @@ test('two browsers carry audio through signaling, mute/reopen, and clean up on r
     assert.equal(await two.locator('[data-voice-view="call"]').isVisible(), true);
     await two.locator('[data-voice-member]').click();
     assert.equal(await two.locator('.voice-volume input').inputValue(), '0.25', 'the member display restores the selected listening volume');
-    await one.evaluate(() => { window.originalTrack = nightcord.voice.capture.getAudioTracks()[0]; });
+    await one.evaluate(() => { window.originalTrack = nightcord.voice.capture.getAudioTracks()[0]; window.originalPublisher = nightcord.voice.publisher; });
+    await two.evaluate(() => { window.originalReceiver = nightcord.voice.receiver; window.originalAudio = [...nightcord.voice.playbacks.values()][0].audio; });
+    const originalVersion = await two.evaluate(() => nightcord.voice.state.members.find(member => member.memberId !== nightcord.voice.membership.memberId).publicationVersion);
+    const allocations = calls.filter(call => typeof call === 'string' && call.endsWith('/sessions/new')).length;
     await openVoice(one);
     await one.locator('[data-voice-mic]').click();
     assert.equal(await one.evaluate(() => window.originalTrack.readyState), 'ended');
     assert.equal(await one.locator('[data-voice-mic] .voice-mic-off').isVisible(), true, 'microphone icons survive status updates');
-    await two.waitForFunction(() => nightcord.voice.playbacks.size === 0);
+    await two.waitForFunction(() => nightcord.voice.state.members.some(member => member.memberId !== nightcord.voice.membership.memberId && member.publishing && member.microphone === false));
     await observer.waitForFunction(() => document.querySelector('#voice-users [data-user-id^="guest:"] .member-microphone')?.dataset.microphone === 'false');
+    assert.equal(await one.evaluate(() => nightcord.voice.capture), null, 'muting releases microphone capture');
+    assert.equal(await one.evaluate(() => nightcord.voice.publisher === window.originalPublisher), true);
+    assert.equal(await two.evaluate(() => nightcord.voice.receiver === window.originalReceiver && [...nightcord.voice.playbacks.values()][0].audio === window.originalAudio), true, 'mute preserves the receiver and its playback element');
+    async function mediaStats(page, direction) {
+      return page.evaluate(async direction => {
+        const pc = direction === 'outbound-rtp' ? nightcord.voice.publisher : nightcord.voice.receiver;
+        const report = await pc.getStats(), stats = [...report.values()].find(stat => stat.type === direction && stat.kind === 'audio');
+        return { at: Date.now(), packets: stats.packetsSent ?? stats.packetsReceived, bytes: stats.bytesSent ?? stats.bytesReceived, headerBytes: stats.headerBytesSent ?? stats.headerBytesReceived, energy: stats.totalAudioEnergy || 0 };
+      }, direction);
+    }
+    await delay(live ? 3000 : 1000);
+    const quietStart = { publisher: await mediaStats(one, 'outbound-rtp'), receiver: await mediaStats(two, 'inbound-rtp') };
+    await delay(live ? 35000 : 3000);
+    const quietEnd = { publisher: await mediaStats(one, 'outbound-rtp'), receiver: await mediaStats(two, 'inbound-rtp') };
+    const rate = (start, end) => (end.packets - start.packets) * 1000 / (end.at - start.at);
+    const muted = { seconds: (quietEnd.publisher.at - quietStart.publisher.at) / 1000,
+      publisherPacketsPerSecond: rate(quietStart.publisher, quietEnd.publisher), receiverPacketsPerSecond: rate(quietStart.receiver, quietEnd.receiver) };
+    assert.ok(muted.publisherPacketsPerSecond > 0 && muted.publisherPacketsPerSecond < 15, `DTX must reduce silent publishing packets: ${JSON.stringify(muted)}`);
+    if (live) assert.ok(muted.receiverPacketsPerSecond > 0 && muted.receiverPacketsPerSecond < 15, `SFU must preserve the packet savings: ${JSON.stringify(muted)}`);
+    assert.ok(quietEnd.receiver.energy - quietStart.receiver.energy < 0.0001, 'muting must stop real audio energy');
+    const resumeAt = Date.now();
     await one.locator('[data-voice-mic]').click();
     await one.waitForFunction(() => nightcord.voice.state.microphone);
-    await two.waitForFunction(() => nightcord.voice.receiver?.connectionState === 'connected');
-    assert.equal(await two.evaluate(() => [...nightcord.voice.playbacks.values()][0].audio.volume), 0.25, 'receiver replacement preserves the chosen volume');
+    let resumed;
+    for (let retry = 0; retry < 100; retry++) {
+      resumed = await mediaStats(two, 'inbound-rtp');
+      if (resumed.energy > quietEnd.receiver.energy + 0.0001) break;
+      await delay(50);
+    }
+    assert.ok(resumed.energy > quietEnd.receiver.energy + 0.0001, 'real audio must resume on the existing subscription');
+    const resumeMs = resumed.at - resumeAt;
+    assert.ok(resumeMs < 5000, `warm unmute must avoid ICE and publication setup: ${resumeMs} ms`);
+    assert.equal(await one.evaluate(() => nightcord.voice.publisher === window.originalPublisher), true);
+    assert.equal(await two.evaluate(() => nightcord.voice.receiver === window.originalReceiver && [...nightcord.voice.playbacks.values()][0].audio === window.originalAudio), true);
+    assert.equal(await two.evaluate(() => nightcord.voice.state.members.find(member => member.memberId !== nightcord.voice.membership.memberId).publicationVersion), originalVersion);
+    assert.equal(calls.filter(call => typeof call === 'string' && call.endsWith('/sessions/new')).length, allocations, 'mute and reopen allocate no new SFU sessions');
+    assert.equal(await two.evaluate(() => [...nightcord.voice.playbacks.values()][0].audio.volume), 0.25, 'warm unmute preserves the chosen volume');
     await one.evaluate(() => { window.lastTrack = nightcord.voice.capture.getAudioTracks()[0]; nightcord.joinRoom('voice-other'); });
     assert.equal(await one.evaluate(() => window.lastTrack.readyState), 'ended');
     await two.waitForFunction(() => nightcord.voice.state.members.length === 1 && nightcord.voice.playbacks.size === 0);
@@ -306,7 +342,7 @@ test('two browsers carry audio through signaling, mute/reopen, and clean up on r
       assert.ok([...cloudSessions.values()].every(mids => !mids.size), 'backend must confirm Cloudflare forwarding cleanup');
     }
     assert.deepEqual(errors, []);
-    await writeFile(join(artifacts, 'result.json'), JSON.stringify({ fixture: live ? 'Cloudflare SFU/TURN with local application/auth fixture' : 'local native WebRTC relay; no Cloudflare media connection', relayOnly, ...connection, ...audio }, null, 2));
+    await writeFile(join(artifacts, 'result.json'), JSON.stringify({ fixture: live ? 'Cloudflare SFU/TURN with local application/auth fixture' : 'local native WebRTC relay; no Cloudflare media connection', relayOnly, ...connection, ...audio, muted, resumeMs }, null, 2));
   } catch (error) {
     await mkdir(artifacts, { recursive: true });
     const diagnostics = await Promise.all(pages.map(page => page.evaluate(async () => ({ states: window.voiceStates, errors: window.voiceErrors, publisher: nightcord.voice.publisher?.connectionState, receiver: nightcord.voice.receiver?.connectionState, stats: await Promise.all([nightcord.voice.publisher, nightcord.voice.receiver].filter(Boolean).map(async pc => [...(await pc.getStats()).values()].filter(stat => ['inbound-rtp', 'outbound-rtp', 'media-source'].includes(stat.type)))) })).catch(() => ({}))));

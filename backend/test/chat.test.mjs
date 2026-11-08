@@ -22,6 +22,7 @@ async function bootstrap(cookie = '', ip = '') {
 beforeEach(async () => {
   if (process.env.CHAT_BASE_URL) return;
   state.revoked = false;
+  delete state.name;
   runtime = createRuntime(state);
   base = String(await runtime.ready).replace(/\/$/, '');
 });
@@ -164,6 +165,52 @@ test('server verifies account identity, ignores forged claims, and preserves sub
   second.send({ type: 'auth', accessToken: 'local-test-token' });
   await second.waitFor(value => value.code === 'auth_invalid');
   await guest.waitFor(value => value.quit && value.userId === session.user.id);
+});
+
+test('room members retain verified Pass visitors without messages and exclude guests and other rooms', { skip: !!process.env.CHAT_BASE_URL, timeout: 30_000 }, async () => {
+  const room = `members-${crypto.randomUUID().slice(0, 12)}`;
+  const account = await connect(room, 'ignored', { accessToken: 'local-test-token', isMobile: true }, { ip: 'members-account' });
+  const sameAccount = await connect(room, 'ignored', { accessToken: 'local-test-token' }, { ip: 'members-second-tab' });
+  state.name = 'Latest member name';
+  sameAccount.send({ type: 'auth', accessToken: 'local-test-token' });
+  await sameAccount.waitFor(frame => frame.type === 'profile' && frame.user.displayName === state.name);
+  account.socket.close(); sameAccount.socket.close();
+  await Promise.all([once(account.socket, 'close'), once(sameAccount.socket, 'close')]);
+  const visitor = await connect(room, 'Guest', undefined, { ip: 'members-visitor' });
+  const members = (await visitor.waitFor(frame => frame.type === 'room:members')).users;
+  assert.equal(members.length, 1);
+  assert.equal(members[0].id, 'sekai:stable-subject');
+  assert.equal(members[0].displayName, state.name);
+  assert.equal(members[0].isMobile, false, 'offline members have no live device state');
+  assert.equal(JSON.stringify(members).includes('local-test-token'), false);
+  const otherRoom = await connect('members-other-room', 'Guest', undefined, { ip: 'members-other' });
+  assert.deepEqual((await otherRoom.waitFor(frame => frame.type === 'room:members')).users, []);
+  delete state.name;
+});
+
+test('existing rooms backfill the latest verified profiles once and retain members after history is removed', { skip: !!process.env.CHAT_BASE_URL, timeout: 30_000 }, async () => {
+  await runtime.dispose();
+  runtime = createRuntime(state, { inspectDurableObjects: true });
+  base = String(await runtime.ready).replace(/\/$/, '');
+  const room = `backfill-${crypto.randomUUID().slice(0, 12)}`;
+  const seed = await connect(room, 'Seed', undefined, { ip: 'backfill-seed' });
+  seed.socket.close(); await once(seed.socket, 'close');
+  const [id] = await runtime.listDurableObjectIds('ROOMS');
+  const storage = await runtime.unsafeGetDurableObjectStorage('nightcord-chat', 'ChatRoom', { id });
+  await storage.exec('DROP TABLE room_members');
+  const old = { id: 'sekai:past', displayName: 'Old name', authenticated: true };
+  for (const profile of [old, { ...old, displayName: 'Latest name' }, { id: 'guest:past', displayName: 'Past guest', authenticated: false }]) {
+    await storage.exec('INSERT INTO messages (name, message, timestamp, profile) VALUES (?, ?, ?, ?)', profile.displayName, 'History', Date.now(), JSON.stringify(profile));
+  }
+  await runtime.unsafeEvictDurableObject('nightcord-chat', 'ChatRoom', { id });
+  const visitor = await connect(room, 'Visitor', undefined, { ip: 'backfill-visitor' });
+  const members = (await visitor.waitFor(frame => frame.type === 'room:members')).users;
+  assert.deepEqual(members.map(profile => [profile.id, profile.displayName]), [['sekai:past', 'Latest name']]);
+  visitor.socket.close(); await once(visitor.socket, 'close');
+  await storage.exec('DELETE FROM messages');
+  await runtime.unsafeEvictDurableObject('nightcord-chat', 'ChatRoom', { id });
+  const later = await connect(room, 'Later', undefined, { ip: 'backfill-later' });
+  assert.deepEqual((await later.waitFor(frame => frame.type === 'room:members')).users, members);
 });
 
 test('invalid bearer token cannot receive history or claim an authenticated session', { timeout: 20_000 }, async () => {

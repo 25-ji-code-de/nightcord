@@ -24,6 +24,7 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_members (id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL, data TEXT NOT NULL)');
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_sessions (id TEXT PRIMARY KEY, data TEXT NOT NULL)');
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_tickets (hash TEXT PRIMARY KEY, data TEXT NOT NULL)');
+    ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_events (revision INTEGER PRIMARY KEY AUTOINCREMENT)');
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_operations (member_id TEXT NOT NULL, request_id TEXT NOT NULL, action TEXT NOT NULL, fingerprint TEXT NOT NULL, result TEXT, expires_at INTEGER NOT NULL, PRIMARY KEY(member_id, request_id))');
   }
   private members(): Member[] { return this.ctx.storage.sql.exec<{ data: string }>('SELECT data FROM voice_members').toArray().map(row => JSON.parse(row.data)); }
@@ -39,6 +40,7 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
       memberId: member.id, user: member.user, publishing: !!member.publication, publicationVersion: member.publication?.version || null,
     })) };
   }
+  getPresence() { return this.snapshot(); }
   private changed() {
     this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_events (revision INTEGER PRIMARY KEY AUTOINCREMENT)');
     this.ctx.storage.sql.exec('INSERT INTO voice_events DEFAULT VALUES');

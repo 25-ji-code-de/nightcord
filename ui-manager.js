@@ -87,7 +87,9 @@ class UIManager {
       chatroom: document.querySelector("#chatroom"),
       chatlog: document.querySelector("#messages"),
       chatInput: document.querySelector("#messageInput"),
-      roster: document.querySelector("#voice-users"),
+      roster: document.querySelector("#online-users"),
+      voiceRoster: document.querySelector("#voice-users"),
+      offlineRoster: document.querySelector("#offline-users"),
       attachmentBtn: document.querySelector("#attachmentBtn"),
       fileUploadMenu: document.querySelector("#fileUploadMenu"),
       imageInput: document.querySelector("#imageInput"),
@@ -112,6 +114,10 @@ class UIManager {
     this.lastMsgTimestamp = 0;
     this.roster = [];
     this.rosterElements = new Map();
+    this.roomMembers = new Map();
+    this.voiceMembers = new Map();
+    this.voiceRevision = -1;
+    this.localVoice = null;
     this.currentUser = null;
     this.profileUI = new NightcordProfileUI(this);
 
@@ -263,6 +269,23 @@ class UIManager {
     });
     this.eventBus.on('user:profile', (data) => this.addUserToRoster(data.user.displayName, data.user));
     this.eventBus.on('user:rename', (data) => this.handleUserRename(data.oldUsername, data.newUsername));
+    this.eventBus.on('room:members', ({ users }) => {
+      this.roomMembers = new Map((users || []).filter(user => user.authenticated && user.id?.startsWith('sekai:')).map(user => [user.id, user]));
+      this.renderVoiceUsers();
+    });
+    this.eventBus.on('voice:state', ({ snapshot }) => {
+      if (!snapshot || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < this.voiceRevision || !Array.isArray(snapshot.members)) return;
+      this.voiceRevision = snapshot.revision;
+      this.voiceMembers = new Map(snapshot.members.map(member => [member.user.id, member]));
+      this.renderVoiceUsers();
+    });
+    this.eventBus.on('voice:changed', state => {
+      this.localVoice = state.joined ? { memberId: state.memberId, microphone: state.microphone } : null;
+      this.renderVoiceUsers();
+    });
+    this.eventBus.on('voice:activity', ids => {
+      for (const row of this.elements.voiceRoster.children) row.classList.toggle('is-speaking', ids.includes(row.dataset.memberId));
+    });
     this.eventBus.on('roster:clear', () => {
       this.clearRoster();
       this.mentionsReady = false;
@@ -725,25 +748,39 @@ class UIManager {
 
 
   /**
-   * 渲染语音用户列表
+   * 按在线、语音和离线分组渲染房间成员，移动已有节点以保留头像和资料入口。
    */
   renderVoiceUsers() {
-    const rosterElement = this.elements.roster;
+    const { roster: onlineElement, voiceRoster, offlineRoster } = this.elements;
+    if (!onlineElement || !voiceRoster || !offlineRoster) return;
+    const onlineIds = new Set(this.roster.map(user => user.profile?.id));
+    const voiceUsers = [...this.voiceMembers.values()].map(member => {
+      const online = this.roster.find(user => user.profile?.id === member.user.id);
+      const profile = online?.profile || this.roomMembers.get(member.user.id) || member.user;
+      return { ...this.generateAvatar(profile.displayName), profile, voice: member, group: 'voice' };
+    });
+    const users = [
+      ...this.roster.filter(user => !this.voiceMembers.has(user.profile?.id)).map(user => ({ ...user, group: 'online' })),
+      ...voiceUsers,
+      ...[...this.roomMembers.values()].filter(profile => !onlineIds.has(profile.id) && !this.voiceMembers.has(profile.id))
+        .map(profile => ({ ...this.generateAvatar(profile.displayName), profile, group: 'offline' }))
+    ];
     const keyFor = user => user.profile?.id ? `id:${user.profile.id}` : `name:${user.name}`;
-    const activeKeys = new Set(this.roster.map(keyFor));
+    const activeKeys = new Set(users.map(keyFor));
     for (const [key, element] of this.rosterElements) {
       if (!activeKeys.has(key)) {
         element.remove();
         this.rosterElements.delete(key);
       }
     }
-    let nextElement = rosterElement.firstElementChild;
+    const groups = new Map([onlineElement, voiceRoster, offlineRoster].map(element => [element, []]));
     // 获取当前用户名
     let currentName = null;
     try {
       currentName = localStorage.getItem('nightcord-username');
     } catch (e) {}
-    this.roster.forEach(user => {
+    users.forEach(user => {
+      const rosterElement = user.group === 'voice' ? voiceRoster : user.group === 'offline' ? offlineRoster : onlineElement;
       const key = keyFor(user);
       let div = this.rosterElements.get(key);
       if (!div) {
@@ -761,9 +798,13 @@ class UIManager {
          */
         div.innerHTML = `
           <div class="voice-user-info">
-            <span class="avatar ${escapeHtml(user.color)}">${escapeHtml(user.avatar)}</span>
-            <span class="voice-user-name" style="font-size:14px;">${escapeHtml(user.name)}</span>
+            <span class="member-avatar">
+              <span class="avatar ${escapeHtml(user.color)}">${escapeHtml(user.avatar)}</span>
+              <span class="member-presence" role="img"></span>
+            </span>
+            <span class="voice-user-name">${escapeHtml(user.name)}</span>
           </div>
+          <span class="member-microphone" aria-hidden="true" hidden></span>
         `;
       }
       const info = div.querySelector('.voice-user-info');
@@ -772,6 +813,33 @@ class UIManager {
       avatar.className = `avatar ${user.color}`;
       info.querySelector('.voice-user-name').textContent = user.name;
       this.profileUI.avatar(avatar, user.profile, user.avatar);
+      div.dataset.userId = user.profile?.id || '';
+      div.classList.toggle('is-offline', user.group === 'offline');
+      if (user.voice) div.dataset.memberId = user.voice.memberId;
+      else { delete div.dataset.memberId; div.classList.remove('is-speaking'); }
+      const presence = info.querySelector('.member-presence');
+      const isMobile = user.profile?.isMobile === true;
+      const presenceState = user.group === 'offline' ? '离线' : isMobile ? '移动端在线' : '在线';
+      const presenceKind = user.group === 'offline' ? 'offline' : isMobile ? 'mobile' : 'online';
+      presence.hidden = presenceKind === 'offline';
+      if (presence.dataset.presence !== presenceKind) {
+        presence.dataset.presence = presenceKind;
+        presence.innerHTML = presenceKind === 'mobile' ? '<svg viewBox="0 0 12 19" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="1" y="1" width="10" height="17" rx=".8"/><path d="M4.5 2h3"/></svg>' : '';
+      }
+      presence.title = presenceState;
+      presence.setAttribute('aria-label', presenceState);
+      const mic = div.querySelector('.member-microphone');
+      mic.hidden = !user.voice;
+      const microphone = user.voice && (user.voice.memberId === this.localVoice?.memberId ? this.localVoice.microphone : user.voice.publishing);
+      const micState = microphone ? '麦克风已开启' : '麦克风已关闭';
+      if (user.voice && mic.dataset.microphone !== String(microphone)) {
+        mic.dataset.microphone = String(microphone);
+        mic.innerHTML = microphone
+          ? '<svg viewBox="0 0 16 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="1" width="5" height="10" rx="2.5" fill="currentColor" stroke="none"/><path d="M3 8v2a5 5 0 0 0 10 0V8M8 15v3M4.5 18h7"/></svg>'
+          : '<svg viewBox="0 0 16 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 10V3.5a2.5 2.5 0 0 1 5 0v1.25L5.5 10Z" fill="currentColor" stroke="none"/><path d="M3 8v2a5 5 0 0 0 1.45 3.52M7 14.9a5 5 0 0 0 6-4.9V8M8 15v3M4.5 18h7M1.5 17.5l13-15"/></svg>';
+      }
+      mic.title = micState;
+      div.title = `${user.name} · ${presenceState}${user.voice ? ` · ${micState}` : ''}`;
       const existingBadge = info.querySelector('.identity-badge');
       if (user.profile?.authenticated && !existingBadge) {
         info.appendChild(this.profileUI.badge(user.profile));
@@ -782,7 +850,7 @@ class UIManager {
         this.profileUI.makeTrigger(div, user.profile);
         // Include the visible avatar initial in the spoken label too, so voice
         // control can match the complete text shown on the member button.
-        div.setAttribute('aria-label', `${user.avatar} ${user.name}，查看资料`);
+        div.setAttribute('aria-label', `${user.avatar} ${user.name}，${presenceState}${user.voice ? `，${micState}` : ''}，查看资料`);
       } else if (user.name === currentName && !div.dataset.nameChooserBound) {
         div.dataset.nameChooserBound = 'true';
         div.style.cursor = 'pointer';
@@ -801,9 +869,15 @@ class UIManager {
       }
       // Leave unchanged members connected so in-flight avatar loads survive
       // the burst of individual presence events during room initialization.
-      if (div !== nextElement) rosterElement.insertBefore(div, nextElement);
-      nextElement = div.nextElementSibling;
+      groups.get(rosterElement).push(div);
     });
+    for (const [container, rows] of groups) {
+      let nextElement = container.firstElementChild;
+      for (const row of rows) {
+        if (row !== nextElement) container.insertBefore(row, nextElement);
+        nextElement = row.nextElementSibling;
+      }
+    }
   }
 
   /**
@@ -2081,6 +2155,7 @@ class UIManager {
    */
   addUserToRoster(username, profile) {
     this.storage?.rememberProfile(profile);
+    if (profile?.authenticated && profile.id?.startsWith('sekai:')) this.roomMembers.set(profile.id, profile);
     // Avoid adding duplicate entries for the same username. Server may emit
     // a user:joined after we have locally renamed the user, so skip if
     // username already exists in the roster.
@@ -2127,6 +2202,10 @@ class UIManager {
    */
   clearRoster() {
     this.roster = [];
+    this.roomMembers.clear();
+    this.voiceMembers.clear();
+    this.voiceRevision = -1;
+    this.localVoice = null;
     this.renderVoiceUsers();
   }
 

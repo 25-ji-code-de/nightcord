@@ -208,6 +208,10 @@ class NightcordManager {
    * @fires message:received
    */
   handleMessage(data) {
+    if (data.type === 'room:members') {
+      this.eventBus.emit('room:members', { users: data.users });
+      return;
+    }
     if (data.type === 'voice:ticket' || data.type === 'voice:state') {
       this.eventBus.emit(data.type, data);
       return;

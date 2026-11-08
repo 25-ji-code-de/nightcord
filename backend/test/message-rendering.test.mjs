@@ -32,7 +32,7 @@ test('message rendering batches updates without losing or duplicating messages',
       </style>
       <div class="channel"><span></span></div>
       <div id="messages"></div><textarea id="messageInput"></textarea>
-      <div id="voice-users"></div>` }));
+      <div id="online-users"></div><div id="voice-users"></div><div id="offline-users"></div>` }));
     await page.goto('http://nightcord-rendering.test/');
     if (!taskScheduler) await page.evaluate(() => Object.defineProperty(window, 'scheduler', { value: undefined, configurable: true }));
     for (const { file, content } of sources) {
@@ -70,6 +70,59 @@ test('message rendering batches updates without losing or duplicating messages',
     });
     return page;
   }
+
+  await t.test('member groups follow voice, device and presence changes without duplicating identities', async t => {
+    const page = await fixture(t);
+    const result = await page.evaluate(() => {
+      const pass = { id: 'sekai:one', displayName: 'Same name', authenticated: true, isMobile: true };
+      const offline = { id: 'sekai:offline', displayName: 'Offline Pass', authenticated: true };
+      const guest = { id: 'guest:two', displayName: 'Same name', authenticated: false };
+      const ids = container => [...container.children].map(row => row.dataset.userId);
+      const groups = () => ({ online: ids(ui.elements.roster), voice: ids(ui.elements.voiceRoster), offline: ids(ui.elements.offlineRoster) });
+      ui.eventBus.emit('room:members', { users: [pass, offline, guest] });
+      ui.addUserToRoster(pass.displayName, pass);
+      ui.addUserToRoster(guest.displayName, guest);
+      const row = ui.elements.roster.firstElementChild;
+      const initial = groups();
+      const members = [{ memberId: 'voice-one', user: pass, publishing: true }, { memberId: 'voice-two', user: guest, publishing: false }];
+      ui.eventBus.emit('voice:state', { snapshot: { revision: 1, members } });
+      const voice = groups();
+      const mobile = row.querySelector('.member-presence').dataset.presence;
+      const micOn = row.querySelector('.member-microphone').dataset.microphone;
+      const guestMic = ui.elements.voiceRoster.lastElementChild.querySelector('.member-microphone').dataset.microphone;
+      ui.eventBus.emit('voice:activity', ['voice-one']);
+      const speaking = row.classList.contains('is-speaking');
+      ui.eventBus.emit('voice:changed', { joined: true, memberId: 'voice-one', microphone: false });
+      const localMute = row.querySelector('.member-microphone').dataset.microphone;
+      ui.eventBus.emit('voice:state', { snapshot: { revision: 2, members: [members[1]] } });
+      ui.eventBus.emit('voice:state', { snapshot: { revision: 1, members } });
+      ui.addUserToRoster('Renamed', { ...pass, displayName: 'Renamed', isMobile: false });
+      const returned = groups();
+      const desktop = row.querySelector('.member-presence').dataset.presence;
+      const sameRow = row === ui.elements.roster.firstElementChild;
+      ui.removeUserFromRoster('Renamed', pass.id);
+      const departed = groups();
+      const offlineState = row.classList.contains('is-offline') && row.querySelector('.member-presence').hidden && row.querySelector('.member-microphone').hidden;
+      ui.eventBus.emit('voice:state', { snapshot: { revision: 3, members: [] } });
+      ui.removeUserFromRoster(guest.displayName, guest.id);
+      const guestGone = groups();
+      const opened = [];
+      ui.profileUI.open = profile => opened.push(profile.displayName);
+      row.focus(); row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      ui.eventBus.emit('roster:clear');
+      return { initial, voice, returned, departed, guestGone, mobile, desktop, micOn, guestMic, localMute, speaking, sameRow, offlineState, opened, cleared: groups() };
+    });
+    assert.deepEqual(result.initial, { online: ['sekai:one', 'guest:two'], voice: [], offline: ['sekai:offline'] });
+    assert.deepEqual(result.voice, { online: [], voice: ['sekai:one', 'guest:two'], offline: ['sekai:offline'] });
+    assert.deepEqual(result.returned, { online: ['sekai:one'], voice: ['guest:two'], offline: ['sekai:offline'] });
+    assert.deepEqual(result.departed, { online: [], voice: ['guest:two'], offline: ['sekai:one', 'sekai:offline'] });
+    assert.deepEqual(result.guestGone, { online: [], voice: [], offline: ['sekai:one', 'sekai:offline'] });
+    assert.equal(result.mobile, 'mobile'); assert.equal(result.desktop, 'online');
+    assert.equal(result.micOn, 'true'); assert.equal(result.guestMic, 'false'); assert.equal(result.localMute, 'false');
+    assert.ok(result.speaking && result.sameRow && result.offlineState);
+    assert.deepEqual(result.opened, ['Renamed']);
+    assert.deepEqual(result.cleared, { online: [], voice: [], offline: [] });
+  });
 
   await t.test('AI echoes confirm one message through replay and reload', async t => {
     const page = await fixture(t);
@@ -510,7 +563,7 @@ test('message rendering batches updates without losing or duplicating messages',
     assert.equal(result.connected, true);
     assert.equal(result.removals, 0);
     assert.deepEqual(result.opened, Array(2).fill({ id: 'sekai:one', name: 'Renamed', bio: 'Updated bio' }));
-    assert.equal(result.label, 'R Renamed，查看资料');
+    assert.equal(result.label, 'R Renamed，在线，查看资料');
     release();
     await page.waitForFunction(() => originalImage.complete && originalImage.naturalWidth === 32);
     assert.equal(requests.length, 1);

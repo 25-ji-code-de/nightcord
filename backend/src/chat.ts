@@ -98,6 +98,15 @@ export class ChatRoom extends DurableObject<ChatEnv> {
       id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, message TEXT NOT NULL,
       timestamp INTEGER NOT NULL, profile TEXT NOT NULL
     )`);
+    const hasMembers = this.ctx.storage.sql.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'room_members'").toArray().length;
+    this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room_members (id TEXT PRIMARY KEY, profile TEXT NOT NULL)');
+    if (!hasMembers) {
+      // Retain the latest verified identity from rooms that predate the member list.
+      this.ctx.storage.sql.exec(`INSERT OR IGNORE INTO room_members (id, profile)
+        SELECT json_extract(profile, '$.id'), profile FROM messages
+        WHERE json_extract(profile, '$.authenticated') = 1 AND json_extract(profile, '$.id') LIKE 'sekai:%'
+        ORDER BY id DESC`);
+    }
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -187,6 +196,9 @@ export class ChatRoom extends DurableObject<ChatEnv> {
           ...initial, user, authExpiresAt, isMobile, busy: true, closed: false,
           userLimiterId: this.env.LIMITERS.idFromName(`user:${user.id}`).toString(),
         } satisfies Session);
+        if (user.authenticated) {
+          this.ctx.storage.sql.exec('INSERT INTO room_members (id, profile) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET profile = excluded.profile', user.id, JSON.stringify({ ...user, isMobile: false }));
+        }
         const guestExpiresAt = user.authenticated ? 0 : initial.guest!.expiresAt;
         ws.send(JSON.stringify({ type: 'session', user, authExpiresAt, guestExpiresAt }));
         const sameIdentity = this.ctx.getWebSockets().filter(other => {
@@ -220,6 +232,15 @@ export class ChatRoom extends DurableObject<ChatEnv> {
           }
         }
         this.broadcast(sameIdentity.length ? { type: 'profile', user: presenceUser } : { joined: user.displayName, user: presenceUser });
+        const users = this.ctx.storage.sql.exec<{ profile: string }>('SELECT profile FROM room_members ORDER BY rowid').toArray().map(row => JSON.parse(row.profile) as Profile);
+        ws.send(JSON.stringify({ type: 'room:members', users }));
+        if (configuration(this.env, initial.roomName || '').enabled || this.env.VOICE_MODE === 'drain') {
+          try {
+            const snapshot = await this.env.VOICE_ROOMS.getByName(`voice:${this.ctx.id}`).getPresence();
+            if ((ws.deserializeAttachment() as Session).closed) return;
+            ws.send(JSON.stringify({ type: 'voice:state', snapshot }));
+          } catch { /* Voice discovery must not prevent joining text chat. */ }
+        }
         ws.send(JSON.stringify({ ready: true, user, authExpiresAt, guestExpiresAt }));
         return;
       }

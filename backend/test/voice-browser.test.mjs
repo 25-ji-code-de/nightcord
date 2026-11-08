@@ -128,8 +128,8 @@ test('two browsers carry audio through signaling, mute/reopen, and clean up on r
     });
     const apiBase = String(await runtime.ready).replace(/\/$/, ''), wsBase = apiBase.replace(/^http/, 'ws');
     const errors = [];
-    async function pageFor(identity, viewport) {
-      const context = await browser.newContext({ viewport, serviceWorkers: 'block' });
+    async function pageFor(identity, viewport, { joinVoice = true } = {}) {
+      const context = await browser.newContext({ viewport, serviceWorkers: 'block', ...(viewport.width < 768 ? { isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36' } : {}) });
       await context.route('**/*', route => route.request().url().startsWith(origin) || route.request().url().startsWith(apiBase) ? route.continue() : route.abort());
       await context.addInitScript(({ apiBase, wsBase, identity }) => {
         const nativeFetch = window.fetch.bind(window), NativeWebSocket = window.WebSocket;
@@ -148,17 +148,25 @@ test('two browsers carry audio through signaling, mute/reopen, and clean up on r
       await page.waitForFunction(() => nightcord.chatRoom.wsManager.ready && nightcord.voice.state.available);
       if (relayOnly) await page.evaluate(() => { nightcord.voice.peerFactory = config => new RTCPeerConnection({ ...config, iceTransportPolicy: 'relay' }); });
       await page.evaluate(() => { window.voiceStates = []; window.voiceErrors = []; const handle = nightcord.voice.handleError.bind(nightcord.voice); nightcord.voice.handleError = error => { window.voiceErrors.push({ code: error.code, name: error.name }); handle(error); }; nightcord.eventBus.on('voice:changed', state => window.voiceStates.push({ message: state.message, count: state.members.length, receiver: nightcord.voice.receiver?.connectionState, signature: nightcord.voice.receiverSignature })); });
-      await page.locator('[data-voice-join]').click();
-      await page.waitForFunction(() => nightcord.voice.state.joined);
+      if (joinVoice) {
+        await page.locator('[data-voice-join]').click();
+        await page.waitForFunction(() => nightcord.voice.state.joined);
+      }
       return page;
     }
     const one = await pageFor(null, { width: 1280, height: 900 });
     const two = await pageFor('voice-two', { width: 320, height: 740 });
+    const observer = await pageFor('voice-one', { width: 1280, height: 900 }, { joinVoice: false });
+    assert.equal(await observer.locator('#voice-users .voice-user').count(), 2, 'late text-only observer receives the initial voice roster');
+    assert.equal(await observer.locator('#online-users .voice-user').count(), 1);
+    assert.equal(await observer.locator('#voice-users [data-user-id="sekai:voice-two"] .member-presence').getAttribute('data-presence'), 'mobile');
+    assert.equal(await observer.locator('#voice-users .member-microphone[data-microphone="false"]').count(), 2);
     assert.equal(await one.evaluate(() => nightcord.chatRoom.currentUser.authenticated), false, 'guest can join voice using their signed cookie');
     assert.equal(await one.evaluate(() => nightcord.voice.capture == null), true, 'joining does not request a microphone');
     await one.locator('[data-voice-mic]').click();
     await one.waitForFunction(() => nightcord.voice.state.microphone || window.voiceErrors.length, null, { timeout: live ? 45000 : 20000 });
     assert.ok(await one.evaluate(() => nightcord.voice.state.microphone), JSON.stringify(await one.evaluate(() => window.voiceErrors)));
+    await observer.waitForFunction(() => document.querySelector('#voice-users [data-user-id^="guest:"] .member-microphone')?.dataset.microphone === 'true');
     await two.waitForFunction(() => nightcord.voice.receiver?.connectionState === 'connected', null, { timeout: live ? 45000 : 25000 });
     let audio;
     for (let attempt = 0; attempt < 100; attempt++) {
@@ -184,12 +192,20 @@ test('two browsers carry audio through signaling, mute/reopen, and clean up on r
     assert.ok(await two.locator('#voice-panel').evaluate(node => node.scrollWidth <= node.clientWidth), 'voice panel fits 320px');
     await mkdir(artifacts, { recursive: true });
     await one.screenshot({ path: join(artifacts, 'desktop.png') }); await two.screenshot({ path: join(artifacts, 'mobile.png') });
+    await observer.screenshot({ path: join(artifacts, 'sidebar-desktop.png') });
+    await two.getByRole('button', { name: '切换成员列表' }).click();
+    await two.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().left === 0);
+    await two.screenshot({ path: join(artifacts, 'sidebar-mobile.png') });
+    assert.ok(await two.locator('.sidebar-content').evaluate(node => node.scrollWidth <= node.clientWidth), 'member groups fit the mobile drawer');
+    await two.mouse.click(305, 400);
+    await two.waitForFunction(() => !document.querySelector('.sidebar').classList.contains('show'));
     await two.locator('.voice-volume input').fill('0.25');
     assert.equal(await two.evaluate(() => [...nightcord.voice.playbacks.values()][0].audio.volume), 0.25);
     await one.evaluate(() => { window.originalTrack = nightcord.voice.capture.getAudioTracks()[0]; });
     await one.locator('[data-voice-mic]').click();
     assert.equal(await one.evaluate(() => window.originalTrack.readyState), 'ended');
     await two.waitForFunction(() => nightcord.voice.playbacks.size === 0);
+    await observer.waitForFunction(() => document.querySelector('#voice-users [data-user-id^="guest:"] .member-microphone')?.dataset.microphone === 'false');
     await one.locator('[data-voice-mic]').click();
     await one.waitForFunction(() => nightcord.voice.state.microphone);
     await two.waitForFunction(() => nightcord.voice.receiver?.connectionState === 'connected');
@@ -199,6 +215,10 @@ test('two browsers carry audio through signaling, mute/reopen, and clean up on r
     await two.waitForFunction(() => nightcord.voice.state.members.length === 1 && nightcord.voice.playbacks.size === 0);
     await two.locator('[data-voice-leave]').click();
     await two.waitForFunction(() => !nightcord.voice.state.joined);
+    await observer.waitForFunction(() => !document.querySelector('#voice-users .voice-user') && document.querySelectorAll('#online-users .voice-user').length === 2);
+    await two.evaluate(() => nightcord.chatRoom.leave());
+    await observer.waitForFunction(() => document.querySelector('#offline-users [data-user-id="sekai:voice-two"]'));
+    await observer.screenshot({ path: join(artifacts, 'sidebar-offline.png') });
     if (!live) await relay.waitForFunction(() => [...window.sessions.values()].every(session => session.pc.connectionState === 'closed'));
     else {
       for (let i = 0; i < 100 && [...cloudSessions.values()].some(mids => mids.size); i++) await delay(100);

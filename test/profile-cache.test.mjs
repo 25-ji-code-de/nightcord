@@ -24,7 +24,7 @@ function harness() {
       const ui = vm.runInContext('Object.create(UIManager.prototype)', context);
       const listeners = new Map();
       Object.assign(ui, {
-        storage, roster: [], messages: [],
+        storage, roster: [], messages: [], roomMembers: new Map(),
         eventBus: { on: (name, listener) => listeners.set(name, listener) },
         setupMobileMenu() {}, setupNakoEventListeners() {}, renderVoiceUsers() {},
         addChatMessage(user, text, timestamp, avatar, color, profile) { this.messages.push({ user, text, timestamp, profile }); },

@@ -80,8 +80,8 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
       if (page.viewportSize().width <= 768 && !await page.locator('.sidebar').evaluate(el => el.classList.contains('show'))) {
         await page.getByRole('button', { name: '切换成员列表' }).click();
       }
-      const index = await page.evaluate(() => nightcord.ui.roster.findIndex(user => user.profile?.id === nightcord.ui.currentUser.id));
-      await page.locator('#voice-users .voice-user').nth(index).click();
+      const id = await page.evaluate(() => nightcord.ui.currentUser.id);
+      await page.locator(`.sidebar .voice-user[data-user-id="${id}"]`).click();
     }
     await openOwnProfile(member);
     const dialog = member.locator('dialog');
@@ -187,6 +187,7 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     await guest.waitForFunction(() => nightcord.chatRoom.wsManager.ready && nightcord.ui.currentUser.displayName === 'Shared name');
     await member.evaluate(() => nightcord.chatRoom.leave());
     await guest.waitForFunction(() => !nightcord.ui.roster.some(u => u.profile?.id === 'sekai:stable-subject'));
+    assert.equal(await guest.locator('#offline-users [data-user-id="sekai:stable-subject"]').count(), 1);
     // A same-name online guest cannot be substituted for an offline account.
     assert.ok(await guest.evaluate(() => nightcord.ui.roster.some(u => u.name === 'Shared name' && !u.profile.authenticated)));
     await oldMessage.locator('.message-user').click();
@@ -204,6 +205,7 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     // Reload replays the old message snapshot, but must retain the newer offline profile.
     await guest.reload({ waitUntil: 'domcontentloaded' });
     await guest.waitForFunction(() => nightcord.chatRoom.wsManager.ready);
+    assert.equal(await guest.locator('#offline-users [data-user-id="sekai:stable-subject"]').count(), 1);
     await oldMessage.locator('.avatar').focus();
     await guest.keyboard.press('Enter');
     assert.equal(await guest.locator('dialog h2').textContent(), 'Updated profile');

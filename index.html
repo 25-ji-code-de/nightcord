@@ -97,9 +97,17 @@ Copyright (C) 2025 The 25-ji-code-de Team
             </svg></div>
           <span>聊天</span>
         </div>
-        <div class="section-label">&gt; 聊天</div>
-        <div id="voice-users"></div>
-        <div class="section-label">&gt; 离线</div>
+        <div id="online-users" class="member-list" role="group" aria-label="在线成员"></div>
+        <div class="section-label" id="voice-users-label">
+          <svg class="section-label-chevron" viewBox="0 0 1366 2048" fill="currentColor" aria-hidden="true" focusable="false"><path d="M1132 1489 272 1921V1772L916 1460V1454L272 1098V948L1132 1430Z"/></svg>
+          <span>语音聊天</span>
+        </div>
+        <div id="voice-users" class="member-list" role="group" aria-labelledby="voice-users-label"></div>
+        <div class="section-label" id="offline-users-label">
+          <svg class="section-label-chevron" viewBox="0 0 1366 2048" fill="currentColor" aria-hidden="true" focusable="false"><path d="M1132 1489 272 1921V1772L916 1460V1454L272 1098V948L1132 1430Z"/></svg>
+          <span>离线</span>
+        </div>
+        <div id="offline-users" class="member-list" role="group" aria-labelledby="offline-users-label"></div>
       </div>
     </div>
     <!-- Main Chat Area -->

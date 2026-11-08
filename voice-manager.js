@@ -75,7 +75,7 @@ class VoiceManager {
     const generation = ++this.generation;
     const credential = { base: this.base(), token: Array.from(crypto.getRandomValues(new Uint8Array(32)), value => value.toString(16).padStart(2, '0')).join('') };
     this.identity = this.chat.currentUser.id;
-    this.state.busy = true; this.state.message = '正在加入语音…'; this.emit();
+    this.state.busy = true; this.state.message = '正在加入语音会话……'; this.emit();
     try {
       const ticket = await this.ticket();
       if (generation !== this.generation) return;
@@ -88,7 +88,7 @@ class VoiceManager {
       }
       if (generation !== this.generation) { void this.request('leave', {}, credential).catch(() => {}); return; }
       this.membership = { ...credential, ...result };
-      this.state.joined = true; this.state.message = '已加入 · 麦克风关闭';
+      this.state.joined = true; this.state.message = '已加入 · 麦克风已关闭';
       this.appliedRevision = -1; this.receiverSignature = ''; this.receiverFailures = 0;
       this.applySnapshot(result.snapshot);
       this.heartbeatTimer = setInterval(() => { void this.heartbeat(); }, 20000);
@@ -119,7 +119,7 @@ class VoiceManager {
       if (this.membership !== membership) return;
       Object.assign(membership, { authUntil: value.authUntil, expiresAt: value.expiresAt });
       this.applySnapshot(value.snapshot);
-      if (!this.state.microphone && this.state.message.startsWith('网络')) this.state.message = '已加入 · 麦克风关闭';
+      if (!this.state.microphone && this.state.message.startsWith('网络')) this.state.message = '已加入 · 麦克风已关闭';
       this.emit();
     } catch (error) {
       if (this.membership !== membership) return;
@@ -235,7 +235,7 @@ class VoiceManager {
     const generation = ++this.micGeneration;
     const attempt = { membership, operationId: crypto.randomUUID() };
     this.publisherAttempt = attempt;
-    this.capturePending = true; this.state.message = '正在开启麦克风…'; this.emit();
+    this.capturePending = true; this.state.message = '正在启用麦克风……'; this.emit();
     let stream, pc;
     try {
       // Keep the permission request inside the user's click, before network awaits.
@@ -281,7 +281,7 @@ class VoiceManager {
     ++this.micGeneration; this.capturePending = false;
     this.capture?.getTracks().forEach(track => { track.enabled = false; track.stop(); }); this.capture = null;
     this.publisher?.close(); this.publisher = null;
-    this.state.microphone = false; this.state.message = '已加入 · 麦克风关闭'; this.emit();
+    this.state.microphone = false; this.state.message = '已加入 · 麦克风已关闭'; this.emit();
     if (this.publisherAttempt) { void this.stopPublisher(this.publisherAttempt); this.publisherAttempt = null; }
   }
   setVolume(memberId, volume) { const value = Math.max(0, Math.min(1, volume)); this.volumes.set(memberId, value); const player = this.playbacks.get(memberId); if (player) player.audio.volume = value; }

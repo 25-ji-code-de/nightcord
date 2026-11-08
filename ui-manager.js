@@ -1471,9 +1471,8 @@ class UIManager {
 
     // Focus chat input on click
     this.elements.main.addEventListener("click", (e) => {
-      // 如果点击的是提及列表项，不要聚焦输入框（因为点击事件会先触发，然后才是列表项的点击处理）
-      // 或者更简单地，让列表项的点击处理完后再聚焦
-      if (e.target.closest('.mention-list, .mention-item, .profile-trigger, button, a')) return;
+      // Keep controls and overlays in charge of their own focus, including native popovers.
+      if (e.target.closest('.mention-list, .mention-item, .profile-trigger, button, a, input, select, textarea, label, summary, [contenteditable], [popover], dialog, [role="dialog"]')) return;
 
       if (window.getSelection().toString() == "") {
         if (window.innerWidth > 768) chatInput.focus();

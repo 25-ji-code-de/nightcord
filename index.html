@@ -123,28 +123,120 @@ Copyright (C) 2025 The 25-ji-code-de Team
           </svg></div>
         <span style="font-weight:600;">聊天</span>
         <span id="connection-status" class="connection-status" role="status" hidden></span>
-        <div class="window-buttons sekai-window-dots">
-          <i class="window-btn blue"></i>
-          <i class="window-btn yellow"></i>
-          <i class="window-btn red"></i>
+        <div class="chat-header-actions">
+          <div class="voice-toolbar" data-voice-toolbar hidden>
+            <button type="button" class="voice-trigger" data-voice-toggle popovertarget="voice-panel" aria-controls="voice-panel" aria-expanded="false" aria-label="打开房间语音面板">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14v-3a9 9 0 0 1 18 0v3"/><rect x="3" y="12" width="4" height="8" rx="2"/><rect x="17" y="12" width="4" height="8" rx="2"/></svg>
+              <span data-voice-label>语音</span>
+              <span class="voice-count" data-voice-count hidden>0</span>
+              <span class="voice-indicator" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="voice-quick-mic" data-voice-quick-mic aria-label="取消静音麦克风" title="取消静音麦克风" aria-pressed="false" hidden>
+              <svg class="voice-mic-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg>
+              <svg class="voice-mic-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M9 9v3a3 3 0 0 0 5.1 2.1M9 5a3 3 0 0 1 6 0v4M5 10v2a7 7 0 0 0 12 4.9M19 10v2a7 7 0 0 1-.2 1.8M12 19v3m-4 0h8"/></svg>
+            </button>
+            <section id="voice-panel" class="voice-panel" popover="auto" role="dialog" aria-labelledby="voice-title">
+              <!-- Conference terminal: one display with menus, two fixed call keys. -->
+              <div class="voice-housing-header">
+                <h2 id="voice-title">房间语音</h2>
+                <button type="button" class="voice-close" popovertarget="voice-panel" popovertargetaction="hide" aria-label="收起语音面板" title="收起语音面板">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg>
+                </button>
+              </div>
+              <div class="voice-display">
+                <div class="voice-screen-stack">
+                  <div class="voice-screen voice-screen--call" data-voice-layer="call">
+                    <div class="voice-display-header">
+                      <div class="voice-display-title">
+                        <h3 data-voice-room-title tabindex="-1">聊天</h3>
+                        <span class="voice-member-count" data-voice-member-count hidden>0 人</span>
+                      </div>
+                      <div class="voice-connection" role="status" aria-live="polite">
+                        <span class="voice-connection-light" aria-hidden="true"></span>
+                        <p class="voice-status" data-voice-status>等待接入</p>
+                      </div>
+                    </div>
+                    <div class="voice-view" data-voice-view="call">
+                      <div class="voice-idle" data-voice-idle>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14v-3a9 9 0 0 1 18 0v3"/><rect x="3" y="12" width="4" height="8" rx="2"/><rect x="17" y="12" width="4" height="8" rx="2"/></svg>
+                        <p>接通后默认为“仅收听”模式<br><span>准备好后，请开启麦克风</span></p>
+                      </div>
+                      <ul class="voice-members" data-voice-members aria-label="语音成员" hidden></ul>
+                      <button type="button" class="voice-screen-link voice-settings" data-voice-settings>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 7h2m6 0h8M4 17h8m6 0h2"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>
+                        <span>输入设备</span>
+                        <svg class="voice-screen-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="voice-screen voice-screen--menu" data-voice-layer="menu" inert aria-hidden="true">
+                    <div class="voice-display-header">
+                      <div class="voice-display-title">
+                        <button type="button" class="voice-back" data-voice-back aria-label="返回通话">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
+                        </button>
+                        <h3 data-voice-screen-title tabindex="-1">输入设备</h3>
+                      </div>
+                      <div class="voice-connection" role="status" aria-live="polite">
+                        <span class="voice-connection-light" aria-hidden="true"></span>
+                        <p class="voice-status" data-voice-menu-status>等待接入</p>
+                      </div>
+                    </div>
+                    <div class="voice-screen-body">
+                      <div class="voice-view voice-member-view" data-voice-view="member" hidden>
+                        <div class="voice-volume">
+                          <label for="voice-member-volume">收听音量</label>
+                          <output for="voice-member-volume" data-voice-volume-output aria-hidden="true">100%</output>
+                          <input id="voice-member-volume" data-voice-volume type="range" min="0" max="1" step=".05" value="1">
+                        </div>
+                        <p class="voice-screen-hint">仅调节您听到该成员时的音量。</p>
+                      </div>
+                      <div class="voice-view voice-device-view" data-voice-view="device" hidden>
+                        <label class="voice-device">麦克风<select data-voice-device><option value="">系统默认麦克风</option></select></label>
+                        <p class="voice-screen-hint">更换设备后，您需要重新启用麦克风。</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="voice-notices" data-voice-notices hidden>
+                  <button type="button" class="voice-screen-link" data-voice-play hidden>启用声音</button>
+                  <button type="button" class="voice-screen-link" data-voice-recover hidden>恢复连接</button>
+                </div>
+              </div>
+              <div class="voice-controls">
+                <button type="button" class="voice-key voice-key--microphone" data-voice-mic aria-label="取消静音麦克风" aria-pressed="false" disabled>
+                  <span class="voice-key-face">
+                    <svg class="voice-mic-on" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg>
+                    <svg class="voice-mic-off" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M9 9v3a3 3 0 0 0 5.1 2.1M9 5a3 3 0 0 1 6 0v4M5 10v2a7 7 0 0 0 12 4.9M19 10v2a7 7 0 0 1-.2 1.8M12 19v3m-4 0h8"/></svg>
+                    <span class="voice-key-light" aria-hidden="true"></span>
+                  </span>
+                  <span data-voice-mic-label>麦克风</span>
+                </button>
+                <div class="voice-call-key">
+                  <button type="button" class="voice-key voice-key--join" data-voice-join>
+                    <span class="voice-key-face">
+                      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.96.36 1.9.7 2.8a2 2 0 0 1-.45 2.11L8.09 9.9a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.84.58 2.8.7A2 2 0 0 1 22 16.92Z"/></svg>
+                    </span>
+                    <span data-voice-join-label>接入语音</span>
+                  </button>
+                  <button type="button" class="voice-key voice-key--leave" data-voice-leave aria-label="结束通话" hidden>
+                    <span class="voice-key-face">
+                      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15a12 12 0 0 1 16 0l2-3a2 2 0 0 0-.5-2.7 17 17 0 0 0-19 0A2 2 0 0 0 2 12l2 3Z"/><path d="M7 13v-3m10 3v-3"/></svg>
+                    </span>
+                    <span data-voice-leave-label>结束通话</span>
+                  </button>
+                </div>
+              </div>
+              <div id="voice-audio" aria-hidden="true"></div>
+            </section>
+          </div>
+          <div class="window-buttons sekai-window-dots">
+            <i class="window-btn blue"></i>
+            <i class="window-btn yellow"></i>
+            <i class="window-btn red"></i>
+          </div>
         </div>
       </div>
-      <section id="voice-panel" class="voice-panel" aria-label="房间语音" hidden>
-        <div class="voice-controls">
-          <p class="voice-status" data-voice-status role="status" aria-live="polite">语音 · 加入后默认只听</p>
-          <button type="button" data-voice-join>加入语音</button>
-          <button type="button" data-voice-mic aria-pressed="false" hidden>开启麦克风</button>
-          <button type="button" data-voice-play hidden>启用声音</button>
-          <button type="button" data-voice-recover hidden>恢复连接</button>
-          <button type="button" data-voice-leave hidden>退出语音</button>
-        </div>
-        <details hidden>
-          <summary>语音成员 0 / 8</summary>
-          <ul class="voice-members" data-voice-members></ul>
-          <label class="voice-device">麦克风设备 <select data-voice-device><option value="">系统默认麦克风</option></select></label>
-        </details>
-        <div id="voice-audio" aria-hidden="true"></div>
-      </section>
       <div class="messages sekai-messages" id="messages"></div>
       <div class="input-area">
         <div class="input-box">

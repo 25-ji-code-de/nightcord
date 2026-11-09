@@ -277,28 +277,28 @@ body {
   color: #fff;
 }
 .bg-pink-500 {
-  background: #ec4899;
+  background: rgb(var(--sekai-identity-1));
 }
 .bg-purple-400 {
-  background: #a78bfa;
+  background: rgb(var(--sekai-identity-2));
 }
 .bg-teal-400 {
-  background: #2dd4bf;
+  background: rgb(var(--sekai-identity-3));
 }
 .bg-pink-400 {
-  background: #f472b6;
+  background: rgb(var(--sekai-identity-4));
 }
 .bg-purple-600 {
-  background: #7c3aed;
+  background: rgb(var(--sekai-identity-5));
 }
 .bg-green-600 {
-  background: #22c55e;
+  background: rgb(var(--sekai-identity-6));
 }
 .bg-red-600 {
-  background: #ef4444;
+  background: rgb(var(--sekai-identity-7));
 }
 .bg-default {
-  background: #9a559b;
+  background: rgb(var(--sekai-identity-8));
 }
 .main {
   flex: 1;

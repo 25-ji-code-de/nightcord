@@ -130,37 +130,27 @@
   --sekai-surface-card-live: 35 35 41;
 
   /* ---------- Identity tints ----------
-     Eight colours for telling people apart, as a printed colour-coded
-     tag: a bright field with dark ink of the same hue. That is what a
-     cable marker or an equipment label looks like, and glancing across
-     a roster is exactly the job they do.
+     Nightcord-derived avatar colours in its original bucket order,
+     selected with white initials and kept independent of world.
+     Slots 3, 4 and 6 intentionally retain white-text contrast ratios
+     of 2.50:1, 3.20:1 and 2.74:1, respectively (below 4.5:1). */
+  --sekai-identity-1: 212 47 133; /* pink */
+  --sekai-identity-2: 128 98 205; /* lavender */
+  --sekai-identity-3: 0 184 165; /* teal */
+  --sekai-identity-4: 227 98 166; /* light pink */
+  --sekai-identity-5: 124 58 237; /* deep purple */
+  --sekai-identity-6: 0 180 83; /* green */
+  --sekai-identity-7: 221 49 53; /* red */
+  --sekai-identity-8: 154 85 155; /* default purple */
 
-     Deliberately NOT in the world files. A person has to stay the same
-     colour in nightcord, in hub and in Pass, or the colour stops being
-     an identity. These are the only palette tokens a world may not
-     re-point.
-
-     Generated, not picked: hue anchored on SEKAI's own 293°, eight
-     even 45° steps, one lightness so every one is equally legible.
-     Re-run scripts/derive-identity-tints.mjs to change or verify —
-     it also prints the contrast audit and the neighbour separation. */
-  --sekai-identity-1: 175 151 255; /* H 293° — the house hue */
-  --sekai-identity-2: 230 131 203; /* H 338° */
-  --sekai-identity-3: 251 129 125; /* H  23° */
-  --sekai-identity-4: 232 150 41; /* H  68° */
-  --sekai-identity-5: 172 180 46; /* H 113° */
-  --sekai-identity-6: 64 199 134; /* H 158° */
-  --sekai-identity-7: 0 197 212; /* H 203° */
-  --sekai-identity-8: 83 177 255; /* H 248° */
-
-  --sekai-identity-1-ink: 65 51 105;
-  --sekai-identity-2-ink: 90 40 77;
-  --sekai-identity-3-ink: 100 38 38;
-  --sekai-identity-4-ink: 93 51 0;
-  --sekai-identity-5-ink: 65 68 0;
-  --sekai-identity-6-ink: 0 79 46;
-  --sekai-identity-7-ink: 0 76 85;
-  --sekai-identity-8-ink: 13 66 108;
+  --sekai-identity-1-ink: 255 255 255;
+  --sekai-identity-2-ink: 255 255 255;
+  --sekai-identity-3-ink: 255 255 255;
+  --sekai-identity-4-ink: 255 255 255;
+  --sekai-identity-5-ink: 255 255 255;
+  --sekai-identity-6-ink: 255 255 255;
+  --sekai-identity-7-ink: 255 255 255;
+  --sekai-identity-8-ink: 255 255 255;
 
   /* ---------- Scrim ---------- */
   --sekai-scrim: 20 20 25;

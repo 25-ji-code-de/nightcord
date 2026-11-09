@@ -52,66 +52,65 @@
 .voice-toolbar [aria-pressed="true"] .voice-mic-off { display: none; }
 .voice-toolbar :is(button, select, input, summary):focus-visible { outline: 2px solid rgb(var(--sekai-accent-hover)); outline-offset: -2px; }
 
-/* A conference phone: housing, one recessed display, two fixed call keys.
-   Member volume and input selection are menus on that same display. */
+/* A conference terminal with its own plastic housing, rubber keys and glass.
+   Screen menus change content; lamps and physical controls stay in place. */
 .voice-panel {
-  --voice-ink-muted: rgb(var(--sekai-fg) / .7);
+  --voice-ink-muted: rgb(var(--sekai-device-fg) / .75);
   position: fixed;
   inset: auto;
   top: var(--voice-panel-top, 56px);
   left: var(--voice-panel-left, 12px);
-  width: 336px;
-  height: 432px;
+  width: 344px;
+  height: 544px;
   max-width: calc(100vw - 24px);
   max-height: var(--voice-panel-height, calc(100dvh - 72px));
   box-sizing: border-box;
   margin: 0;
   padding: var(--sekai-space-lg);
   overflow: hidden;
-  border: var(--sekai-hairline);
-  border-top-color: rgb(var(--sekai-line) / .16);
-  border-radius: var(--sekai-radius-xl);
-  background: linear-gradient(145deg, rgb(var(--sekai-fg) / .025), rgb(0 0 0 / .04)), rgb(var(--sekai-surface));
-  box-shadow: var(--sekai-elev-3);
-  color: rgb(var(--sekai-fg));
+  border: 1px solid rgb(var(--sekai-device-line));
+  border-top-color: rgb(255 255 255 / .16);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgb(255 255 255 / .045), rgb(0 0 0 / .08)), rgb(var(--sekai-device-chassis));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .035), 0 12px 28px rgb(0 0 0 / .28), 0 2px 4px rgb(0 0 0 / .2);
+  color: rgb(var(--sekai-device-fg));
   font-size: var(--sekai-text-sm);
   line-height: var(--sekai-leading);
 }
 .voice-panel:popover-open { display: flex; flex-direction: column; animation: voice-panel-in var(--sekai-dur-fast) var(--sekai-ease-out); }
-.voice-housing-header { position: relative; display: flex; align-items: center; flex-shrink: 0; height: 24px; margin-bottom: var(--sekai-space-md); }
+.voice-housing-header { position: relative; display: flex; align-items: center; flex-shrink: 0; height: 24px; margin-bottom: var(--sekai-space-sm); }
 .voice-housing-header h2 { margin: 0; color: var(--voice-ink-muted); font-family: var(--sekai-font-mono); font-size: var(--sekai-text-label); font-weight: var(--sekai-weight-medium); letter-spacing: var(--sekai-tracking-wide); }
 .voice-close { position: absolute; right: -8px; top: -10px; color: var(--voice-ink-muted); }
+.voice-hardware-status { display: flex; align-items: center; flex-shrink: 0; gap: var(--sekai-space-lg); min-height: 16px; margin: 0 2px var(--sekai-space-md); }
+.voice-lamp { display: inline-flex; align-items: center; gap: 6px; color: var(--voice-ink-muted); font-family: var(--sekai-font-mono); font-size: var(--sekai-text-micro); letter-spacing: var(--sekai-tracking-wide); }
+.voice-lamp i { display: block; width: 5px; height: 5px; border: 1px solid rgb(0 0 0 / .5); border-radius: 50%; background: rgb(var(--sekai-device-screen)); box-shadow: inset 0 1px 2px rgb(0 0 0 / .8), 0 1px 0 rgb(255 255 255 / .12); }
+.voice-lamp.is-active i { background: rgb(var(--sekai-signal)); border-color: rgb(var(--sekai-signal) / .5); box-shadow: 0 0 5px rgb(var(--sekai-signal) / .5), inset 0 1px 0 rgb(255 255 255 / .3); }
+.voice-lamp.needs-attention i { background: rgb(var(--sekai-warning)); border-color: rgb(var(--sekai-warning) / .5); box-shadow: 0 0 5px rgb(var(--sekai-warning) / .3); }
+.voice-housing-signature { margin-left: auto; color: var(--voice-ink-muted); font-family: var(--sekai-font-mono); font-size: var(--sekai-text-micro); letter-spacing: var(--sekai-tracking-wide); }
 .voice-display {
-  --voice-screen-surface: linear-gradient(145deg, rgb(var(--sekai-surface-raised)), rgb(var(--sekai-surface-sunken)));
+  --voice-screen-surface: rgb(var(--sekai-device-screen));
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0;
+  min-height: 210px;
   overflow: hidden;
-  border: 1px solid rgb(0 0 0 / .2);
-  border-bottom-color: rgb(var(--sekai-line) / .1);
-  border-radius: var(--sekai-radius-panel);
+  border: 1px solid rgb(0 0 0 / .7);
+  border-bottom-color: rgb(255 255 255 / .12);
+  border-radius: 8px;
   background: var(--voice-screen-surface);
-  box-shadow: inset 0 2px 5px rgb(0 0 0 / .22);
+  box-shadow: inset 0 2px 5px rgb(0 0 0 / .5), 0 1px 0 rgb(255 255 255 / .035);
 }
 .voice-screen-stack { position: relative; flex: 1; min-height: 0; overflow: hidden; isolation: isolate; border-radius: inherit; }
-.voice-screen { position: absolute; inset: 0; display: flex; flex-direction: column; min-width: 0; box-sizing: border-box; padding: var(--sekai-space-md); background: var(--voice-screen-surface); }
-.voice-screen--call { z-index: var(--sekai-z-base); transform: translateX(0); transition: transform var(--sekai-dur-slow) var(--sekai-ease-out); }
-.voice-screen--call::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: var(--sekai-tint-scrim); opacity: 0; transition: opacity var(--sekai-dur-slow) var(--sekai-ease-out); }
-.voice-screen--menu { z-index: var(--sekai-z-raised); visibility: hidden; transform: translateX(100%); transition: transform var(--sekai-dur-slow) var(--sekai-ease-out), visibility 0s var(--sekai-dur-slow); }
-.voice-screen--menu::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; box-shadow: -8px 0 24px rgb(0 0 0 / .3), -1px 0 rgb(0 0 0 / .2); opacity: 0; transition: opacity var(--sekai-dur-slow) var(--sekai-ease-out); }
-.voice-panel:is([data-voice-screen="device"], [data-voice-screen="member"]) .voice-screen--call { transform: translateX(-25%); }
-.voice-panel:is([data-voice-screen="device"], [data-voice-screen="member"]) .voice-screen--call::after { opacity: 1; }
-.voice-panel:is([data-voice-screen="device"], [data-voice-screen="member"]) .voice-screen--menu { visibility: visible; transform: translateX(0); transition-delay: 0s; }
-.voice-panel:is([data-voice-screen="device"], [data-voice-screen="member"]) .voice-screen--menu::before { opacity: 1; }
+.voice-screen { position: absolute; inset: 0; display: flex; flex-direction: column; min-width: 0; box-sizing: border-box; padding: var(--sekai-space-md); background: transparent; transition: opacity var(--sekai-dur-fast); }
+.voice-screen--call { visibility: visible; opacity: 1; }
+.voice-screen--menu { visibility: hidden; opacity: 0; }
+.voice-panel:is([data-voice-screen="device"], [data-voice-screen="member"]) .voice-screen--call { visibility: hidden; opacity: 0; }
+.voice-panel:is([data-voice-screen="device"], [data-voice-screen="member"]) .voice-screen--menu { visibility: visible; opacity: 1; transition-delay: 0s; }
 .voice-display-header { flex-shrink: 0; margin-bottom: var(--sekai-space-sm); }
 .voice-display-title { display: flex; align-items: center; gap: var(--sekai-space-2xs); min-height: 28px; }
 .voice-display-title h3 { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--sekai-text-xl); font-weight: var(--sekai-weight-medium); }
 .voice-member-count { flex-shrink: 0; color: var(--voice-ink-muted); font-size: var(--sekai-text-label); font-variant-numeric: tabular-nums; }
-.voice-connection { display: flex; align-items: baseline; gap: var(--sekai-space-xs); margin-top: var(--sekai-space-2xs); }
-.voice-connection-light { width: 5px; height: 5px; flex-shrink: 0; border-radius: var(--sekai-radius-full); background: rgb(var(--sekai-fg) / .25); }
-.is-joined .voice-connection-light { background: rgb(var(--sekai-success)); }
-.needs-attention .voice-connection-light { background: rgb(var(--sekai-warning)); }
+.voice-connection { display: flex; align-items: baseline; margin-top: var(--sekai-space-2xs); }
 .voice-status { margin: 0; color: var(--voice-ink-muted); font-size: var(--sekai-text-label); overflow-wrap: anywhere; }
 .needs-attention .voice-status { color: rgb(var(--sekai-warning)); }
 .voice-screen-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
@@ -131,45 +130,56 @@ button.voice-member-line:hover { background: var(--sekai-tint-hover); }
 .voice-member-info { flex: 1; min-width: 0; }
 .voice-member-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--sekai-weight-medium); }
 .voice-member small { display: block; color: var(--voice-ink-muted); font-size: var(--sekai-text-label); }
-.voice-member.is-speaking .voice-member-avatar { box-shadow: 0 0 0 2px rgb(var(--sekai-surface-raised)), 0 0 0 3px rgb(var(--sekai-signal) / .7); }
+.voice-member.is-speaking .voice-member-avatar { box-shadow: 0 0 0 2px rgb(var(--sekai-device-screen)), 0 0 0 3px rgb(var(--sekai-signal) / .7); }
 .voice-member.is-speaking small { color: rgb(var(--sekai-fg)); }
 .voice-member-line > svg { flex-shrink: 0; width: 14px; height: 14px; color: var(--voice-ink-muted); }
 .voice-screen-link, .voice-back { display: inline-flex; align-items: center; gap: var(--sekai-space-sm); min-height: 44px; box-sizing: border-box; padding: var(--sekai-space-xs) var(--sekai-space-2xs); border: 0; background: transparent; color: var(--voice-ink-muted); cursor: pointer; }
 .voice-screen-link:hover, .voice-back:hover { color: rgb(var(--sekai-fg)); }
 .voice-screen-link svg { flex-shrink: 0; }
-.voice-settings { flex-shrink: 0; width: 100%; margin-top: var(--sekai-space-2xs); border-top: var(--sekai-hairline); font-size: var(--sekai-text-label); text-align: left; }
+.voice-settings { flex-shrink: 0; width: 100%; margin-top: var(--sekai-space-2xs); border-top: 1px solid rgb(var(--sekai-device-line) / .7); font-size: var(--sekai-text-label); text-align: left; }
 .voice-screen-chevron { margin-left: auto; }
 .voice-back { flex-shrink: 0; justify-content: center; width: 44px; margin: -8px 0 -8px -12px; padding: 0; }
-.voice-member-view, .voice-device-view { justify-content: center; }
+.voice-member-view, .voice-device-view { justify-content: flex-start; padding-top: var(--sekai-space-md); }
 .voice-volume { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: var(--sekai-space-sm); padding-top: var(--sekai-space-sm); }
 .voice-volume label { color: var(--voice-ink-muted); font-size: var(--sekai-text-label); }
 .voice-volume output { font-variant-numeric: tabular-nums; }
 .voice-volume input { grid-column: 1 / -1; appearance: none; -webkit-appearance: none; width: 100%; height: 44px; box-sizing: border-box; margin: 0; background: transparent; cursor: pointer; }
-.voice-volume input::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: linear-gradient(90deg, rgb(var(--sekai-fg) / .65) var(--voice-volume-level, 100%), rgb(var(--sekai-fg) / .12) 0); }
-.voice-volume input::-moz-range-track { height: 3px; border-radius: 2px; background: rgb(var(--sekai-fg) / .12); }
-.voice-volume input::-moz-range-progress { height: 3px; background: rgb(var(--sekai-fg) / .65); }
-.voice-volume input::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4.5px; border: 0; border-radius: 50%; background: rgb(var(--sekai-fg)); }
-.voice-volume input::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: rgb(var(--sekai-fg)); }
+.voice-volume input::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: linear-gradient(90deg, rgb(var(--sekai-device-fg) / .8) var(--voice-volume-level, 100%), rgb(var(--sekai-device-fg) / .16) 0); }
+.voice-volume input::-moz-range-track { height: 3px; border-radius: 2px; background: rgb(var(--sekai-device-fg) / .16); }
+.voice-volume input::-moz-range-progress { height: 3px; background: rgb(var(--sekai-device-fg) / .8); }
+.voice-volume input::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4.5px; border: 0; border-radius: 50%; background: rgb(var(--sekai-device-fg)); }
+.voice-volume input::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: rgb(var(--sekai-device-fg)); }
 .voice-screen-hint { margin: var(--sekai-space-xs) 0; color: var(--voice-ink-muted); font-size: var(--sekai-text-label); line-height: var(--sekai-leading-relaxed); }
 .voice-device { display: flex; flex-direction: column; gap: var(--sekai-space-sm); color: var(--voice-ink-muted); font-size: var(--sekai-text-label); }
-.voice-device select { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; padding: var(--sekai-space-sm); border: var(--sekai-hairline-strong); border-radius: var(--sekai-radius-control); background: rgb(var(--sekai-surface-sunken)); color: rgb(var(--sekai-fg)); color-scheme: dark; }
-.voice-notices { display: flex; flex-wrap: wrap; flex-shrink: 0; gap: var(--sekai-space-sm); margin: 0 var(--sekai-space-md) var(--sekai-space-md); border-top: var(--sekai-hairline); }
+.voice-device select { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; padding: var(--sekai-space-sm); border: 1px solid rgb(var(--sekai-device-fg) / .3); border-radius: 4px; background: rgb(var(--sekai-device-panel)); color: rgb(var(--sekai-device-fg)); color-scheme: dark; }
+.voice-screen-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--sekai-space-sm); flex-shrink: 0; min-height: 30px; margin: 0 var(--sekai-space-md); border-top: 1px solid rgb(var(--sekai-device-line) / .7); color: var(--voice-ink-muted); font-size: var(--sekai-text-label); }
+.voice-screen-footer time, .voice-screen-footer output { color: rgb(var(--sekai-device-fg)); font-family: var(--sekai-font-mono); font-size: var(--sekai-text-label); font-variant-numeric: tabular-nums; }
+.voice-output-readout { white-space: nowrap; }
+.voice-notices { display: flex; flex-wrap: wrap; flex-shrink: 0; gap: var(--sekai-space-sm); max-height: 45%; overflow-y: auto; margin: 0 var(--sekai-space-md) var(--sekai-space-md); border-top: 1px solid rgb(var(--sekai-device-line) / .7); }
 .voice-notices button { color: rgb(var(--sekai-warning)); font-size: var(--sekai-text-label); }
 .voice-usage-reminder { flex-basis: 100%; margin: var(--sekai-space-sm) 0 0; color: var(--voice-ink-muted); font-size: var(--sekai-text-label); line-height: var(--sekai-leading-relaxed); overflow-wrap: anywhere; }
-/* These keys belong to the housing, so display menus never move them. */
-.voice-controls { display: grid; grid-template-columns: 1fr 1fr; flex-shrink: 0; gap: var(--sekai-space-lg); padding: var(--sekai-space-lg) var(--sekai-space-lg) 0; }
+/* Key caps sit in the housing. Volume is a fixed rocker, not a screen menu. */
+.voice-output-controls { display: flex; align-items: center; flex-shrink: 0; gap: var(--sekai-space-sm); margin: var(--sekai-space-md) var(--sekai-space-sm) 0; }
+.voice-small-key { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 1px solid rgb(0 0 0 / .65); border-radius: 9px; background: linear-gradient(180deg, rgb(255 255 255 / .055), transparent), rgb(var(--sekai-device-key)); color: rgb(var(--sekai-device-fg)); box-shadow: inset 0 1px 0 rgb(255 255 255 / .12), 0 2px 0 rgb(0 0 0 / .5), 0 3px 4px rgb(0 0 0 / .2); cursor: pointer; transition: background var(--sekai-dur-instant), box-shadow var(--sekai-dur-instant), transform var(--sekai-dur-instant); }
+.voice-small-key:hover:not([aria-disabled="true"]) { background-color: rgb(var(--sekai-device-key-hover)); }
+.voice-small-key:active:not([aria-disabled="true"]) { transform: translateY(1px); box-shadow: inset 0 1px 3px rgb(0 0 0 / .5), 0 1px 0 rgb(0 0 0 / .5); }
+.voice-small-key[aria-disabled="true"] { color: rgb(var(--sekai-device-fg) / .35); cursor: default; }
+.voice-output-mute[aria-pressed="false"] .voice-speaker-off, .voice-output-mute[aria-pressed="true"] .voice-speaker-on { display: none; }
+.voice-output-mute[aria-pressed="true"] { color: rgb(var(--sekai-warning)); }
+.voice-output-caption { flex: 1; color: var(--voice-ink-muted); font-size: var(--sekai-text-label); }
+.voice-volume-rocker { display: flex; gap: 0; border: 1px solid rgb(0 0 0 / .5); border-radius: 10px; }
+.voice-volume-rocker button { border: 0; border-radius: 8px 0 0 8px; }
+.voice-volume-rocker button + button { border-left: 1px solid rgb(0 0 0 / .45); border-radius: 0 8px 8px 0; }
+.voice-controls { display: grid; grid-template-columns: 1fr 1fr; flex-shrink: 0; gap: var(--sekai-space-lg); padding: var(--sekai-space-md) var(--sekai-space-lg) 0; }
 .voice-call-key { display: grid; }
 .voice-call-key > button { grid-area: 1 / 1; }
 .voice-key { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sekai-space-xs); min-width: 0; min-height: 76px; padding: var(--sekai-space-2xs); border: 0; border-radius: var(--sekai-radius-panel); background: transparent; color: var(--voice-ink-muted); font-size: var(--sekai-text-label); cursor: pointer; }
-.voice-key-face { position: relative; display: grid; place-items: center; width: 44px; height: 44px; box-sizing: border-box; border: var(--sekai-hairline); border-top-color: rgb(var(--sekai-line) / .16); border-radius: var(--sekai-radius-full); background: var(--sekai-tint-raised); box-shadow: 0 1px 2px rgb(0 0 0 / .15); color: rgb(var(--sekai-fg)); transition: background var(--sekai-dur-fast), border-color var(--sekai-dur-fast), box-shadow var(--sekai-dur-fast), transform var(--sekai-dur-fast); }
-.voice-key:hover:not(:disabled) .voice-key-face { background: var(--sekai-tint-hover); border-color: rgb(var(--sekai-line-strong) / var(--sekai-line-strong-a)); }
-.voice-key:active:not(:disabled) .voice-key-face { transform: translateY(1px); box-shadow: inset 0 1px 3px rgb(0 0 0 / .2); }
+.voice-key-face { position: relative; display: grid; place-items: center; width: 48px; height: 44px; box-sizing: border-box; border: 1px solid rgb(0 0 0 / .7); border-radius: 15px; background: linear-gradient(180deg, rgb(255 255 255 / .07), transparent), rgb(var(--sekai-device-key)); box-shadow: inset 0 1px 0 rgb(255 255 255 / .15), 0 2px 0 rgb(0 0 0 / .65), 0 3px 5px rgb(0 0 0 / .25); color: rgb(var(--sekai-device-fg)); transition: background var(--sekai-dur-instant), box-shadow var(--sekai-dur-instant), transform var(--sekai-dur-instant); }
+.voice-key:hover:not(:disabled) .voice-key-face { background-color: rgb(var(--sekai-device-key-hover)); }
+.voice-key:active:not(:disabled) .voice-key-face { transform: translateY(1px); box-shadow: inset 0 1px 3px rgb(0 0 0 / .5), 0 1px 0 rgb(0 0 0 / .6); }
 .voice-key:disabled { opacity: .4; cursor: default; }
-.voice-key--join .voice-key-face { color: rgb(var(--sekai-accent-hover)); }
+.voice-key--join .voice-key-face { color: rgb(var(--sekai-success)); }
 .voice-key--leave .voice-key-face { color: rgb(var(--sekai-danger)); }
-.voice-key--leave:hover .voice-key-face { border-color: rgb(var(--sekai-danger) / .35); }
-.voice-key-light { position: absolute; right: 3px; top: 3px; width: 5px; height: 5px; border-radius: var(--sekai-radius-full); background: rgb(var(--sekai-surface-sunken)); box-shadow: 0 0 0 2px rgb(var(--sekai-surface)); }
-.voice-key[aria-pressed="true"] .voice-key-light { background: rgb(var(--sekai-signal)); box-shadow: 0 0 0 2px rgb(var(--sekai-surface)), 0 0 4px rgb(var(--sekai-signal) / .5); }
 #voice-audio { display: none; }
 @keyframes voice-panel-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 768px) {
@@ -180,9 +190,24 @@ button.voice-member-line:hover { background: var(--sekai-tint-hover); }
   .chat-header { padding-inline: var(--sekai-space-sm); }
 }
 @media (max-height: 500px) {
-  .voice-panel { padding: var(--sekai-space-md); }
+  .voice-panel { padding: var(--sekai-space-md); overflow-y: auto; }
+  .voice-display { min-height: 150px; }
   .voice-housing-header { margin-bottom: var(--sekai-space-sm); }
   .voice-controls { padding-top: var(--sekai-space-sm); }
+  .voice-hardware-status { margin-bottom: var(--sekai-space-sm); }
+  .voice-output-controls { margin-top: var(--sekai-space-sm); }
+  .voice-key { min-height: 66px; }
+  .voice-screen { padding: var(--sekai-space-sm); }
+  .voice-screen-footer { margin-inline: var(--sekai-space-sm); }
+}
+@media (max-height: 500px) and (min-width: 600px) {
+  .voice-panel { width: 480px; }
+  .voice-panel:popover-open { display: grid; grid-template-columns: minmax(0, 1fr) 132px; grid-template-rows: 24px 24px minmax(150px, 1fr); gap: 8px 12px; }
+  .voice-housing-header, .voice-hardware-status { grid-column: 1 / -1; margin: 0; }
+  .voice-display { grid-column: 1; grid-row: 3; height: 100%; box-sizing: border-box; }
+  .voice-output-controls { grid-column: 2; grid-row: 3; flex-direction: column; align-self: start; margin: 0; }
+  .voice-output-caption { display: none; }
+  .voice-controls { grid-column: 2; grid-row: 3; align-self: end; gap: 8px; padding: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .voice-panel:popover-open { animation: none; }

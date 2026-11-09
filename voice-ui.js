@@ -27,6 +27,13 @@ class VoiceUI {
     this.back = this.root.querySelector('[data-voice-back]');
     this.volume = this.root.querySelector('[data-voice-volume]');
     this.volumeOutput = this.root.querySelector('[data-voice-volume-output]');
+    this.outputMute = this.root.querySelector('[data-voice-output-mute]');
+    this.outputDown = this.root.querySelector('[data-voice-output-down]');
+    this.outputUp = this.root.querySelector('[data-voice-output-up]');
+    this.outputReadout = this.root.querySelector('[data-voice-output-readout]');
+    this.lineLamp = this.root.querySelector('[data-voice-line-lamp]');
+    this.micLamp = this.root.querySelector('[data-voice-mic-lamp]');
+    this.elapsed = this.root.querySelector('[data-voice-elapsed]');
     this.play = this.root.querySelector('[data-voice-play]');
     this.recover = this.root.querySelector('[data-voice-recover]');
     this.usageReminder = this.root.querySelector('[data-voice-usage-reminder]');
@@ -40,6 +47,12 @@ class VoiceUI {
       button.addEventListener('click', () => { void manager.microphone(this.device.value); }, options);
     }
     this.leave.addEventListener('click', () => { void manager.leave(); }, options);
+    this.outputMute.addEventListener('click', () => manager.toggleOutputMute(), options);
+    for (const [button, step] of [[this.outputDown, -0.1], [this.outputUp, 0.1]]) {
+      button.addEventListener('click', () => {
+        if (button.getAttribute('aria-disabled') !== 'true') manager.setOutputVolume(Math.round((manager.state.outputVolume + step) * 10) / 10);
+      }, options);
+    }
     this.device.addEventListener('change', () => {
       if (manager.state.microphone || manager.capturePending) manager.mute();
     }, options);
@@ -75,6 +88,7 @@ class VoiceUI {
       const open = this.root.matches(':popover-open');
       this.toggle.setAttribute('aria-expanded', String(open));
       if (!open) { this.selectedMember = null; this.showView('call'); }
+      this.syncClock();
     }, options);
     window.addEventListener('resize', () => {
       if (this.root.matches(':popover-open')) this.positionPanel();
@@ -113,7 +127,7 @@ class VoiceUI {
     if (inMenu) this.menuView = this.view;
     this.menuStatus.parentElement.hidden = this.menuView === 'device';
     this.root.dataset.voiceScreen = this.view;
-    // Keep the covered page and outgoing menu painted throughout the slide.
+    // Menus replace pixels within the same display; the housing stays fixed.
     for (const page of this.pages) page.hidden = !['call', this.menuView].includes(page.dataset.voiceView);
     this.callScreen.inert = inMenu; this.callScreen.setAttribute('aria-hidden', String(inMenu));
     this.menuScreen.inert = !inMenu; this.menuScreen.setAttribute('aria-hidden', String(!inMenu));
@@ -141,6 +155,21 @@ class VoiceUI {
     this.volume.style.setProperty('--voice-volume-level', value);
     this.volume.setAttribute('aria-valuetext', value);
     this.volumeOutput.textContent = value;
+  }
+  syncClock() {
+    const running = this.state?.joined && this.root.matches(':popover-open');
+    if (!running) { clearInterval(this.clock); this.clock = null; }
+    else if (!this.clock) this.clock = setInterval(() => this.renderElapsed(), 1000);
+    this.renderElapsed();
+  }
+  renderElapsed() {
+    const started = this.state?.joinedAt;
+    const seconds = this.state?.joined && Number.isFinite(started) && started > 0 ? Math.max(0, Math.floor((Date.now() - started) / 1000)) : null;
+    const minutes = seconds === null ? null : Math.floor(seconds / 60);
+    const value = seconds === null ? '--:--' : `${minutes >= 60 ? `${Math.floor(minutes / 60)}:` : ''}${String(minutes % 60).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+    if (this.elapsed.textContent !== value) this.elapsed.textContent = value;
+    if (seconds === null) this.elapsed.removeAttribute('datetime');
+    else this.elapsed.setAttribute('datetime', `PT${seconds}S`);
   }
   renderActivity(ids = []) {
     for (const row of this.members.children) {
@@ -220,6 +249,21 @@ class VoiceUI {
     this.toggle.setAttribute('aria-label', attention ? '语音功能需要您的关注，请打开语音面板' : remindUsage ? '语音功能今日累计使用时长已达 2 小时，请打开语音面板查看时长提醒。' : state.joined ? `房间语音，${state.members.length} 人，${state.microphone ? '麦克风已开启' : '仅收听模式'}，请打开语音面板` : '打开房间语音面板');
     this.status.textContent = messageNeedsAttention ? state.message : state.playbackBlocked ? '尚未启用音频' : state.busy ? '正在接通……' : this.manager.capturePending ? '正在启用麦克风……' : state.joined ? state.microphone ? '已接通 · 麦克风已开启' : '已接通 · 麦克风已静音' : '等待接入';
     this.menuStatus.textContent = this.status.textContent;
+    this.lineLamp.classList.toggle('is-active', state.joined);
+    this.lineLamp.classList.toggle('needs-attention', attention);
+    this.lineLamp.setAttribute('aria-label', attention ? this.status.textContent : state.joined ? '语音已接通' : state.busy ? '语音正在接通' : '语音未接通');
+    this.micLamp.classList.toggle('is-active', state.microphone);
+    this.micLamp.setAttribute('aria-label', this.manager.capturePending ? '正在启用麦克风' : state.microphone ? '麦克风已开启' : '麦克风已关闭');
+    const outputSilent = state.outputMuted || state.outputVolume === 0;
+    const outputLabel = outputSilent ? '恢复收听' : '静音收听';
+    this.outputMute.setAttribute('aria-pressed', String(outputSilent));
+    this.outputMute.setAttribute('aria-label', outputLabel); this.outputMute.title = outputLabel;
+    const outputValue = outputSilent ? '静音' : `${Math.round(state.outputVolume * 100)}%`;
+    if (this.outputReadout.textContent !== outputValue) this.outputReadout.textContent = outputValue;
+    // Keep the focused rocker key in the tab order when it reaches an endpoint.
+    this.outputDown.setAttribute('aria-disabled', String(state.outputVolume === 0));
+    this.outputUp.setAttribute('aria-disabled', String(state.outputVolume === 1 && !state.outputMuted));
+    this.syncClock();
     this.join.hidden = state.joined || state.busy;
     this.mic.disabled = !state.joined; this.quickMic.hidden = !state.joined;
     this.leave.hidden = !state.joined && !state.busy;
@@ -266,6 +310,7 @@ class VoiceUI {
   }
   destroy() {
     this.closePanel(); this.controller?.abort();
+    clearInterval(this.clock);
     this.unsubscribe?.(); this.activityUnsubscribe?.();
   }
 }

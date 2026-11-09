@@ -63,6 +63,29 @@ async function publishing({ silence = true } = {}) {
   return { ...h, stream, peers };
 }
 
+test('master listening controls preserve each member mix, restore zero volume and leave microphone capture alone', async () => {
+  const h = await publishing();
+  const audio = {}, otherAudio = {};
+  h.manager.playbacks.set('first', { audio });
+  h.manager.playbacks.set('second', { audio: otherAudio });
+  h.manager.setVolume('first', 0.25);
+  h.manager.setOutputVolume(0.8);
+  assert.equal(audio.volume, 0.2); assert.equal(otherAudio.volume, 0.8);
+  h.manager.toggleOutputMute();
+  assert.equal(audio.muted, true); assert.equal(otherAudio.muted, true);
+  assert.equal(h.manager.state.microphone, true); assert.equal(h.stream.track.readyState, 'live');
+  const reconnectedAudio = {};
+  h.manager.applyPlaybackVolume('first', reconnectedAudio);
+  assert.equal(reconnectedAudio.volume, 0.2); assert.equal(reconnectedAudio.muted, true);
+  h.manager.setOutputVolume(0);
+  h.manager.toggleOutputMute();
+  assert.equal(h.manager.state.outputVolume, 0.8); assert.equal(audio.muted, false);
+  assert.equal(audio.volume, 0.2);
+  h.manager.setOutputVolume(NaN); h.manager.setVolume('first', Infinity);
+  assert.equal(audio.volume, 0.2); assert.equal(h.manager.state.outputVolume, 0.8);
+  h.manager.playbacks.clear(); h.manager.destroy();
+});
+
 test('a minute-limit heartbeat closes capture and media and explains the daily limit', async () => {
   const h = await publishing();
   const pc = h.manager.publisher, silence = h.manager.publisherAttempt.silence;

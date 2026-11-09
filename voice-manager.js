@@ -10,7 +10,8 @@ class VoiceManager {
     this.peerFactory = peerFactory;
     this.mediaDevices = mediaDevices;
     this.audioContextFactory = audioContextFactory;
-    this.state = { available: false, loginRequired: true, joined: false, busy: false, microphone: false, message: '', members: [], speaking: [] };
+    this.state = { available: false, loginRequired: true, joined: false, busy: false, microphone: false, outputVolume: 1, outputMuted: false, joinedAt: null, message: '', members: [], speaking: [] };
+    this.lastOutputVolume = 1;
     this.generation = 0;
     this.micGeneration = 0;
     this.ticketRequests = new Map();
@@ -91,7 +92,7 @@ class VoiceManager {
       if (generation !== this.generation) { void this.request('leave', {}, credential).catch(() => {}); return; }
       this.membership = { ...credential, ...result };
       this.state.usage = result.usage;
-      this.state.joined = true; this.state.message = '已加入 · 麦克风已关闭';
+      this.state.joined = true; this.state.joinedAt = Date.now(); this.state.message = '已加入 · 麦克风已关闭';
       this.appliedRevision = -1; this.receiverSignature = ''; this.receiverFailures = 0;
       this.applySnapshot(result.snapshot);
       this.heartbeatTimer = setInterval(() => { void this.heartbeat(); }, 20000);
@@ -265,7 +266,7 @@ class VoiceManager {
         const memberId = mapping.get(event.transceiver.mid);
         if (!memberId) return;
         const audio = document.createElement('audio'); audio.autoplay = true;
-        audio.volume = this.volumes.get(memberId) ?? 1;
+        this.applyPlaybackVolume(memberId, audio);
         audio.srcObject = new MediaStream([event.track]);
         this.playbacks.get(memberId)?.audio.remove();
         this.playbacks.set(memberId, { audio, mid: event.transceiver.mid });
@@ -485,7 +486,34 @@ class VoiceManager {
     void this.replaceTrack(attempt, attempt.silence.track).catch(failed);
     void this.syncMicrophone(attempt, false).catch(failed);
   }
-  setVolume(memberId, volume) { const value = Math.max(0, Math.min(1, volume)); this.volumes.set(memberId, value); const player = this.playbacks.get(memberId); if (player) player.audio.volume = value; }
+  applyPlaybackVolume(memberId, audio) {
+    audio.volume = (this.volumes.get(memberId) ?? 1) * this.state.outputVolume;
+    audio.muted = this.state.outputMuted;
+  }
+  setVolume(memberId, volume) {
+    if (!Number.isFinite(volume)) return;
+    this.volumes.set(memberId, Math.max(0, Math.min(1, volume)));
+    const player = this.playbacks.get(memberId);
+    if (player) this.applyPlaybackVolume(memberId, player.audio);
+  }
+  setOutputVolume(volume) {
+    if (!Number.isFinite(volume)) return;
+    this.state.outputVolume = Math.max(0, Math.min(1, volume));
+    this.state.outputMuted = this.state.outputVolume === 0;
+    if (this.state.outputVolume > 0) this.lastOutputVolume = this.state.outputVolume;
+    this.updateOutput();
+  }
+  toggleOutputMute() {
+    if (this.state.outputMuted) {
+      this.state.outputMuted = false;
+      if (this.state.outputVolume === 0) this.state.outputVolume = this.lastOutputVolume;
+    } else this.state.outputMuted = true;
+    this.updateOutput();
+  }
+  updateOutput() {
+    for (const [memberId, { audio }] of this.playbacks) this.applyPlaybackVolume(memberId, audio);
+    this.emit();
+  }
   async enablePlayback() {
     try { await Promise.all([...this.playbacks.values()].map(({ audio }) => audio.play())); this.state.playbackBlocked = false; }
     catch { this.state.playbackBlocked = true; }
@@ -522,7 +550,7 @@ class VoiceManager {
     this.releasePublisher(this.publisherAttempt, false); this.publisher = null; this.capturePending = false; this.publisherAttempt = null;
     this.closeReceiver(); this.iceConfig = null;
     this.volumes.clear();
-    this.state = { ...this.state, joined: false, busy: false, microphone: false, message: '', members: [], speaking: [], recoveryNeeded: false, playbackBlocked: false, usage: null };
+    this.state = { ...this.state, joined: false, busy: false, microphone: false, joinedAt: null, message: '', members: [], speaking: [], recoveryNeeded: false, playbackBlocked: false, usage: null };
     this.emit();
     if (membership) {
       try { await this.request('leave', {}, membership, { keepalive: true }); }

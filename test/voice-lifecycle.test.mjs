@@ -33,9 +33,8 @@ function harness() {
   return { manager, bus, chat, permission, calls, audioContexts };
 }
 
-async function publishing({ silence = true } = {}) {
-  const h = harness(), stream = capture(), peers = [];
-  if (!silence) h.manager.audioContextFactory = () => { throw new Error('Web Audio unavailable'); };
+function configurePublishing(h) {
+  const peers = [];
   h.manager.ice = async () => ({ iceServers: [] }); h.manager.gather = async () => {};
   h.manager.peerFactory = () => {
     const pc = {
@@ -44,6 +43,7 @@ async function publishing({ silence = true } = {}) {
       addTransceiver(track) { this.sender.track = track; return { mid: '0', sender: this.sender }; },
       createOffer: async () => ({}), setLocalDescription: async () => {},
       async setRemoteDescription(description) { this.remoteDescription = description; },
+      getStats: async () => new Map([['audio', { type: 'outbound-rtp', kind: 'audio', packetsSent: 1 }]]),
       addEventListener() {}, close() { this.connectionState = 'closed'; },
     };
     peers.push(pc); return pc;
@@ -53,6 +53,11 @@ async function publishing({ silence = true } = {}) {
     if (action === 'publisher/start') return { operationId: input.mutationId, generation: 1, sessionDescription: { type: 'answer', sdp: 'v=0\r\na=rtpmap:111 opus/48000/2\r\na=fmtp:111 minptime=10;useinbandfec=1\r\n' } };
     return {};
   };
+  return peers;
+}
+async function publishing({ silence = true } = {}) {
+  const h = harness(), stream = capture(), peers = configurePublishing(h);
+  if (!silence) h.manager.audioContextFactory = () => { throw new Error('Web Audio unavailable'); };
   const pending = h.manager.microphone(); h.permission.resolve(stream); await pending;
   assert.equal(h.manager.state.microphone, true);
   return { ...h, stream, peers };
@@ -235,5 +240,165 @@ test('bounded ICE gathering uses available candidates and rejects an empty descr
   await h.manager.gather(pc, 1);
   pc.localDescription.sdp = 'v=0\r\n';
   await assert.rejects(h.manager.gather(pc, 1), error => error.code === 'ice_timeout');
+  h.manager.destroy();
+});
+
+function gatheringPeer(policy = 'all') {
+  const listeners = new Map();
+  return {
+    iceGatheringState: 'gathering', signalingState: 'have-local-offer', localDescription: { sdp: 'v=0\r\n' },
+    getConfiguration: () => ({ iceTransportPolicy: policy }),
+    addEventListener(name, listener) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(listener); },
+    removeEventListener(name, listener) { listeners.get(name)?.delete(listener); },
+    dispatch(name) { listeners.get(name)?.forEach(listener => listener()); },
+    candidate(type) { this.localDescription.sdp += `a=candidate:1 1 udp 123 192.0.2.1 5000 typ ${type}\r\n`; this.dispatch('icecandidate'); },
+    listenerCount: () => [...listeners.values()].reduce((sum, set) => sum + set.size, 0),
+  };
+}
+
+test('adaptive ICE exits with reflected and relay candidates and removes all listeners', async () => {
+  const h = harness(), pc = gatheringPeer();
+  pc.candidate('host'); pc.candidate('srflx'); pc.candidate('relay');
+  assert.equal(await h.manager.gather(pc, 2000), true);
+  assert.equal(pc.listenerCount(), 0); h.manager.destroy();
+});
+
+test('ICE waits for a late relay and full fallback does not exit at an earlier quiet window', async () => {
+  const h = harness(), pc = gatheringPeer('relay'); let settled = false;
+  const pending = h.manager.gather(pc, 3000).then(result => { settled = true; return result; });
+  await new Promise(resolve => setTimeout(resolve, 850));
+  assert.equal(settled, false, 'no timeout just because the initial window elapsed');
+  pc.candidate('relay'); assert.equal(await pending, true); assert.equal(pc.listenerCount(), 0);
+  const full = h.manager.gather(pc, 1200, { full: true }).then(result => { settled = true; return result; });
+  settled = false; await new Promise(resolve => setTimeout(resolve, 850));
+  assert.equal(settled, false, 'full fallback must keep collecting');
+  pc.iceGatheringState = 'complete'; pc.dispatch('icegatheringstatechange');
+  assert.equal(await full, false); assert.equal(pc.listenerCount(), 0); h.manager.destroy();
+});
+
+test('ICE rejects a closed connection or an empty completed collection and cleans up', async () => {
+  const h = harness(), pc = gatheringPeer();
+  const pending = h.manager.gather(pc); pc.signalingState = 'closed'; pc.dispatch('signalingstatechange');
+  await assert.rejects(pending, error => error.code === 'connection_closed'); assert.equal(pc.listenerCount(), 0);
+  pc.signalingState = 'stable'; pc.iceGatheringState = 'complete';
+  await assert.rejects(h.manager.gather(pc), error => error.code === 'ice_timeout');
+  assert.equal(pc.listenerCount(), 0); h.manager.destroy();
+});
+
+test('joining prefetches one credential request without opening a microphone or publisher', async () => {
+  const h = harness(), response = deferred();
+  h.manager.membership = null; h.manager.state.joined = false; h.manager.ticket = async () => 'ticket';
+  h.manager.request = async (action, input, membership) => {
+    h.calls.push({ action, input, membership });
+    if (action === 'join') return { memberId: 'joined', snapshot: { revision: 1, members: [{ memberId: 'joined', publishing: false }] } };
+    if (action === 'ice') return response.promise;
+    return {};
+  };
+  await h.manager.join();
+  assert.equal(h.manager.state.joined, true); assert.equal(h.manager.state.busy, false);
+  assert.equal(h.audioContexts.length, 0); assert.equal(h.manager.capture, undefined); assert.equal(h.manager.publisher, undefined);
+  const duringClick = h.manager.ice(h.manager.membership);
+  assert.equal(h.calls.filter(call => call.action === 'ice').length, 1);
+  await h.manager.leave(); response.resolve({ iceServers: [], iceExpiresAt: Date.now() + 3600000 }); await duringClick;
+  assert.equal(h.manager.iceConfig, null, 'a late prefetch cannot restore credentials after leave');
+  assert.ok(!h.calls.some(call => call.action === 'publisher/start')); h.manager.destroy();
+});
+
+test('a failed early publisher retries once with a new operation, full ICE and the same capture', async () => {
+  for (const failure of ['connection_failed', 'media_timeout']) {
+    const h = harness(), peers = configurePublishing(h), stream = capture(), windows = [];
+    h.manager.gather = async (pc, timeout, options) => { windows.push(options.full); return !options.full; };
+    if (failure === 'connection_failed') h.manager.connected = async pc => { if (pc === peers[0]) throw h.manager.error(failure); };
+    else h.manager.mediaFlow = async pc => { if (pc === peers[0]) throw h.manager.error(failure); };
+    const pending = h.manager.microphone(); h.permission.resolve(stream); await pending;
+    assert.equal(h.manager.state.microphone, true, failure); assert.deepEqual(windows, [false, true], failure);
+    assert.equal(peers.length, 2); assert.equal(peers[0].connectionState, 'closed');
+    assert.equal(h.manager.capture, stream); assert.equal(stream.track.readyState, 'live');
+    assert.equal(h.audioContexts.length, 1); assert.equal(h.audioContexts[0].state, 'running');
+    const starts = h.calls.filter(call => call.action === 'publisher/start'), stops = h.calls.filter(call => call.action === 'publisher/stop');
+    assert.notEqual(starts[0].input.mutationId, starts[1].input.mutationId);
+    assert.equal(stops[0].input.operationId, starts[0].input.mutationId);
+    assert.equal(h.calls.filter(call => call.action === 'publisher/ready').length, 1);
+    h.manager.destroy(); assert.equal(stream.track.readyState, 'ended'); assert.equal(h.audioContexts[0].state, 'closed');
+  }
+});
+
+test('a second connection failure or an unknown upstream result never loops allocation', async () => {
+  for (const upstream of [false, true]) {
+    const h = harness(), peers = configurePublishing(h), stream = capture(), original = h.manager.request;
+    h.manager.gather = async () => true;
+    h.manager.connected = async () => { throw h.manager.error('connection_failed'); };
+    if (upstream) h.manager.request = async (...args) => {
+      if (args[0] === 'publisher/start') { h.calls.push({ action: args[0] }); throw h.manager.error('upstream_unavailable'); }
+      return original(...args);
+    };
+    const pending = h.manager.microphone(); h.permission.resolve(stream); await pending;
+    assert.equal(h.manager.state.microphone, false); assert.equal(h.manager.publisher, null);
+    assert.equal(stream.track.readyState, 'ended'); assert.ok(peers.every(pc => pc.connectionState === 'closed'));
+    assert.equal(h.calls.filter(call => call.action === 'publisher/start').length, upstream ? 1 : 2);
+    h.manager.destroy();
+  }
+});
+
+test('canceling during full publisher fallback stops the capture and fences delayed work', async () => {
+  const h = harness(), peers = configurePublishing(h), stream = capture(), waiting = deferred(), continueFull = deferred();
+  h.manager.gather = async (pc, timeout, { full }) => { if (full) { waiting.resolve(); await continueFull.promise; } return true; };
+  h.manager.connected = async pc => { if (pc === peers[0]) throw h.manager.error('connection_failed'); };
+  const pending = h.manager.microphone(); h.permission.resolve(stream); await waiting.promise;
+  h.manager.mute(); assert.equal(stream.track.readyState, 'ended');
+  continueFull.resolve(); await pending;
+  assert.equal(h.manager.publisher, null); assert.equal(h.manager.state.microphone, false);
+  assert.equal(h.calls.filter(call => call.action === 'publisher/start').length, 1);
+  assert.equal(h.audioContexts[0].state, 'closed'); h.manager.destroy();
+});
+
+test('device enumeration does not delay microphone readiness or turn a working microphone off', async () => {
+  const h = harness(), peers = configurePublishing(h), stream = capture(), response = deferred();
+  h.manager.mediaDevices.enumerateDevices = () => response.promise;
+  const pending = h.manager.microphone(); h.permission.resolve(stream); await pending;
+  assert.equal(h.manager.state.microphone, true); assert.equal(h.manager.capturePending, false);
+  response.resolve(Promise.reject(new Error('device labels unavailable')));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.manager.state.microphone, true); assert.equal(peers[0].connectionState, 'connected'); h.manager.destroy();
+});
+
+test('allocation waits for confirmed cleanup using new IDs and stops retrying when canceled', async () => {
+  const h = harness(), attempts = [];
+  h.manager.request = async (action, input) => {
+    attempts.push(input.mutationId);
+    if (attempts.length === 1) throw h.manager.error('cleanup_pending');
+    return { operationId: input.mutationId };
+  };
+  const attempt = { operationId: crypto.randomUUID() };
+  const result = await h.manager.allocate('publisher/start', {}, h.manager.membership, () => true, attempt);
+  assert.equal(attempts.length, 2); assert.notEqual(attempts[0], attempts[1]); assert.equal(result.operationId, attempts[1]);
+  assert.equal(attempt.activeOperationId, attempts[1]);
+  let current = true;
+  h.manager.request = async () => { current = false; throw h.manager.error('operation_busy'); };
+  await assert.rejects(h.manager.allocate('publisher/start', {}, h.manager.membership, () => current, attempt), error => error.code === 'operation_busy');
+  assert.equal(attempt.started, false);
+  h.manager.destroy();
+});
+
+test('an early receiver failure retries full candidates once and closes the replaced receiver', async () => {
+  const h = harness(), peers = [], windows = [];
+  h.manager.peerFactory = () => {
+    const pc = { connectionState: 'connected', addEventListener() {}, setRemoteDescription: async () => {},
+      createAnswer: async () => ({}), setLocalDescription: async () => {}, localDescription: {},
+      close() { this.connectionState = 'closed'; } };
+    peers.push(pc); return pc;
+  };
+  h.manager.request = async (action, input) => {
+    h.calls.push({ action, input });
+    return { sessionDescription: {}, tracks: [], operationId: input.mutationId, generation: h.calls.length };
+  };
+  h.manager.gather = async (pc, timeout, { full }) => { windows.push(full); return !full; };
+  h.manager.connected = async pc => { if (pc === peers[0]) throw h.manager.error('connection_failed'); };
+  h.manager.mediaFlow = async () => {};
+  await h.manager.receive(h.manager.membership, [{ memberId: 'other' }], { iceServers: [] });
+  assert.deepEqual(windows, [false, true]); assert.equal(peers[0].connectionState, 'closed');
+  assert.equal(h.manager.receiver, peers[1]);
+  const requests = h.calls.filter(call => call.action === 'subscriptions');
+  assert.equal(requests.length, 2); assert.notEqual(requests[0].input.mutationId, requests[1].input.mutationId);
   h.manager.destroy();
 });

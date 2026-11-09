@@ -11,12 +11,15 @@ import { chromium } from 'playwright';
 import { createRuntime } from './runtime.mjs';
 
 const live = process.env.NIGHTCORD_REALTIME_LIVE === '1';
-const relayOnly = process.env.NIGHTCORD_REALTIME_RELAY === '1';
+const turnTransport = process.env.NIGHTCORD_REALTIME_TRANSPORT || '';
+assert.ok(['', 'tcp', 'tls'].includes(turnTransport));
+const relayOnly = process.env.NIGHTCORD_REALTIME_RELAY === '1' || !!turnTransport;
+const failEarly = process.env.NIGHTCORD_VOICE_FAIL_EARLY === '1';
 // This is a local protocol fixture with real browser RTP, not a Cloudflare
 // connectivity test unless NIGHTCORD_REALTIME_LIVE=1 explicitly enables it.
 test('two browsers carry audio, keep DTX subscriptions across mute, and clean up on room change', { timeout: 180000 }, async () => {
   const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-  const artifacts = join(root, '.qa-artifacts', live ? relayOnly ? 'voice-cloudflare-turn' : 'voice-cloudflare' : 'voice');
+  const artifacts = join(root, '.qa-artifacts', (live ? relayOnly ? 'voice-cloudflare-turn' : 'voice-cloudflare' : 'voice') + (turnTransport ? `-${turnTransport}` : '') + (failEarly ? '-fallback' : ''));
   const secrets = live ? Object.fromEntries((await readFile(join(root, 'backend/.dev.vars'), 'utf8')).split(/\r?\n/).map(line => /^(REALTIME_[A-Z_]+)=(.*)$/.exec(line)).filter(Boolean).map(match => [match[1], match[2]])) : {};
   const cloudSessions = new Map(), turnUsers = new Set();
   const temp = await mkdtemp(join(tmpdir(), 'nightcord-voice-'));
@@ -146,7 +149,30 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
       pages.push(page);
       await page.goto(`${origin}/?test`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => nightcord.chatRoom.wsManager.ready && nightcord.voice.state.available);
-      if (relayOnly) await page.evaluate(() => { nightcord.voice.peerFactory = config => new RTCPeerConnection({ ...config, iceTransportPolicy: 'relay' }); });
+      await page.evaluate(({ relayOnly, turnTransport, failEarly }) => {
+        const manager = nightcord.voice;
+        if (relayOnly) manager.peerFactory = config => {
+          if (turnTransport) config = { ...config, iceServers: config.iceServers.flatMap(server => {
+            const urls = (Array.isArray(server.urls) ? server.urls : [server.urls]).filter(url => turnTransport === 'tls' ? url.startsWith('turns:') : url.startsWith('turn:') && url.includes('transport=tcp'));
+            return urls.length ? [{ ...server, urls }] : [];
+          }) };
+          return new RTCPeerConnection({ ...config, iceTransportPolicy: 'relay' });
+        };
+        window.gathering = []; window.connectionFaults = [];
+        const originalGather = manager.gather, originalConnected = manager.connected;
+        const injected = new Set();
+        manager.gather = async function (pc, timeout, options) {
+          const start = Date.now(), role = this.publisher === pc ? 'publisher' : 'receiver';
+          const early = await originalGather.call(this, pc, timeout, options);
+          window.gathering.push({ role, full: options?.full === true, early, ms: Date.now() - start });
+          return failEarly && !options?.full ? true : early;
+        };
+        manager.connected = async function (pc) {
+          const role = this.publisher === pc ? 'publisher' : 'receiver';
+          if (failEarly && !injected.has(role)) { injected.add(role); window.connectionFaults.push(role); throw this.error('connection_failed'); }
+          return originalConnected.call(this, pc);
+        };
+      }, { relayOnly, turnTransport, failEarly });
       await page.evaluate(() => { window.voiceStates = []; window.voiceErrors = []; const handle = nightcord.voice.handleError.bind(nightcord.voice); nightcord.voice.handleError = error => { window.voiceErrors.push({ code: error.code, name: error.name }); handle(error); }; nightcord.eventBus.on('voice:changed', state => window.voiceStates.push({ message: state.message, count: state.members.length, receiver: nightcord.voice.receiver?.connectionState, signature: nightcord.voice.receiverSignature })); });
       if (joinVoice) {
         await page.locator('[data-voice-toggle]').click();
@@ -185,15 +211,19 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
     await observer.locator('#messageInput').focus();
     assert.equal(await observer.locator('#voice-panel').isVisible(), false, 'returning keyboard focus to chat dismisses voice');
     assert.equal(await observer.locator('#messageInput').evaluate(node => node === document.activeElement), true);
+    const firstMicrophoneAt = Date.now();
     await one.locator('[data-voice-quick-mic]').click();
     await one.waitForFunction(() => nightcord.voice.state.microphone || window.voiceErrors.length, null, { timeout: live ? 45000 : 20000 });
     assert.ok(await one.evaluate(() => nightcord.voice.state.microphone), JSON.stringify(await one.evaluate(() => window.voiceErrors)));
+    const microphoneReadyMs = Date.now() - firstMicrophoneAt;
     await observer.waitForFunction(() => document.querySelector('#voice-users [data-user-id^="guest:"] .member-microphone')?.dataset.microphone === 'true');
     await two.waitForFunction(() => nightcord.voice.receiver?.connectionState === 'connected', null, { timeout: live ? 45000 : 25000 });
     let audio;
     for (let attempt = 0; attempt < 100; attempt++) {
       audio = await two.evaluate(async () => {
-        const stats = await nightcord.voice.receiver.getStats();
+        const receiver = nightcord.voice.receiver;
+        if (!receiver || receiver.connectionState !== 'connected') return {};
+        const stats = await receiver.getStats();
         const inbound = [...stats.values()].find(stat => stat.type === 'inbound-rtp' && stat.kind === 'audio');
         const player = [...nightcord.voice.playbacks.values()][0]?.audio;
         return { bytesReceived: inbound?.bytesReceived, totalAudioEnergy: inbound?.totalAudioEnergy, playing: player && !player.paused, time: player?.currentTime };
@@ -202,6 +232,13 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
       await delay(100);
     }
     assert.ok(audio.bytesReceived > 1000 && audio.totalAudioEnergy > 0.0001 && audio.playing && audio.time > 0, JSON.stringify(audio));
+    const firstAudioMs = Date.now() - firstMicrophoneAt;
+    if (failEarly) {
+      assert.deepEqual(await one.evaluate(() => window.connectionFaults), ['publisher']);
+      assert.deepEqual(await two.evaluate(() => window.connectionFaults), ['receiver']);
+      assert.equal(await one.evaluate(() => window.gathering.some(value => value.role === 'publisher' && value.full)), true);
+      assert.equal(await two.evaluate(() => window.gathering.some(value => value.role === 'receiver' && value.full)), true);
+    }
     const connection = await two.evaluate(async () => {
       const stats = await nightcord.voice.receiver.getStats();
       const transport = [...stats.values()].find(stat => stat.type === 'transport' && stat.selectedCandidatePairId);
@@ -209,6 +246,7 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
       return { candidateType: local?.candidateType, protocol: local?.protocol, relayProtocol: local?.relayProtocol };
     });
     if (relayOnly) assert.equal(connection.candidateType, 'relay');
+    if (turnTransport) assert.equal(connection.relayProtocol, turnTransport);
     await mkdir(artifacts, { recursive: true });
     await one.screenshot({ path: join(artifacts, 'desktop-collapsed.png') }); await two.screenshot({ path: join(artifacts, 'mobile-collapsed.png') });
     await openVoice(one); await openVoice(two);
@@ -342,7 +380,8 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
       assert.ok([...cloudSessions.values()].every(mids => !mids.size), 'backend must confirm Cloudflare forwarding cleanup');
     }
     assert.deepEqual(errors, []);
-    await writeFile(join(artifacts, 'result.json'), JSON.stringify({ fixture: live ? 'Cloudflare SFU/TURN with local application/auth fixture' : 'local native WebRTC relay; no Cloudflare media connection', relayOnly, ...connection, ...audio, muted, resumeMs }, null, 2));
+    const gathering = await Promise.all([one, two].map(page => page.evaluate(() => window.gathering)));
+    await writeFile(join(artifacts, 'result.json'), JSON.stringify({ fixture: live ? 'Cloudflare SFU/TURN with local application/auth fixture' : 'local native WebRTC relay; no Cloudflare media connection', relayOnly, turnTransport, failEarly, ...connection, ...audio, microphoneReadyMs, firstAudioMs, gathering, muted, resumeMs }, null, 2));
   } catch (error) {
     await mkdir(artifacts, { recursive: true });
     const diagnostics = await Promise.all(pages.map(page => page.evaluate(async () => ({ states: window.voiceStates, errors: window.voiceErrors, publisher: nightcord.voice.publisher?.connectionState, receiver: nightcord.voice.receiver?.connectionState, stats: await Promise.all([nightcord.voice.publisher, nightcord.voice.receiver].filter(Boolean).map(async pc => [...(await pc.getStats()).values()].filter(stat => ['inbound-rtp', 'outbound-rtp', 'media-source'].includes(stat.type)))) })).catch(() => ({}))));

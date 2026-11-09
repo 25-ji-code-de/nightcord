@@ -95,6 +95,8 @@ class VoiceManager {
       this.applySnapshot(result.snapshot);
       this.heartbeatTimer = setInterval(() => { void this.heartbeat(); }, 20000);
       this.statsTimer = setInterval(() => { void this.sampleActivity(); }, 1000);
+      // Prepare credentials without opening a device or allocating a media session.
+      void this.ice(this.membership).catch(() => {});
     } catch (error) {
       // A lost join response may still have created membership; always attempt leave.
       void this.request('leave', {}, credential).catch(() => {});
@@ -156,15 +158,31 @@ class VoiceManager {
     }
     return value;
   }
-  async gather(pc, timeoutMs = 8000) {
-    if (pc.iceGatheringState === 'complete') return;
-    await new Promise((resolve, reject) => {
-      // Some unreachable STUN/TURN alternatives keep gathering open. A complete
-      // local description with candidates is still usable without trickle ICE.
-      const timer = setTimeout(() => done(/^a=candidate:/m.test(pc.localDescription?.sdp || '') ? undefined : this.error('ice_timeout')), timeoutMs);
-      const check = () => { if (pc.iceGatheringState === 'complete') done(); else if (pc.signalingState === 'closed') done(this.error('connection_closed')); };
-      const done = error => { clearTimeout(timer); pc.removeEventListener('icegatheringstatechange', check); pc.removeEventListener('signalingstatechange', check); error ? reject(error) : resolve(); };
-      pc.addEventListener('icegatheringstatechange', check); pc.addEventListener('signalingstatechange', check); check();
+  async gather(pc, timeoutMs = 8000, { full = false } = {}) {
+    const candidates = () => (pc.localDescription?.sdp || '').split(/\r?\n/).filter(line => line.startsWith('a=candidate:'));
+    return new Promise((resolve, reject) => {
+      let settled = false, quietTimer, minimumElapsed = false;
+      const done = (error, early = false) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer); clearTimeout(minimumTimer); clearTimeout(quietTimer);
+        pc.removeEventListener('icecandidate', onCandidate); pc.removeEventListener('icegatheringstatechange', check); pc.removeEventListener('signalingstatechange', check);
+        error ? reject(error) : resolve(early);
+      };
+      const enough = () => {
+        const lines = candidates();
+        return lines.some(line => / typ relay(?: |$)/.test(line))
+          && (pc.getConfiguration?.().iceTransportPolicy === 'relay' || lines.some(line => / typ srflx(?: |$)/.test(line)));
+      };
+      const check = () => {
+        if (pc.signalingState === 'closed') return done(this.error('connection_closed'));
+        if (pc.iceGatheringState === 'complete') return done(candidates().length ? undefined : this.error('ice_timeout'));
+        if (!full && minimumElapsed && enough() && !quietTimer) quietTimer = setTimeout(() => done(undefined, true), 200);
+      };
+      const onCandidate = () => { clearTimeout(quietTimer); quietTimer = null; check(); };
+      const timer = setTimeout(() => done(candidates().length ? undefined : this.error('ice_timeout')), timeoutMs);
+      const minimumTimer = setTimeout(() => { minimumElapsed = true; check(); }, 600);
+      pc.addEventListener('icecandidate', onCandidate); pc.addEventListener('icegatheringstatechange', check); pc.addEventListener('signalingstatechange', check); check();
     });
   }
   async connected(pc) {
@@ -176,6 +194,39 @@ class VoiceManager {
       pc.addEventListener('connectionstatechange', check); check();
     });
   }
+  async mediaFlow(pc, direction, current) {
+    // DTX still sends RTP. Silence is valid; connected without packets is not.
+    const until = Date.now() + 4000;
+    while (current()) {
+      const stats = await pc.getStats();
+      if (!current()) throw this.error('connection_closed');
+      if ([...stats.values()].some(stat => stat.type === direction && stat.kind === 'audio' && (stat.packetsSent ?? stat.packetsReceived) > 0)) return;
+      if (Date.now() >= until || ['failed', 'closed'].includes(pc.connectionState)) throw this.error('media_timeout');
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    throw this.error('connection_closed');
+  }
+  async allocate(action, input, membership, current, attempt) {
+    // Only retry explicit failures that occur before a new allocation. Never
+    // replay an upstream failure whose tracks/new outcome might be unknown.
+    for (let retry = 0; current(); retry++) {
+      const mutationId = attempt?.operationId || crypto.randomUUID();
+      if (attempt) { attempt.started = true; attempt.activeOperationId = mutationId; }
+      try {
+        const result = await this.request(action, { ...input, mutationId }, membership);
+        return result;
+      }
+      catch (error) {
+        const unallocated = ['cleanup_pending', 'operation_busy', 'rate_limited'].includes(error.code);
+        if (attempt && unallocated) { attempt.started = false; attempt.activeOperationId = null; }
+        if (retry >= 5 || !unallocated || !current()) throw error;
+        await new Promise(resolve => setTimeout(resolve, 400 * (retry + 1)));
+        if (attempt) attempt.operationId = crypto.randomUUID();
+      }
+    }
+    throw this.error('connection_closed');
+  }
+  connectionFailure(error) { return ['connection_timeout', 'connection_failed', 'media_timeout'].includes(error.code); }
   desired() { return this.state.members.filter(member => member.memberId !== this.membership?.memberId && member.publishing); }
   async reconcile() {
     if (this.reconciling || !this.membership) return;
@@ -189,38 +240,52 @@ class VoiceManager {
         this.closeReceiver();
         const ice = await this.ice(membership);
         if (this.membership !== membership) break;
-        const result = await this.request('subscriptions', { memberIds: peers.map(peer => peer.memberId), mutationId: crypto.randomUUID() }, membership);
+        await this.receive(membership, peers, ice);
         if (this.membership !== membership) break;
-        if (!result.empty) {
-          const pc = this.peerFactory({ iceServers: ice.iceServers }); this.receiver = pc;
-          const mapping = new Map(result.tracks.map(track => [track.mid, track.memberId]));
-          pc.addEventListener('track', event => {
-            if (this.receiver !== pc || this.membership !== membership) return;
-            const memberId = mapping.get(event.transceiver.mid);
-            if (!memberId) return;
-            const audio = document.createElement('audio'); audio.autoplay = true;
-            audio.volume = this.volumes.get(memberId) ?? 1;
-            audio.srcObject = new MediaStream([event.track]);
-            this.playbacks.get(memberId)?.audio.remove();
-            this.playbacks.set(memberId, { audio, mid: event.transceiver.mid });
-            document.querySelector('#voice-audio')?.append(audio);
-            void audio.play().catch(() => { this.state.playbackBlocked = true; this.emit(); });
-          });
-          await pc.setRemoteDescription(result.sessionDescription);
-          await pc.setLocalDescription(await pc.createAnswer()); await this.gather(pc);
-          if (this.receiver !== pc || this.membership !== membership) break;
-          await this.request('renegotiate', { operationId: result.operationId, generation: result.generation, sessionDescription: pc.localDescription, mutationId: crypto.randomUUID() }, membership);
-          await this.connected(pc);
-          pc.addEventListener('connectionstatechange', () => {
-            if (this.receiver !== pc || this.membership !== membership) return;
-            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') this.retryReceiver();
-          });
-        }
         this.receiverSignature = signature; this.receiverFailures = 0; this.state.recoveryNeeded = false; this.emit();
       }
     } catch (error) {
       if (this.membership === membership) { this.handleError(error); this.retryReceiver(); }
     } finally { this.reconciling = false; if (this.membership && this.membership !== membership) void this.reconcile(); }
+  }
+  async receive(membership, peers, ice, full = false) {
+    const current = () => this.membership === membership;
+    const result = await this.allocate('subscriptions', { memberIds: peers.map(peer => peer.memberId) }, membership, current);
+    if (!current()) return;
+    if (!result.empty) {
+      const pc = this.peerFactory({ iceServers: ice.iceServers }); this.receiver = pc;
+      const mapping = new Map(result.tracks.map(track => [track.mid, track.memberId]));
+      pc.addEventListener('track', event => {
+        if (this.receiver !== pc || this.membership !== membership) return;
+        const memberId = mapping.get(event.transceiver.mid);
+        if (!memberId) return;
+        const audio = document.createElement('audio'); audio.autoplay = true;
+        audio.volume = this.volumes.get(memberId) ?? 1;
+        audio.srcObject = new MediaStream([event.track]);
+        this.playbacks.get(memberId)?.audio.remove();
+        this.playbacks.set(memberId, { audio, mid: event.transceiver.mid });
+        document.querySelector('#voice-audio')?.append(audio);
+        void audio.play().catch(() => { this.state.playbackBlocked = true; this.emit(); });
+      });
+      await pc.setRemoteDescription(result.sessionDescription);
+      await pc.setLocalDescription(await pc.createAnswer());
+      const early = await this.gather(pc, 8000, { full });
+      if (this.receiver !== pc || !current()) return;
+      await this.request('renegotiate', { operationId: result.operationId, generation: result.generation, sessionDescription: pc.localDescription, mutationId: crypto.randomUUID() }, membership);
+      try {
+        await this.connected(pc);
+        await this.mediaFlow(pc, 'inbound-rtp', () => current() && this.receiver === pc);
+      } catch (error) {
+        if (!early || full || !this.connectionFailure(error) || !current() || this.receiver !== pc) throw error;
+        this.closeReceiver();
+        // subscriptions confirms cleanup of the previous direction first.
+        return this.receive(membership, peers, ice, true);
+      }
+      pc.addEventListener('connectionstatechange', () => {
+        if (this.receiver !== pc || this.membership !== membership) return;
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') this.retryReceiver();
+      });
+    }
   }
   retryReceiver() {
     clearTimeout(this.receiverTimer);
@@ -262,7 +327,8 @@ class VoiceManager {
       void context.resume().catch(() => {});
       context.addEventListener?.('statechange', () => {
         // A suspended Web Audio graph cannot keep the publication alive reliably.
-        if (this.publisherAttempt === attempt && attempt.ready && !this.state.microphone && !this.capturePending && context.state !== 'running') this.releasePublisher(attempt);
+        const owner = this.publisherAttempt;
+        if (owner?.silence?.context === context && owner.ready && !this.state.microphone && !this.capturePending && context.state !== 'running') this.releasePublisher(owner);
       });
     } catch {
       void context?.close().catch(() => {});
@@ -304,7 +370,7 @@ class VoiceManager {
       attempt.silence.track.stop(); attempt.silence.source.stop();
       void attempt.silence.context.close().catch(() => {});
     }
-    if (notify && attempt.started) void this.stopPublisher(attempt);
+    if (notify && attempt.started) void this.stopPublisher({ membership: attempt.membership, operationId: attempt.activeOperationId || attempt.operationId });
   }
   async microphone(deviceId = '') {
     if (this.state.microphone || this.capturePending) { this.mute(); return; }
@@ -313,7 +379,7 @@ class VoiceManager {
     const generation = ++this.micGeneration;
     const warm = this.warmPublisher();
     if (!warm) this.releasePublisher();
-    const attempt = warm || { membership, operationId: crypto.randomUUID(), sequence: 0 };
+    let attempt = warm || { membership, operationId: crypto.randomUUID(), sequence: 0 };
     this.publisherAttempt = attempt;
     this.capturePending = true; this.state.message = '正在启用麦克风……'; this.emit();
     let stream;
@@ -333,28 +399,11 @@ class VoiceManager {
         await this.syncMicrophone(attempt, true);
         if (generation !== this.micGeneration || this.membership !== membership) return;
       } else {
-        const ice = await this.ice(membership);
-        if (generation !== this.micGeneration || this.membership !== membership) return;
-        const pc = this.peerFactory({ iceServers: ice.iceServers }); this.publisher = pc; attempt.pc = pc;
-        const transceiver = pc.addTransceiver(track, { direction: 'sendonly' }); attempt.sender = transceiver.sender;
-        const opus = globalThis.RTCRtpSender?.getCapabilities?.('audio')?.codecs.filter(codec => codec.mimeType.toLowerCase() === 'audio/opus');
-        if (opus?.length && transceiver.setCodecPreferences) transceiver.setCodecPreferences(opus);
-        const params = transceiver.sender.getParameters();
-        if (params.encodings?.length) { params.encodings[0].maxBitrate = 40000; await transceiver.sender.setParameters(params).catch(() => {}); }
-        await pc.setLocalDescription(await pc.createOffer()); await this.gather(pc);
-        if (generation !== this.micGeneration || this.membership !== membership) return;
-        attempt.started = true;
-        const result = await this.request('publisher/start', { sessionDescription: pc.localDescription, mid: transceiver.mid, mutationId: attempt.operationId }, membership);
-        if (generation !== this.micGeneration || this.membership !== membership) { void this.stopPublisher(attempt); return; }
-        await pc.setRemoteDescription(this.opusDtx(result.sessionDescription)); await this.connected(pc);
-        await this.request('publisher/ready', { operationId: result.operationId, generation: result.generation, mutationId: crypto.randomUUID() }, membership);
-        if (generation !== this.micGeneration || this.membership !== membership) { void this.stopPublisher(attempt); return; }
-        attempt.ready = true; attempt.generation = result.generation;
-        pc.addEventListener('connectionstatechange', () => { if (this.publisher === pc && ['failed', 'disconnected'].includes(pc.connectionState)) { this.mute(); this.state.message = '麦克风连接中断，请重新开启。'; this.emit(); } });
+        attempt = await this.publish(attempt, track, generation);
       }
+      if (generation !== this.micGeneration || this.membership !== membership) return;
       this.state.microphone = true; this.state.message = '麦克风已开启'; this.emit();
-      const devices = await this.mediaDevices.enumerateDevices();
-      if (generation === this.micGeneration && this.membership === membership) this.state.devices = devices.filter(device => device.kind === 'audioinput').map(device => ({ deviceId: device.deviceId, label: device.label }));
+      void this.updateDevices(generation, membership);
     } catch (error) {
       if (generation === this.micGeneration && this.membership === membership) { this.mute(); this.handleError(error); }
     } finally {
@@ -365,6 +414,50 @@ class VoiceManager {
       if (generation === this.micGeneration) this.capturePending = false;
       this.emit();
     }
+  }
+  async updateDevices(generation, membership) {
+    try {
+      const devices = await this.mediaDevices.enumerateDevices();
+      if (generation === this.micGeneration && this.membership === membership) {
+        this.state.devices = devices.filter(device => device.kind === 'audioinput').map(device => ({ deviceId: device.deviceId, label: device.label })); this.emit();
+      }
+    } catch { /* Device labels are optional; a failed enumeration cannot mute audio. */ }
+  }
+  async publish(attempt, track, generation, full = false) {
+    const membership = attempt.membership;
+    const current = () => this.publisherAttempt === attempt && generation === this.micGeneration && this.membership === membership;
+    const ice = await this.ice(membership);
+    if (!current()) throw this.error('connection_closed');
+    const pc = this.peerFactory({ iceServers: ice.iceServers }); this.publisher = pc; attempt.pc = pc;
+    const transceiver = pc.addTransceiver(track, { direction: 'sendonly' }); attempt.sender = transceiver.sender;
+    const opus = globalThis.RTCRtpSender?.getCapabilities?.('audio')?.codecs.filter(codec => codec.mimeType.toLowerCase() === 'audio/opus');
+    if (opus?.length && transceiver.setCodecPreferences) transceiver.setCodecPreferences(opus);
+    const params = transceiver.sender.getParameters();
+    if (params.encodings?.length) { params.encodings[0].maxBitrate = 40000; await transceiver.sender.setParameters(params).catch(() => {}); }
+    await pc.setLocalDescription(await pc.createOffer());
+    const early = await this.gather(pc, 8000, { full });
+    if (!current()) throw this.error('connection_closed');
+    const result = await this.allocate('publisher/start', { sessionDescription: pc.localDescription, mid: transceiver.mid }, membership, current, attempt);
+    if (!current()) { void this.stopPublisher(attempt); throw this.error('connection_closed'); }
+    await pc.setRemoteDescription(this.opusDtx(result.sessionDescription));
+    try {
+      await this.connected(pc);
+      await this.mediaFlow(pc, 'outbound-rtp', current);
+    } catch (error) {
+      if (!early || full || !this.connectionFailure(error) || !current()) throw error;
+      const silence = attempt.silence; attempt.silence = null;
+      this.releasePublisher(attempt);
+      const replacement = { membership, operationId: crypto.randomUUID(), sequence: 0, silence };
+      this.publisherAttempt = replacement;
+      // The backend fences and confirms old forwarding cleanup before allocation.
+      return this.publish(replacement, track, generation, true);
+    }
+    if (!current()) throw this.error('connection_closed');
+    await this.request('publisher/ready', { operationId: result.operationId, generation: result.generation, mutationId: crypto.randomUUID() }, membership);
+    if (!current()) { void this.stopPublisher(attempt); throw this.error('connection_closed'); }
+    attempt.ready = true; attempt.generation = result.generation;
+    pc.addEventListener('connectionstatechange', () => { if (this.publisher === pc && ['failed', 'disconnected'].includes(pc.connectionState)) { this.mute(); this.state.message = '麦克风连接中断，请重新开启。'; this.emit(); } });
+    return attempt;
   }
   async stopPublisher({ membership, operationId }) {
     const mutationId = crypto.randomUUID();

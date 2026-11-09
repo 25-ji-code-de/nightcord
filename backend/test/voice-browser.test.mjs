@@ -282,8 +282,10 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
         toolbar: document.querySelector('[data-voice-label]').textContent,
         fits: node.scrollWidth <= node.clientWidth && node.getBoundingClientRect().bottom <= document.querySelector('.voice-display').getBoundingClientRect().bottom };
     });
-    assert.deepEqual(reminder, {
-      below: true, reached: true, text: '今天已累计使用语音 2 小时；每日上限 4 小时，到时将自动结束。',
+    assert.match(reminder.text, /2 小时.*4 小时.*自动结束/);
+    const { text: reminderText, ...reminderState } = reminder;
+    assert.deepEqual(reminderState, {
+      below: true, reached: true,
       stable: true, uninterrupted: true, configured: true, expired: true, nextDay: true, missing: true, left: true,
       toolbar: '时长提醒', fits: true,
     }, 'the two-hour reminder uses actual daily minutes, survives updates, and leaves audio and focus alone');

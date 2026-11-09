@@ -333,7 +333,8 @@ test('daily minute expiry closes forwarding by alarm without a browser heartbeat
     assert.equal((await f.api('publisher/ready', member.credential, { operationId: start.value.operationId, generation: start.value.generation, mutationId: crypto.randomUUID() })).status, 200);
     const [id] = await f.runtime.listDurableObjectIds('VOICE_ROOMS');
     await f.runtime.unsafeEvictDurableObject('nightcord-chat', 'VoiceRoom', { id });
-    for (let i = 0; i < 100 && f.provider.sessions.get('fixture-1').some(track => track.status === 'active'); i++) await delay(60);
+    // Media closure finishes before the subsequent asynchronous TURN revocation.
+    for (let i = 0; i < 100 && (f.provider.sessions.get('fixture-1').some(track => track.status === 'active') || !f.provider.revoked.length); i++) await delay(60);
     assert.ok(f.provider.sessions.get('fixture-1').every(track => track.status === 'inactive'), 'quota alarm must stop actual upstream forwarding');
     assert.ok(f.provider.revoked.length);
     assert.equal((await f.api('heartbeat', member.credential)).value.code, 'voice_daily_limit');

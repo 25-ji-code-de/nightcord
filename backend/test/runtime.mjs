@@ -6,6 +6,7 @@ import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 export function createRuntime(state = {}, options = {}) {
   return new Miniflare(convertV4MiniflareOptions({
     ...(options.inspectDurableObjects ? { unsafeInspectDurableObjects: true } : {}),
+    ...(options.persistencePath ? { resourcePersistencePath: options.persistencePath } : {}),
     workers: [{
       name: 'nightcord-chat', modules: true, scriptPath: 'dist/chat.js',
       compatibilityDate: '2026-11-04', compatibilityFlags: ['nodejs_compat'],
@@ -18,6 +19,7 @@ export function createRuntime(state = {}, options = {}) {
         ROOMS: { className: 'ChatRoom', useSQLite: true },
         LIMITERS: { className: 'RateLimiter', useSQLite: true },
         VOICE_ROOMS: { className: 'VoiceRoom', useSQLite: true },
+        VOICE_QUOTAS: { className: 'VoiceQuota', useSQLite: true },
       },
       ...(options.outboundService ? { outboundService: options.outboundService } : {}),
       serviceBindings: { SEKAI_PASS: async request => {

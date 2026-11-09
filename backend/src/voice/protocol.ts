@@ -3,6 +3,8 @@ export interface VoiceSecrets {
   VOICE_MODE?: string;
   VOICE_ALLOWED_ROOMS?: string;
   VOICE_REQUIRE_PASS?: string;
+  VOICE_MONTHLY_MINUTES?: string;
+  VOICE_DAILY_MINUTES?: string;
   REALTIME_SFU_APP_ID?: string;
   REALTIME_SFU_APP_SECRET?: string;
   REALTIME_TURN_KEY_ID?: string;

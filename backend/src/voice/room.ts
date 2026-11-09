@@ -4,6 +4,7 @@ import type { ChatEnv } from '../guest';
 import type { Profile } from '../identity';
 import { capability, configuration, description, digest, fail, identifier, randomToken, record, VoiceError, type VoiceResult } from './protocol';
 import { Provider, type MediaSession } from './provider';
+import type { VoiceUsage } from './quota';
 
 type Member = {
   id: string; tokenHash: string; user: Pick<Profile, 'id' | 'displayName' | 'avatarUrl' | 'authenticated'>;
@@ -12,12 +13,14 @@ type Member = {
   leaving: boolean; tombstoneUntil?: number; disconnectUntil?: number; generations: { publisher: number; receiver: number };
   publication?: { sessionId: string; trackName: string; version: string; microphone?: boolean; microphoneSequence?: number };
   turnUsers: string[]; ice?: Record<string, unknown>;
+  quotaUntil?: number; usage?: VoiceUsage; leaveReason?: string;
 };
 type Ticket = { user: Member['user']; chatConnectionId: string; chatId: string; authUntil: number; expiresAt: number };
 
 export class VoiceRoom extends DurableObject<ChatEnv> {
   private provider: Provider;
   private active = new Set<string>();
+  private pendingQuota = new Map<string, Promise<Member>>();
   constructor(ctx: DurableObjectState, env: ChatEnv) {
     super(ctx, env);
     this.provider = new Provider(env);
@@ -36,7 +39,8 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
   private revision(): number { return this.ctx.storage.sql.exec<{ revision: number }>('SELECT COALESCE(MAX(rowid),0) AS revision FROM voice_events').one().revision; }
   private snapshot() {
     const now = Date.now();
-    return { revision: this.revision(), members: this.members().filter(member => !member.leaving && this.expiry(member) > now).map(member => ({
+    const members = this.members();
+    return { revision: this.revision(), departures: members.filter(member => member.leaving && member.leaveReason).map(member => ({ memberId: member.id, code: member.leaveReason })), members: members.filter(member => !member.leaving && this.expiry(member) > now).map(member => ({
       memberId: member.id, user: member.user, publishing: !!member.publication, publicationVersion: member.publication?.version || null,
       microphone: !!member.publication && member.publication.microphone !== false,
     })) };
@@ -53,7 +57,9 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
   private async schedule() {
     if (!this.members().length && !this.sessions().length && !this.ctx.storage.sql.exec('SELECT 1 FROM voice_tickets LIMIT 1').toArray().length) { await this.ctx.storage.deleteAlarm(); return; }
     const alarm = await this.ctx.storage.getAlarm();
-    if (alarm === null || alarm > Date.now() + 20000) await this.ctx.storage.setAlarm(Date.now() + 20000);
+    const now = Date.now();
+    const deadline = Math.max(now + 1, Math.min(now + 20000, ...this.members().filter(member => !member.leaving).map(member => Math.min(this.expiry(member), member.quotaUntil ?? now + 20000))));
+    if (alarm === null || alarm > deadline) await this.ctx.storage.setAlarm(deadline);
   }
   async issueTicket(room: string, chatId: string, connectionId: string, user: Profile, authUntil: number): Promise<{ ticket?: string; code?: string }> {
     if (!configuration(this.env, room).enabled && this.env.VOICE_MODE !== 'drain') return { code: 'voice_disabled' };
@@ -82,11 +88,41 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
     return ticket;
   }
   private expiry(member: Member) { return Math.min(member.authUntil, member.expiresAt, member.disconnectUntil ?? Number.MAX_SAFE_INTEGER); }
-  private valid(member: Member) {
-    if (member.leaving || this.expiry(member) <= Date.now()) return fail('membership_expired', 401);
+  private valid(member: Member, refreshingQuota = false) {
+    if (member.leaving || this.expiry(member) <= Date.now()) return fail(member.leaveReason || 'membership_expired', 401);
     if (member.user.id.startsWith('guest:') && this.env.VOICE_REQUIRE_PASS !== 'false') return fail('login_required', 401);
     if (this.env.VOICE_MODE !== 'on' && this.env.VOICE_MODE !== 'drain') return fail('voice_disabled', 503);
+    if (!refreshingQuota && (!member.quotaUntil || member.quotaUntil <= Date.now())) return fail('voice_quota_expired', 401);
     return member;
+  }
+  private async quota(member: Member): Promise<Member> {
+    const existing = this.pendingQuota.get(member.id);
+    if (existing) return existing;
+    const pending = this.grantQuota(member); this.pendingQuota.set(member.id, pending);
+    try { return await pending; }
+    finally {
+      this.pendingQuota.delete(member.id);
+      if (this.latest(member.id).leaving) this.ctx.waitUntil(this.cleanup());
+    }
+  }
+  private async grantQuota(member: Member): Promise<Member> {
+    try {
+      this.valid(member, true);
+      const request = this.env.VOICE_QUOTAS.getByName('voice-minutes-v1').grant(member.id, this.ctx.id.toString(), member.user.id, this.expiry(member));
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new VoiceError('voice_quota_unavailable', 503)), Math.min(5000, Math.max(1, (member.quotaUntil ?? Date.now() + 5000) - Date.now())));
+      });
+      const grant = await Promise.race([request, timeout]).finally(() => { if (timer !== undefined) clearTimeout(timer); });
+      if (!grant.ok) return fail(grant.code, grant.code.endsWith('_limit') ? 429 : 503);
+      member = this.latest(member.id); member.quotaUntil = grant.until; member.usage = grant.usage; this.save(member);
+      return this.valid(member);
+    } catch (error) {
+      const failure = error instanceof VoiceError ? error : new VoiceError('voice_quota_unavailable', 503);
+      member = this.latest(member.id);
+      if (!member.leaving) { this.retireMember(member, failure.code); this.changed(); }
+      throw failure;
+    }
   }
   async handle(room: string, action: string, token: string, json: string): Promise<{ status: number; json: string }> {
     let input;
@@ -102,7 +138,7 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
       if (action === 'join') {
         const clientId = identifier(input.clientId), joinRequestId = identifier(input.joinRequestId);
         if (member) {
-          this.valid(member);
+          this.valid(member, true);
           if (member.clientId !== clientId || member.joinRequestId !== joinRequestId) return fail('invalid_request');
         } else {
           if (!configuration(this.env, room).enabled) return fail('voice_disabled', 503);
@@ -116,6 +152,7 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
             generations: { publisher: 0, receiver: 0 }, turnUsers: [] };
           this.save(member); this.changed();
         }
+        member = await this.quota(member);
         await this.schedule();
         return { ok: true, value: this.state(member) };
       }
@@ -125,21 +162,24 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
         this.ctx.waitUntil(this.cleanup());
         return { ok: true, value: { cleanupState: member.tombstoneUntil ? 'complete' : 'pending' } };
       }
-      this.valid(member);
+      this.valid(member, true);
       if (action === 'renew') {
         const ticket = await this.ticket(input.ticket);
-        member = this.valid(this.latest(member.id));
+        member = this.valid(this.latest(member.id), true);
         if (ticket.user.id !== member.user.id || ticket.chatId !== member.chatId) return fail('invalid_ticket', 401);
         member.authUntil = ticket.authUntil; member.chatConnectionId = ticket.chatConnectionId; member.user = ticket.user;
         delete member.disconnectUntil;
-        member.expiresAt = Date.now() + 90000; this.save(member); await this.schedule();
+        member.expiresAt = Date.now() + 90000; this.save(member); member = await this.quota(member); await this.schedule();
         return { ok: true, value: this.state(member) };
       }
       if (action === 'heartbeat') {
         if (Date.now() - member.heartbeatAt < 3000) return fail('rate_limited', 429);
         member.heartbeatAt = Date.now(); member.expiresAt = Date.now() + 90000; this.save(member);
+        member = await this.quota(member);
         await this.schedule(); return { ok: true, value: this.state(member) };
       }
+      if (!member.quotaUntil) member = await this.quota(member);
+      this.valid(member);
       if (action === 'ice') {
         const ice = await this.ice(member.id); await this.schedule();
         return { ok: true, value: ice };
@@ -170,9 +210,10 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
     }
   }
   private state(member: Member): Record<string, unknown> {
-    return { memberId: member.id, authUntil: member.authUntil, expiresAt: this.expiry(member), heartbeatEveryMs: 20000, snapshot: this.snapshot() };
+    return { memberId: member.id, authUntil: member.authUntil, expiresAt: this.expiry(member), heartbeatEveryMs: 20000, usage: member.usage, snapshot: this.snapshot() };
   }
-  private retireMember(member: Member) {
+  private retireMember(member: Member, reason?: string) {
+    if (reason) member.leaveReason = reason;
     member.leaving = true; delete member.publication; this.save(member);
     for (const session of this.sessions().filter(value => value.memberId === member.id)) { session.retired = true; this.saveSession(session); }
   }
@@ -316,10 +357,12 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
       finally { this.active.delete(session.id); }
     }
     for (const member of this.members().filter(value => value.leaving && !value.tombstoneUntil)) {
-      if (this.sessions().some(session => session.memberId === member.id) || this.active.has(`turn:${member.id}`)) continue;
+      if (this.sessions().some(session => session.memberId === member.id) || this.active.has(`turn:${member.id}`) || this.pendingQuota.has(member.id)) continue;
       this.active.add(`turn:${member.id}`);
       try {
         for (const username of member.turnUsers) await this.provider.revoke(username);
+        // Refund unused seconds only after upstream forwarding is confirmed shut.
+        await this.env.VOICE_QUOTAS.getByName('voice-minutes-v1').release(member.id, this.ctx.id.toString());
         const latest = this.latest(member.id); latest.tombstoneUntil = Date.now() + 600000; latest.turnUsers = []; delete latest.ice; this.save(latest);
       } catch { /* Retry credentials alongside media cleanup. */ }
       finally { this.active.delete(`turn:${member.id}`); }
@@ -339,6 +382,10 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
     for (const member of this.members()) {
       if (member.tombstoneUntil && member.tombstoneUntil <= now) { this.ctx.storage.sql.exec('DELETE FROM voice_members WHERE id=?', member.id); continue; }
       if (!member.leaving && (this.expiry(member) <= now || !['on', 'drain'].includes(this.env.VOICE_MODE || '') || (member.user.id.startsWith('guest:') && this.env.VOICE_REQUIRE_PASS !== 'false'))) { this.retireMember(member); changed = true; }
+    }
+    for (const member of this.members().filter(member => !member.leaving && (!member.quotaUntil || member.quotaUntil - Date.now() <= 20000))) {
+      try { await this.quota(member); }
+      catch { /* quota() retires the member; cleanup and its alarm keep retrying. */ }
     }
     for (const session of this.sessions()) if (!session.retired && session.deadline <= now) {
       session.retired = true; this.saveSession(session);

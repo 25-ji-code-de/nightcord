@@ -72,8 +72,8 @@ class VoiceManager {
   }
   async join() {
     if (this.state.busy || this.membership) return;
-    if (!this.chat.currentUser) { this.state.message = '请等待文字聊天连接就绪后再加入语音。'; this.emit(); return; }
-    if (this.state.loginRequired && !this.chat.currentUser.authenticated) { this.state.message = '请先使用 SEKAI Pass 登录，再加入语音。'; this.emit(); return; }
+    if (!this.chat.currentUser) { this.state.message = '请在文本聊天连接就绪后再加入语音聊天。'; this.emit(); return; }
+    if (this.state.loginRequired && !this.chat.currentUser.authenticated) { this.state.message = '在加入语音聊天前，请先使用 SEKAI Pass 登录。'; this.emit(); return; }
     const generation = ++this.generation;
     const credential = { base: this.base(), token: Array.from(crypto.getRandomValues(new Uint8Array(32)), value => value.toString(16).padStart(2, '0')).join('') };
     this.identity = this.chat.currentUser.id;
@@ -90,6 +90,7 @@ class VoiceManager {
       }
       if (generation !== this.generation) { void this.request('leave', {}, credential).catch(() => {}); return; }
       this.membership = { ...credential, ...result };
+      this.state.usage = result.usage;
       this.state.joined = true; this.state.message = '已加入 · 麦克风已关闭';
       this.appliedRevision = -1; this.receiverSignature = ''; this.receiverFailures = 0;
       this.applySnapshot(result.snapshot);
@@ -111,7 +112,7 @@ class VoiceManager {
       const ticket = await this.ticket();
       if (this.membership !== membership) return;
       const value = await this.request('renew', { ticket }, membership);
-      if (this.membership === membership) Object.assign(membership, { authUntil: value.authUntil, expiresAt: value.expiresAt });
+      if (this.membership === membership) { Object.assign(membership, { authUntil: value.authUntil, expiresAt: value.expiresAt }); this.state.usage = value.usage; }
     } finally { this.renewing = false; }
   }
   async heartbeat() {
@@ -122,20 +123,24 @@ class VoiceManager {
       const value = await this.request('heartbeat', {}, membership);
       if (this.membership !== membership) return;
       Object.assign(membership, { authUntil: value.authUntil, expiresAt: value.expiresAt });
+      this.state.usage = value.usage;
       this.applySnapshot(value.snapshot);
       if (!this.state.microphone && this.state.message.startsWith('网络')) this.state.message = '已加入 · 麦克风已关闭';
       this.emit();
     } catch (error) {
       if (this.membership !== membership) return;
-      if (['membership_expired', 'voice_disabled', 'invalid_token', 'login_required'].includes(error.code) || Date.now() >= Math.min(membership.authUntil, membership.expiresAt)) {
+      if (['membership_expired', 'voice_disabled', 'invalid_token', 'login_required', 'voice_monthly_limit', 'voice_daily_limit', 'voice_quota_expired', 'voice_quota_unavailable'].includes(error.code) || Date.now() >= Math.min(membership.authUntil, membership.expiresAt)) {
         await this.leave(); this.handleError(error);
-      } else { this.state.message = '网络暂时中断，正在恢复语音连接…'; this.emit(); }
+      } else { this.state.message = '网络暂时中断，正在恢复语音连接……'; this.emit(); }
     } finally { this.heartbeating = false; }
   }
   applySnapshot(snapshot) {
     if (!this.membership || !snapshot || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < this.appliedRevision || !Array.isArray(snapshot.members)) return;
     this.appliedRevision = snapshot.revision; this.state.members = snapshot.members;
-    if (!snapshot.members.some(member => member.memberId === this.membership.memberId)) { void this.leave(); return; }
+    if (!snapshot.members.some(member => member.memberId === this.membership.memberId)) {
+      const code = snapshot.departures?.find(member => member.memberId === this.membership.memberId)?.code;
+      void this.leave(); if (code) this.handleError(this.error(code)); return;
+    }
     this.emit(); void this.reconcile();
   }
   async ice(membership) {
@@ -291,7 +296,7 @@ class VoiceManager {
     clearTimeout(this.receiverTimer);
     if (!this.membership) return;
     this.receiverSignature = null;
-    if (++this.receiverFailures > 3) { this.state.message = '语音接收中断，请点击恢复连接。'; this.state.recoveryNeeded = true; this.emit(); return; }
+    if (++this.receiverFailures > 3) { this.state.message = '语音接收中断，请点击以恢复连接。'; this.state.recoveryNeeded = true; this.emit(); return; }
     this.receiverTimer = setTimeout(() => { void this.reconcile(); }, 1000 * 2 ** (this.receiverFailures - 1) + Math.random() * 300);
   }
   recover() { this.receiverFailures = 0; this.state.recoveryNeeded = false; this.receiverSignature = null; void this.reconcile(); this.emit(); }
@@ -517,7 +522,7 @@ class VoiceManager {
     this.releasePublisher(this.publisherAttempt, false); this.publisher = null; this.capturePending = false; this.publisherAttempt = null;
     this.closeReceiver(); this.iceConfig = null;
     this.volumes.clear();
-    this.state = { ...this.state, joined: false, busy: false, microphone: false, message: '', members: [], speaking: [], recoveryNeeded: false, playbackBlocked: false };
+    this.state = { ...this.state, joined: false, busy: false, microphone: false, message: '', members: [], speaking: [], recoveryNeeded: false, playbackBlocked: false, usage: null };
     this.emit();
     if (membership) {
       try { await this.request('leave', {}, membership, { keepalive: true }); }
@@ -525,14 +530,17 @@ class VoiceManager {
     }
   }
   handleError(error) {
+    if (this.membership && ['voice_monthly_limit', 'voice_daily_limit', 'voice_quota_expired', 'voice_quota_unavailable'].includes(error.code)) void this.leave();
     const messages = {
-      login_required: '请先使用 SEKAI Pass 登录。', voice_disabled: '此房间的语音尚未开放。', room_full: '语音房已满，最多 8 人。',
-      voice_in_use: '你的账号已在此房间的另一窗口加入语音，请先退出。', membership_expired: '语音身份已过期，请重新加入。',
-      rate_limited: '操作太快，请稍后再试。', chat_unavailable: '请等待文字聊天连接恢复后重试。',
-      NotAllowedError: '未获得麦克风权限，你仍可以收听。', NotFoundError: '未找到麦克风，你仍可以收听。',
-      NotReadableError: '麦克风被占用或暂时不可用，请检查设备。', cleanup_pending: '正在关闭旧连接，请稍后恢复连接。',
+      login_required: '请先使用您的 SEKAI Pass 登录。', voice_disabled: '此房间未启用语音聊天。', room_full: '语音房间已满（最多 8 人）。',
+      voice_in_use: '您的账号已在其他窗口连接至此房间的语音聊天，请先在另一窗口断开连接。', membership_expired: '您的语音聊天权限已过期，请重新加入。',
+      rate_limited: '操作过于频繁，请稍后再试。', chat_unavailable: '请等待文字聊天连接恢复后再试。',
+      voice_monthly_limit: '您本月的语音通话时长配额已用尽，请下个月再试。', voice_daily_limit: '您今日的语音通话时长配额已用尽，请明天再试。',
+      voice_quota_expired: '您的语音通话时长授权已过期，请重新加入。', voice_quota_unavailable: '目前无法核实剩余的语音通话时长，通话已结束，请稍后再试。',
+      NotAllowedError: '未授予麦克风权限，您仍可进行收听。', NotFoundError: '未检测到麦克风，您仍可进行收听。',
+      NotReadableError: '麦克风正在被占用或暂时不可用，请检查您的设备。', cleanup_pending: '正在关闭之前的连接，请稍候片刻后再重新连接。',
     };
-    this.state.message = messages[error.code || error.name] || '语音连接未完成，请检查网络后重试。'; this.emit();
+    this.state.message = messages[error.code || error.name] || '语音连接失败，请检查您的网络并重试。'; this.emit();
   }
   destroy() { void this.leave(); this.unsubscribers.forEach(unsubscribe => unsubscribe()); globalThis.removeEventListener?.('pagehide', this.onPageHide); }
 }

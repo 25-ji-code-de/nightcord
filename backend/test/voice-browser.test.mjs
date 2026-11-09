@@ -250,6 +250,48 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
     await mkdir(artifacts, { recursive: true });
     await one.screenshot({ path: join(artifacts, 'desktop-collapsed.png') }); await two.screenshot({ path: join(artifacts, 'mobile-collapsed.png') });
     await openVoice(one); await openVoice(two);
+    const reminder = await two.evaluate(() => {
+      const manager = nightcord.voice, node = document.querySelector('[data-voice-usage-reminder]');
+      const focus = document.activeElement, receiver = manager.receiver, playback = [...manager.playbacks.values()][0].audio;
+      const daily = { usedMinutes: 120, reservedMinutes: 1, limitMinutes: 240, resetsAt: Date.now() + 3600000 };
+      // Exercise daily totals returned after joins/heartbeats without consuming hours or altering media state.
+      const render = (value, overrides = {}) => nightcord.eventBus.emit('voice:changed', {
+        ...manager.state, memberId: manager.membership.memberId, usage: value ? { daily: value } : null, ...overrides,
+      });
+      render({ ...daily, usedMinutes: 119.9 });
+      const below = node.hidden;
+      render(daily);
+      const reached = !node.hidden && !node.parentElement.hidden;
+      const text = node.textContent, textNode = node.firstChild;
+      render({ ...daily, usedMinutes: 121 });
+      const stable = node.firstChild === textNode;
+      const uninterrupted = manager.state.joined && manager.receiver === receiver && receiver.connectionState === 'connected'
+        && [...manager.playbacks.values()][0].audio === playback && !playback.paused && document.activeElement === focus;
+      render({ ...daily, limitMinutes: 300 });
+      const configured = node.textContent.includes('5 小时');
+      render({ ...daily, resetsAt: Date.now() - 1 });
+      const expired = node.hidden;
+      render({ ...daily, usedMinutes: 0, resetsAt: daily.resetsAt + 86400000 });
+      const nextDay = node.hidden;
+      render(null);
+      const missing = node.hidden;
+      render(daily, { joined: false });
+      const left = node.hidden;
+      render(daily);
+      return { below, reached, text, stable, uninterrupted, configured, expired, nextDay, missing, left,
+        toolbar: document.querySelector('[data-voice-label]').textContent,
+        fits: node.scrollWidth <= node.clientWidth && node.getBoundingClientRect().bottom <= document.querySelector('.voice-display').getBoundingClientRect().bottom };
+    });
+    assert.deepEqual(reminder, {
+      below: true, reached: true, text: '今天已累计使用语音 2 小时；每日上限 4 小时，到时将自动结束。',
+      stable: true, uninterrupted: true, configured: true, expired: true, nextDay: true, missing: true, left: true,
+      toolbar: '时长提醒', fits: true,
+    }, 'the two-hour reminder uses actual daily minutes, survives updates, and leaves audio and focus alone');
+    await two.screenshot({ path: join(artifacts, 'mobile-usage-reminder.png') });
+    await two.locator('.voice-close').click();
+    assert.equal(await two.locator('[data-voice-label]').textContent(), '时长提醒', 'the closed panel keeps its time reminder visible in the voice entry');
+    await two.evaluate(() => nightcord.voice.emit());
+    await openVoice(two);
     await one.locator('.voice-member-line:not(button)').click();
     assert.equal(await one.locator('#voice-panel').isVisible(), true, 'clicking your own participant row keeps the voice panel open');
     const memberListBounds = await one.locator('[data-voice-members]').boundingBox();

@@ -6,6 +6,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import { createRuntime } from './runtime.mjs';
+import { quotaPeriods } from '../src/voice/quota-policy.ts';
 
 const origin = 'https://nightcord.de5.net';
 const offer = { type: 'offer', sdp: 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:0\r\na=sendonly\r\na=rtpmap:111 opus/48000/2\r\n' };
@@ -77,9 +78,9 @@ async function fixture(options = {}) {
     const response = await fetch(`${base}/api/room/${room}/voice/${action}`, { method: 'POST', headers: { Origin: origin, Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
     return { status: response.status, value: await response.json() };
   }
-  async function join(client) {
+  async function join(client, room = 'voice-test') {
     const credential = token(), input = { ticket: await client.ticket(), clientId: crypto.randomUUID(), joinRequestId: crypto.randomUUID() };
-    const result = await api('join', credential, input); assert.equal(result.status, 200, JSON.stringify(result.value));
+    const result = await api('join', credential, input, room); assert.equal(result.status, 200, JSON.stringify(result.value));
     return { credential, input, ...result.value };
   }
   return { runtime, provider, connect, api, join, base, async close() { sockets.forEach(socket => socket.terminate()); await runtime.dispose(); } };
@@ -295,6 +296,87 @@ test('persistent authentication expiry rejects heartbeats and alarm closes media
     for (let i = 0; i < 110 && f.provider.sessions.get('fixture-1').some(track => track.status === 'active'); i++) await delay(200);
     assert.ok(f.provider.sessions.get('fixture-1').every(track => track.status === 'inactive'), 'alarm must revoke forwarding without a cooperative browser leave');
     assert.ok(f.provider.revoked.length);
+  } finally { await f.close(); }
+});
+
+async function quotaStorage(f) {
+  const namespace = await f.runtime.getDurableObjectNamespace('VOICE_QUOTAS');
+  const id = namespace.idFromName('voice-minutes-v1');
+  await namespace.get(id).grant('bootstrap', 'bootstrap', 'bootstrap', 0);
+  return f.runtime.unsafeGetDurableObjectStorage('nightcord-chat', 'VoiceQuota', { id: id.toString() });
+}
+
+test('monthly minutes reject admission across rooms before allocating SFU or TURN resources', async () => {
+  const f = await fixture({ bindings: { VOICE_MONTHLY_MINUTES: '1' } });
+  try {
+    const storage = await quotaStorage(f);
+    await storage.exec('INSERT INTO voice_quota_totals VALUES (?,?,?,?)', 'month', quotaPeriods(Date.now()).month, '*', 60000);
+    for (const [identity, room] of [['one', 'voice-test'], ['two', 'other-test']]) {
+      const client = await f.connect(identity, room);
+      const result = await f.api('join', token(), { ticket: await client.ticket(), clientId: crypto.randomUUID(), joinRequestId: crypto.randomUUID() }, room);
+      assert.equal(result.status, 429); assert.equal(result.value.code, 'voice_monthly_limit');
+    }
+    assert.equal(f.provider.calls.length, 0);
+  } finally { await f.close(); }
+});
+
+test('daily minute expiry closes forwarding by alarm without a browser heartbeat, including after eviction', { timeout: 15000 }, async () => {
+  const f = await fixture({ bindings: { VOICE_DAILY_MINUTES: '1' } });
+  try {
+    const storage = await quotaStorage(f);
+    await storage.exec('INSERT INTO voice_quota_totals VALUES (?,?,?,?)', 'day', quotaPeriods(Date.now()).day, 'sekai:one', 56000);
+    const one = await f.connect(), member = await f.join(one);
+    assert.equal(member.usage.daily.limitMinutes, 1);
+    assert.ok(member.usage.daily.usedMinutes >= 56 / 60);
+    const start = await f.api('publisher/start', member.credential, { mutationId: crypto.randomUUID(), mid: '0', sessionDescription: offer });
+    assert.equal(start.status, 200);
+    assert.equal((await f.api('publisher/ready', member.credential, { operationId: start.value.operationId, generation: start.value.generation, mutationId: crypto.randomUUID() })).status, 200);
+    const [id] = await f.runtime.listDurableObjectIds('VOICE_ROOMS');
+    await f.runtime.unsafeEvictDurableObject('nightcord-chat', 'VoiceRoom', { id });
+    for (let i = 0; i < 100 && f.provider.sessions.get('fixture-1').some(track => track.status === 'active'); i++) await delay(60);
+    assert.ok(f.provider.sessions.get('fixture-1').every(track => track.status === 'inactive'), 'quota alarm must stop actual upstream forwarding');
+    assert.ok(f.provider.revoked.length);
+    assert.equal((await f.api('heartbeat', member.credential)).value.code, 'voice_daily_limit');
+    assert.ok(one.messages.some(frame => frame.snapshot?.departures?.some(value => value.memberId === member.memberId && value.code === 'voice_daily_limit')));
+    const other = await f.connect('one', 'other-test');
+    const blocked = await f.api('join', token(), { ticket: await other.ticket(), clientId: crypto.randomUUID(), joinRequestId: crypto.randomUUID() }, 'other-test');
+    assert.equal(blocked.value.code, 'voice_daily_limit', 'changing room cannot reset personal minutes');
+  } finally { await f.close(); }
+});
+
+test('failed forwarding cleanup keeps its reservation until closure is confirmed, then refunds unused seconds', async () => {
+  const f = await fixture();
+  try {
+    const one = await f.connect(), member = await f.join(one), storage = await quotaStorage(f);
+    const start = await f.api('publisher/start', member.credential, { mutationId: crypto.randomUUID(), mid: '0', sessionDescription: offer });
+    await f.api('publisher/ready', member.credential, { operationId: start.value.operationId, generation: start.value.generation, mutationId: crypto.randomUUID() });
+    f.provider.failClose = true;
+    const before = await storage.exec("SELECT spent_ms FROM voice_quota_totals WHERE scope='month'");
+    await f.api('leave', member.credential); await delay(100);
+    assert.deepEqual(await storage.exec("SELECT spent_ms FROM voice_quota_totals WHERE scope='month'"), before);
+    assert.ok(f.provider.sessions.get('fixture-1').some(track => track.status === 'active'));
+    f.provider.failClose = false;
+    await f.api('leave', member.credential);
+    for (let i = 0; i < 40; i++) {
+      const rows = await storage.exec("SELECT data FROM voice_quota_leases WHERE id=?", member.memberId);
+      if (JSON.parse(rows[0].data).closed) break;
+      await delay(30);
+    }
+    const after = await storage.exec("SELECT spent_ms FROM voice_quota_totals WHERE scope='month'");
+    assert.ok(after[0].spent_ms > 0 && after[0].spent_ms < before[0].spent_ms);
+    assert.ok(f.provider.sessions.get('fixture-1').every(track => track.status === 'inactive'));
+    const rejoined = await f.join(await f.connect());
+    assert.ok(rejoined.usage.daily.usedMinutes > 0, 'leaving and rejoining retain elapsed minutes');
+  } finally { await f.close(); }
+});
+
+test('unavailable minute accounting denies new membership before media allocation', async () => {
+  const f = await fixture({ bindings: { VOICE_MONTHLY_MINUTES: 'invalid' } });
+  try {
+    const one = await f.connect();
+    const result = await f.api('join', token(), { ticket: await one.ticket(), clientId: crypto.randomUUID(), joinRequestId: crypto.randomUUID() });
+    assert.equal(result.status, 503); assert.equal(result.value.code, 'voice_quota_unavailable');
+    assert.equal(f.provider.calls.length, 0);
   } finally { await f.close(); }
 });
 

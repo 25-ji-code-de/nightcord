@@ -13,6 +13,15 @@ installations with `VOICE_MODE=off` until credentials are configured. See
 [voice setup and validation](../docs/VOICE_SETUP.md) for secrets, deployment,
 local browser media tests, rollback and current limitations.
 
+Voice also uses a SQLite `VoiceQuota` to enforce 230,000 participant minutes per
+UTC calendar month across this deployment and 240 minutes per verified identity
+per day in Asia/Shanghai. Configure `VOICE_MONTHLY_MINUTES` and
+`VOICE_DAILY_MINUTES` to change these limits. Listening and muting count as time;
+unused reservations are returned after media cleanup. The voice panel reminds
+participants after 120 cumulative daily minutes without interrupting the call.
+The `v3-voice-quota`
+migration adds its binding. These time limits do not constitute a billing cap.
+
 ## Development and deployment
 
 ```sh

@@ -9,6 +9,7 @@ import { allowedOrigin, corsHeaders, guestSession, verifyGuest, type ChatEnv, ty
 import { isMobileRequest } from './device';
 import { configuration, readJson, record, VoiceError } from './voice/protocol';
 export { VoiceRoom } from './voice/room';
+export { VoiceQuota } from './voice/quota';
 
 const HISTORY_LIMIT = 100;
 const STORED_MESSAGE_LIMIT = 1000;

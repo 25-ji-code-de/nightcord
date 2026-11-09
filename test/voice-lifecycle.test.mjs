@@ -63,6 +63,29 @@ async function publishing({ silence = true } = {}) {
   return { ...h, stream, peers };
 }
 
+test('a minute-limit heartbeat closes capture and media and explains the daily limit', async () => {
+  const h = await publishing();
+  const pc = h.manager.publisher, silence = h.manager.publisherAttempt.silence;
+  h.manager.request = async action => {
+    if (action === 'heartbeat') throw h.manager.error('voice_daily_limit');
+    return {};
+  };
+  await h.manager.heartbeat();
+  assert.equal(h.manager.membership, null); assert.equal(h.manager.state.joined, false);
+  assert.equal(h.stream.track.readyState, 'ended'); assert.equal(pc.connectionState, 'closed');
+  assert.equal(silence.track.readyState, 'ended'); assert.match(h.manager.state.message, /今日.*时长.*已用尽.*明天/);
+  h.manager.destroy();
+});
+
+test('a quota departure snapshot stops media immediately and keeps its explanation', async () => {
+  const h = await publishing();
+  const pc = h.manager.publisher;
+  h.manager.applySnapshot({ revision: 10, members: [], departures: [{ memberId: 'member', code: 'voice_monthly_limit' }] });
+  assert.equal(h.manager.state.joined, false); assert.equal(pc.connectionState, 'closed');
+  assert.match(h.manager.state.message, /本月.*时长.*已用尽.*下个月/);
+  h.manager.destroy();
+});
+
 test('mute stops real capture and reopening reuses publisher, operation and DTX silence', async () => {
   const h = await publishing();
   const pc = h.manager.publisher, attempt = h.manager.publisherAttempt;

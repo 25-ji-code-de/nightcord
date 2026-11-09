@@ -11,6 +11,8 @@
     "VOICE_MODE": "on",
     "VOICE_ALLOWED_ROOMS": "nightcord-test",
     "VOICE_REQUIRE_PASS": "true",
+    "VOICE_MONTHLY_MINUTES": "230000",
+    "VOICE_DAILY_MINUTES": "240",
     "CHAT_ALLOWED_ORIGINS": "https://nightcord.de5.net,http://localhost:8000,http://127.0.0.1:8000"
   },
   "services": [
@@ -23,12 +25,14 @@
     "bindings": [
       { "name": "ROOMS", "class_name": "ChatRoom" },
       { "name": "VOICE_ROOMS", "class_name": "VoiceRoom" },
+      { "name": "VOICE_QUOTAS", "class_name": "VoiceQuota" },
       { "name": "LIMITERS", "class_name": "RateLimiter" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ChatRoom", "RateLimiter"] },
-    { "tag": "v2-voice", "new_sqlite_classes": ["VoiceRoom"] }
+    { "tag": "v2-voice", "new_sqlite_classes": ["VoiceRoom"] },
+    { "tag": "v3-voice-quota", "new_sqlite_classes": ["VoiceQuota"] }
   ],
   "observability": {
     "enabled": true,

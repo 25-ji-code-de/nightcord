@@ -29,6 +29,7 @@ class VoiceUI {
     this.volumeOutput = this.root.querySelector('[data-voice-volume-output]');
     this.play = this.root.querySelector('[data-voice-play]');
     this.recover = this.root.querySelector('[data-voice-recover]');
+    this.usageReminder = this.root.querySelector('[data-voice-usage-reminder]');
     this.pages = [...this.root.querySelectorAll('[data-voice-view]')];
     this.view = 'call';
     this.menuView = 'device';
@@ -209,11 +210,14 @@ class VoiceUI {
     const normalMessages = ['', '已加入 · 麦克风已关闭', '麦克风已开启', '正在启用麦克风……', '正在加入语音会话……'];
     const messageNeedsAttention = state.message && !normalMessages.includes(state.message);
     const attention = !!(state.playbackBlocked || state.recoveryNeeded || messageNeedsAttention);
+    const daily = state.usage?.daily;
+    const remindUsage = !!(state.joined && Number.isFinite(daily?.usedMinutes) && daily.usedMinutes >= 120
+      && Number.isFinite(daily.limitMinutes) && daily.limitMinutes > 120 && daily.resetsAt > Date.now());
     this.toolbar.classList.toggle('is-joined', state.joined);
-    this.toolbar.classList.toggle('needs-attention', attention);
-    this.label.textContent = attention ? '需要操作' : state.busy ? '接通中' : state.joined ? state.microphone ? '语音会话中' : '仅收听模式' : '语音';
+    this.toolbar.classList.toggle('needs-attention', attention || remindUsage);
+    this.label.textContent = attention ? '需要操作' : remindUsage ? '时长提醒' : state.busy ? '接通中' : state.joined ? state.microphone ? '语音会话中' : '仅收听模式' : '语音';
     this.count.hidden = !state.joined; this.count.textContent = state.members.length;
-    this.toggle.setAttribute('aria-label', attention ? '语音功能需要您的关注；请打开语音面板' : state.joined ? `房间语音，${state.members.length} 人，${state.microphone ? '麦克风已开启' : '仅收听模式'}；请打开语音面板` : '打开房间语音面板');
+    this.toggle.setAttribute('aria-label', attention ? '语音功能需要您的关注，请打开语音面板' : remindUsage ? '语音功能今日累计使用时长已达 2 小时，请打开语音面板查看时长提醒。' : state.joined ? `房间语音，${state.members.length} 人，${state.microphone ? '麦克风已开启' : '仅收听模式'}，请打开语音面板` : '打开房间语音面板');
     this.status.textContent = messageNeedsAttention ? state.message : state.playbackBlocked ? '尚未启用音频' : state.busy ? '正在接通……' : this.manager.capturePending ? '正在启用麦克风……' : state.joined ? state.microphone ? '已接通 · 麦克风已开启' : '已接通 · 麦克风已静音' : '等待接入';
     this.menuStatus.textContent = this.status.textContent;
     this.join.hidden = state.joined || state.busy;
@@ -228,7 +232,12 @@ class VoiceUI {
       button.setAttribute('aria-label', micLabel); button.title = micLabel;
     }
     this.play.hidden = !state.playbackBlocked; this.recover.hidden = !state.recoveryNeeded;
-    this.root.querySelector('[data-voice-notices]').hidden = !state.playbackBlocked && !state.recoveryNeeded;
+    const dailyLimit = remindUsage ? (daily.limitMinutes % 60 === 0 ? `${daily.limitMinutes / 60} 小时` : `${daily.limitMinutes} 分钟`) : '';
+    const reminder = remindUsage ? `您今天使用语音功能的时间已累计达到 2 小时，每日限额为 ${dailyLimit}，达到此限额后，会话将自动结束。` : '';
+    // Keep the status text stable across heartbeats so assistive technology only announces changes.
+    if (this.usageReminder.textContent !== reminder) this.usageReminder.textContent = reminder;
+    this.usageReminder.hidden = !remindUsage;
+    this.root.querySelector('[data-voice-notices]').hidden = !state.playbackBlocked && !state.recoveryNeeded && !remindUsage;
     this.idle.hidden = state.joined; this.members.hidden = !state.joined;
     this.memberCount.textContent = `${state.members.length} 人`;
     const menuLostMember = this.view === 'member' && !state.members.some(member => member.memberId === this.selectedMember);

@@ -14,7 +14,7 @@ describe('SEKAI Design chat components', () => {
     test(`${file} is pinned to the tagged source`, () => {
       assert.match(
         read(`vendor/sekai-design/${file}`),
-        new RegExp(`^/\\* @sekai-vendor @sekai/design@v0\\.1\\.0 ${source.replaceAll('/', '\\/')} \\*/`),
+        new RegExp(`^/\\* @sekai-vendor @sekai/design@v0\\.1\\.1 ${source.replaceAll('/', '\\/')} \\*/`),
       );
     });
   }

@@ -5,7 +5,7 @@ protocol used by [workers-chat-demo](https://github.com/cloudflare/workers-chat-
 Production hostname: `chat.nightcord.de5.net`, Worker: `nightcord-chat`.
 
 Optional room voice uses a separate SQLite `VoiceRoom` with Cloudflare Realtime
-SFU/TURN. It currently enables only `nightcord-test`, supports up to eight
+SFU/TURN. It currently enables `nightcord-test` and `nightcord-default`, supports up to eight
 members, and keeps media credentials on the server. `VOICE_REQUIRE_PASS=true`
 requires SEKAI Pass; setting it to `false` explicitly allows verified cookie
 guests for development tests. Start new

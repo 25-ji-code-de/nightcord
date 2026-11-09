@@ -9,7 +9,7 @@
   "preview_urls": false,
   "vars": {
     "VOICE_MODE": "on",
-    "VOICE_ALLOWED_ROOMS": "nightcord-test",
+    "VOICE_ALLOWED_ROOMS": "nightcord-test,nightcord-default",
     "VOICE_REQUIRE_PASS": "true",
     "VOICE_MONTHLY_MINUTES": "230000",
     "VOICE_DAILY_MINUTES": "240",

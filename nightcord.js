@@ -168,8 +168,8 @@ class Nightcord {
     const canOpus = new Audio().canPlayType('audio/ogg; codecs=opus');
     const ext = canOpus ? 'opus' : 'mp3';
     this.sounds = {
-      join: new Audio(`se_cord.${ext}`),
-      quit: new Audio(`se_dcord.${ext}`)
+      join: new Audio(`se_cord.${ext}?v=2`),
+      quit: new Audio(`se_dcord.${ext}?v=2`)
     };
     const playSound = name => this.sounds[name].cloneNode().play().catch(() => {});
     // voiceJoined：本地上一次是否处于语音通话中，用于判断“刚加入”或“刚退出”。

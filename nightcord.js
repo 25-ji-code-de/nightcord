@@ -164,20 +164,30 @@ class Nightcord {
       });
     });
 
-    // 上下线音效（优先 Opus，回退 MP3）
+    // 语音聊天加入、退出音效（优先 Opus，回退 MP3）
     const canOpus = new Audio().canPlayType('audio/ogg; codecs=opus');
     const ext = canOpus ? 'opus' : 'mp3';
     this.sounds = {
       join: new Audio(`se_cord.${ext}`),
       quit: new Audio(`se_dcord.${ext}`)
     };
-    this.roomReady = false; // 跟踪 room:ready 状态
-    this.eventBus.on('room:ready', () => { this.roomReady = true; });
-    this.eventBus.on('user:joined', () => {
-      if (this.roomReady) this.sounds.join.cloneNode().play().catch(() => {});
-    });
-    this.eventBus.on('user:quit', () => {
-      if (this.roomReady) this.sounds.quit.cloneNode().play().catch(() => {});
+    const playSound = name => this.sounds[name].cloneNode().play().catch(() => {});
+    // voiceJoined：本地上一次是否处于语音通话中，用于判断“刚加入”或“刚退出”。
+    let voiceJoined = false;
+    let voiceMembers = new Set();
+    this.eventBus.on('voice:changed', ({ joined, members }) => {
+      // joined：这次事件上报时，本地当前是否处于语音通话中。
+      const memberIds = new Set(members.map(member => member.memberId));
+      // joined 与 voiceJoined 不同时，说明状态刚刚发生了加入/退出变化。
+      if (joined !== voiceJoined) {
+        playSound(joined ? 'join' : 'quit');
+      } else if (joined) {
+        // 仅在通话中提示成员进出，重复快照和麦克风状态更新保持安静。
+        if ([...memberIds].some(id => !voiceMembers.has(id))) playSound('join');
+        if ([...voiceMembers].some(id => !memberIds.has(id))) playSound('quit');
+      }
+      voiceJoined = joined;
+      voiceMembers = memberIds;
     });
 
     // Application state
@@ -285,7 +295,6 @@ class Nightcord {
    */
   joinRoom(roomname) {
     this.state.phase = 'chatting';
-    this.roomReady = false; // 重置 room:ready 状态
     // this.ui.hideRoomChooser();
 
     const success = this.chatRoom.joinRoom(roomname);

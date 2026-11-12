@@ -103,6 +103,9 @@ class UIManager {
       navigationAvatar: document.querySelector("#navigation-avatar"),
       navigationName: document.querySelector("#navigation-username"),
       navigationProfileInfo: document.querySelector("#navigation-profile-info"),
+      mentionPicker: document.querySelector("#mention-picker"),
+      mentionPickerList: document.querySelector("#mention-picker-list"),
+      mentionPickerQuery: document.querySelector("#mention-picker-query"),
     };
 
     this.onSetUser = null;
@@ -123,6 +126,7 @@ class UIManager {
     this.voiceRevision = -1;
     this.localVoice = null;
     this.currentUser = null;
+    this.mentionPickerOpen = false;
     this.profileUI = new NightcordProfileUI(this);
 
     this.systemIcon = `<svg width="24" height="24" viewBox="8 7 34 34" xmlns="http://www.w3.org/2000/svg"><path d="M41 24A16 16 0 1 1 9 24A16 16 0 1 1 41 24ZM41 24A12 12 0 1 1 17 24A12 12 0 1 1 41 24ZM27 24A2 2 0 1 1 23 24A2 2 0 1 1 27 24ZM35 24A2 2 0 1 1 31 24A2 2 0 1 1 35 24Z" fill="white" fill-rule="evenodd"></path></svg>`;
@@ -2779,7 +2783,7 @@ class UIManager {
       const drawerOpen = mobile.matches && sidebar.classList.contains('show');
       const open = !mobile.matches || drawerOpen;
       sidebar.inert = !open;
-      sidebar.classList.toggle('members-collapsed', !mobile.matches && membersCollapsed);
+      sidebar.classList.toggle('members-collapsed', !mobile.matches && membersCollapsed && !this.mentionPickerOpen);
       main.inert = drawerOpen;
       if (scrim) scrim.hidden = !drawerOpen;
       toggle.setAttribute('aria-expanded', String(open));
@@ -2804,10 +2808,12 @@ class UIManager {
     });
     scrim?.addEventListener('click', () => { close(); toggle.focus({ preventScroll: true }); });
     members?.addEventListener('click', () => {
+      this.closeMentionPicker({ restoreFocus: false });
       if (mobile.matches) { close(); toggle.focus({ preventScroll: true }); }
       else { membersCollapsed = !membersCollapsed; sync(); }
     });
     const chat = () => {
+      this.closeMentionPicker({ restoreFocus: false });
       if (mobile.matches) close();
       this.isAtBottom = true;
       this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
@@ -2823,9 +2829,18 @@ class UIManager {
       if (this.currentUser) this.profileUI.open(this.currentUser);
     });
     document.querySelector('#navigation-mentions')?.addEventListener('click', () => {
-      if (mobile.matches) close();
-      this.autocomplete?.insertAtSymbol();
+      if (this.mentionPickerOpen) this.closeMentionPicker();
+      else this.openMentionPicker();
     });
+    // Sidebar panels need the drawer on phones and an uncollapsed rail on desktop.
+    this.revealNavigation = () => {
+      if (mobile.matches) sidebar.classList.add('show');
+      else membersCollapsed = false;
+      sync();
+    };
+    this.closeNavigationDrawer = close;
+    this.syncNavigation = sync;
+    this.setupMentionPicker();
     sync();
     
     // 点击侧边栏外部区域关闭侧边栏
@@ -2863,5 +2878,152 @@ class UIManager {
         }
       }
     });
+  }
+
+  /**
+   * 侧栏提及选择器：点击导航栏的 @ 时展开，选择成员后把 SEKAI Mention
+   * 插入输入框当前光标处，而不是先输入一个 “@”。
+   */
+  setupMentionPicker() {
+    const { mentionPicker, mentionPickerList: list, mentionPickerQuery: query } = this.elements;
+    if (!mentionPicker || !list) return;
+
+    query?.addEventListener('input', () => this.renderMentionPicker());
+    query?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' || event.isComposing) return;
+      const first = list.querySelector('.mention-picker-item');
+      if (!first) return;
+      event.preventDefault();
+      first.click();
+    });
+    mentionPicker.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        this.closeMentionPicker();
+        return;
+      }
+      const items = [...list.querySelectorAll('.mention-picker-item')];
+      if (items.length === 0) return;
+      if (event.key === 'Home' || event.key === 'End') {
+        // Let the search field keep caret movement while it has focus.
+        if (document.activeElement === query) return;
+        event.preventDefault();
+        items[event.key === 'Home' ? 0 : items.length - 1].focus({ preventScroll: false });
+        return;
+      }
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      event.preventDefault();
+      const current = items.indexOf(document.activeElement);
+      const next = current === -1
+        ? (event.key === 'ArrowDown' ? 0 : items.length - 1)
+        : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      items[next].focus({ preventScroll: false });
+    });
+    mentionPicker.querySelector('.mention-picker-close')?.addEventListener('click', () => this.closeMentionPicker());
+    document.addEventListener('click', (event) => {
+      if (!this.mentionPickerOpen) return;
+      if (event.target.closest?.('#mention-picker, #navigation-mentions, dialog')) return;
+      this.closeMentionPicker({ restoreFocus: false });
+    });
+    this.renderMentionPicker();
+  }
+
+  openMentionPicker() {
+    const { mentionPicker, mentionPickerQuery: query } = this.elements;
+    const button = document.querySelector('#navigation-mentions');
+    if (!mentionPicker || !this.autocomplete) return;
+
+    this.mentionPickerOpen = true;
+    this.autocomplete.hideList();
+    this.revealNavigation?.();
+    if (query) query.value = '';
+    this.renderMentionPicker();
+    document.querySelector('.sidebar')?.classList.add('mention-picker-open');
+    button?.classList.add('is-active');
+    button?.setAttribute('aria-expanded', 'true');
+    query?.focus({ preventScroll: true });
+  }
+
+  closeMentionPicker({ restoreFocus = true } = {}) {
+    if (!this.mentionPickerOpen) return;
+    this.mentionPickerOpen = false;
+    document.querySelector('.sidebar')?.classList.remove('mention-picker-open');
+    const button = document.querySelector('#navigation-mentions');
+    button?.classList.remove('is-active');
+    button?.setAttribute('aria-expanded', 'false');
+    this.syncNavigation?.();
+    if (restoreFocus) button?.focus({ preventScroll: true });
+  }
+
+  renderMentionPicker() {
+    const { mentionPickerList: list, mentionPickerQuery: query } = this.elements;
+    if (!list) return;
+
+    const candidates = this.autocomplete ? this.autocomplete.mentionCandidates() : [];
+    const needle = (query?.value || '').trim().toLocaleLowerCase();
+    const rank = candidate => candidate.type === 'all' ? 0 : candidate.type === 'ai' ? 1 : candidate.status === 'online' ? 2 : 3;
+    const matches = candidates
+      .filter(candidate => !needle || String(candidate.name).toLocaleLowerCase().includes(needle))
+      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+
+    const groups = [
+      { label: '所有人', test: candidate => candidate.type === 'all' },
+      { label: 'AI 助手', test: candidate => candidate.type === 'ai' },
+      { label: '在线成员', test: candidate => candidate.type === 'user' && candidate.status === 'online' },
+      { label: '离线成员', test: candidate => candidate.type === 'user' && candidate.status !== 'online' },
+    ];
+
+    if (matches.length === 0) {
+      list.innerHTML = `
+        <div class="mention-picker-empty" role="status">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5M8 10.5h5"/></svg>
+          <span>没有找到匹配的成员</span>
+        </div>`;
+      return;
+    }
+
+    const sections = groups
+      .map(group => ({ ...group, members: matches.filter(group.test) }))
+      .filter(section => section.members.length > 0);
+    const ordered = sections.flatMap(section => section.members);
+
+    list.innerHTML = sections.map((section, index) => {
+      const labelId = `mention-picker-group-${index}`;
+      return `
+      <div class="mention-picker-group" role="group" aria-labelledby="${labelId}">
+        <p class="mention-picker-group-label" id="${labelId}">${this.escapeHtml(section.label)}</p>
+        ${section.members.map(candidate => `
+          <button type="button" class="mention-picker-item" data-name="${this.escapeHtml(candidate.name)}" data-type="${this.escapeHtml(candidate.type || 'user')}" data-id="${this.escapeHtml(candidate.id || '')}" title="${this.escapeHtml(candidate.detailTitle || candidate.detail || candidate.label || '')}">
+            <span class="avatar ${this.escapeHtml(candidate.color || '')}" aria-hidden="true">${this.escapeHtml(candidate.avatar || '')}</span>
+            <span class="mention-picker-identity">
+              <span class="mention-picker-name">${this.escapeHtml(candidate.name)}</span>
+              <span class="mention-picker-detail">${this.escapeHtml(candidate.label || candidate.detail || '')}</span>
+            </span>
+            ${candidate.type === 'user' ? `<span class="mention-picker-status" data-status="${candidate.status === 'online' ? 'online' : 'offline'}" aria-hidden="true"></span>` : ''}
+          </button>`).join('')}
+      </div>`;
+    }).join('');
+
+    list.querySelectorAll('.mention-picker-item').forEach((item, index) => {
+      const candidate = ordered[index];
+      const avatar = item.querySelector('.avatar');
+      if (candidate.type === 'user') {
+        this.profileUI.avatar(avatar, candidate.profile, candidate.avatar);
+      } else {
+        avatar.classList.add('mention-symbol');
+        avatar.appendChild(this.autocomplete.createMentionIcon(candidate.type));
+      }
+      item.addEventListener('click', () => {
+        this.insertPickerMention({ name: item.dataset.name, type: item.dataset.type, id: item.dataset.id });
+      });
+    });
+  }
+
+  insertPickerMention(mention) {
+    if (!this.autocomplete) return;
+    this.closeMentionPicker({ restoreFocus: false });
+    this.closeNavigationDrawer?.();
+    this.autocomplete.insertMention(mention);
   }
 }

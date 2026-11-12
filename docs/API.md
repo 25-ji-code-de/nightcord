@@ -606,6 +606,12 @@ const autocomplete = new AutocompleteManager({
 
 在输入框光标处插入 @ 并触发提及列表。
 
+#### `mentionCandidates()`
+
+返回 @ 提及的完整候选（所有人、AI 角色与已知成员）。输入框补全和侧栏提及选择器共用这份候选，保证身份与排序一致。
+
+**返回值：** `Array<{ name: string, type: 'user'|'ai'|'all', id: string, ... }>`
+
 ---
 
 ## ChatApplication

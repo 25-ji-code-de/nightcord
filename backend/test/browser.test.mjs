@@ -110,6 +110,27 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     await guest.locator('#navigation-members').click();
     assert.equal(await guest.locator('.sidebar-account').isVisible(), true);
     await guest.locator('#messageInput').fill('');
+    // The rail's @ opens a mention picker in the sidebar; choosing a member
+    // inserts a SEKAI Mention at the composer caret instead of typing "@".
+    await guest.locator('#messageInput').fill('请 ');
+    await guest.locator('#messageInput').evaluate(el => el.setSelectionRange(el.value.length, el.value.length));
+    await guest.locator('#navigation-mentions').click();
+    assert.equal(await guest.locator('#mention-picker').isVisible(), true);
+    assert.equal(await guest.locator('#member-list-panel').isVisible(), false);
+    assert.equal(await guest.locator('#navigation-mentions').getAttribute('aria-expanded'), 'true');
+    assert.equal(await guest.locator('#navigation-mentions').evaluate(el => el.classList.contains('is-active')), true);
+    assert.equal(await guest.locator('.mention-picker-group-label').first().textContent(), '所有人');
+    assert.equal(await guest.locator('#mention-picker-query').evaluate(el => el === document.activeElement), true);
+    await guest.locator('#mention-picker-query').fill('Shared');
+    assert.equal(await guest.locator('.mention-picker-item[data-type="user"]').count(), 2);
+    await guest.locator('.mention-picker-item[data-type="user"]').first().click();
+    await guest.locator('#mention-picker').waitFor({ state: 'hidden' });
+    assert.equal(await guest.locator('#navigation-mentions').getAttribute('aria-expanded'), 'false');
+    assert.equal(await guest.locator('#navigation-mentions').evaluate(el => el.classList.contains('is-active')), false);
+    assert.equal(await guest.locator('#member-list-panel').isVisible(), true);
+    assert.match(await guest.locator('#messageInput').inputValue(), /^请 <\$SEKAI:Mention:type=user;.*> $/);
+    assert.equal(await guest.locator('#messageInput').evaluate(el => el === document.activeElement), true);
+    await guest.locator('#messageInput').fill('');
     await guest.locator('#navigation-profile').click();
     assert.equal(await guest.locator('dialog .profile-id').textContent(), guestId);
     await guest.keyboard.press('Escape');

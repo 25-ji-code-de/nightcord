@@ -101,7 +101,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2.8 2.7 26.6 9.3-11.1 6.2L12 29.4ZM2.8 2.7l15.5 15.5"/></svg>
             <span class="navigation-tooltip" aria-hidden="true">私信（暂未开放）</span>
           </button>
-          <button type="button" class="navigation-item" id="navigation-mentions" aria-label="提及成员">
+          <button type="button" class="navigation-item" id="navigation-mentions" aria-label="提及成员" aria-controls="mention-picker" aria-expanded="false">
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="translate(1.2 1.2) scale(.925)"><path d="M25.85 26.45c-2.5 1.6-5.95 2.85-10.05 2.85-8.15 0-13.6-5.5-13.6-13.2C2.2 8.1 7.9 2.45 15.75 2.45c8.35 0 13.8 5.05 13.8 12.45 0 5.1-1.8 7.1-5.1 7.1-3.2 0-3.85-1.95-3.85-4.7v-6.85m0 5.55c0-3.6-1.9-5.55-5-5.55-3.55 0-5.45 2.4-5.45 5.75 0 3.35 1.85 5.65 5.25 5.65 3.2 0 5.2-2.25 5.2-5.85Z"/></g></svg>
             <span class="navigation-tooltip" aria-hidden="true">提及成员</span>
           </button>
@@ -161,6 +161,22 @@ Copyright (C) 2025 The 25-ji-code-de Team
         </div>
         <div id="offline-users" class="member-list" role="group" aria-labelledby="offline-users-label"></div>
       </div>
+      <section class="mention-picker" id="mention-picker" aria-labelledby="mention-picker-title">
+        <header class="mention-picker-header">
+          <div class="mention-picker-heading">
+            <h2 class="mention-picker-title" id="mention-picker-title">提及成员</h2>
+            <p class="mention-picker-hint">选中后插入到输入框光标处</p>
+          </div>
+          <button type="button" class="mention-picker-close" aria-label="关闭提及选择器">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>
+          </button>
+        </header>
+        <label class="mention-picker-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5"/></svg>
+          <input type="search" id="mention-picker-query" placeholder="搜索成员" autocomplete="off" aria-label="搜索成员" aria-controls="mention-picker-list">
+        </label>
+        <div class="mention-picker-list" id="mention-picker-list" role="group" aria-label="成员列表"></div>
+      </section>
       <div class="sidebar-account">
         <button type="button" class="sidebar-profile" id="navigation-profile" aria-label="我的资料" aria-haspopup="dialog" disabled>
           <span class="navigation-avatar avatar bg-default" id="navigation-avatar" aria-hidden="true">N</span>

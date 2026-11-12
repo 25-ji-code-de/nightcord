@@ -89,6 +89,100 @@
 .sidebar .member-microphone { margin-left: 2px; }
 .sidebar .member-microphone[data-microphone="false"] { opacity: .75; }
 
+/* Rail state marker: exactly one surface reads as open. */
+.navigation-item[aria-current="page"], .navigation-item.is-active {
+  color: rgb(var(--nc-text));
+  background: rgb(var(--nc-line) / .07);
+}
+.navigation-item[aria-current="page"]::before,
+.navigation-item.is-active::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 3px;
+  height: 20px;
+  margin-top: -10px;
+  border-radius: 0 2px 2px 0;
+  background: rgb(var(--nc-accent));
+  transition: opacity 160ms ease, transform 200ms cubic-bezier(.2, .7, .3, 1);
+}
+/* The picker is the active surface while open, so chat yields the marker. */
+.sidebar.mention-picker-open #navigation-chat { color: inherit; background: transparent; }
+.sidebar.mention-picker-open #navigation-chat::before { opacity: 0; transform: translateX(-4px); }
+
+/* The rail's @ swaps the member panel for a mention picker. Choosing a row
+   inserts a SEKAI Mention at the composer caret instead of typing "@". */
+.sidebar > .mention-picker {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: rgb(var(--nc-sidebar));
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-10px);
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 180ms cubic-bezier(.2, .7, .3, 1), visibility 0s linear 180ms;
+}
+.sidebar.mention-picker-open > .mention-picker {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity 160ms ease, transform 200ms cubic-bezier(.2, .7, .3, 1), visibility 0s;
+}
+/* Content rises in after the surface, so the eye lands title → search → list. */
+.sidebar > .mention-picker > * { opacity: 0; transform: translateY(4px); transition: opacity 160ms ease, transform 200ms ease; }
+.sidebar.mention-picker-open > .mention-picker > * { opacity: 1; transform: none; }
+.sidebar.mention-picker-open > .mention-picker > .mention-picker-header { transition-delay: 30ms; }
+.sidebar.mention-picker-open > .mention-picker > .mention-picker-search { transition-delay: 60ms; }
+.sidebar.mention-picker-open > .mention-picker > .mention-picker-list { transition-delay: 90ms; }
+.sidebar.mention-picker-open > #member-list-panel { display: none; }
+.mention-picker-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 14px 10px 4px 16px; }
+.mention-picker-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mention-picker-title { margin: 0; font-size: 14px; font-weight: 600; line-height: 20px; color: rgb(var(--nc-text)); }
+.mention-picker-hint { margin: 0; font-size: 12px; line-height: 16px; color: rgb(var(--nc-text-muted)); }
+.mention-picker-close { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; padding: 0; border: 0; border-radius: 4px; background: transparent; color: rgb(var(--nc-icon)); cursor: pointer; transition: color 120ms, background 120ms; }
+.mention-picker-close:hover { background: rgb(var(--nc-line) / .08); color: rgb(var(--nc-text)); }
+.mention-picker-close:active { background: rgb(var(--nc-line) / .14); }
+.mention-picker-close:focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: -2px; }
+.mention-picker-search { display: flex; align-items: center; gap: 6px; height: 34px; margin: 8px 10px 6px; padding: 0 9px; border: 1px solid rgb(var(--nc-line) / .14); border-radius: 6px; background: rgb(var(--nc-input) / .55); color: rgb(var(--nc-icon)); transition: border-color 140ms, background 140ms, box-shadow 140ms; }
+.mention-picker-search:focus-within { border-color: rgb(var(--nc-accent) / .75); background: rgb(var(--nc-input) / .8); box-shadow: 0 0 0 2px rgb(var(--nc-accent) / .28); }
+.mention-picker-search > svg { width: 16px; height: 16px; flex-shrink: 0; }
+.mention-picker-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: rgb(var(--nc-text)); font: inherit; font-size: 13px; outline: none; }
+.mention-picker-search input::placeholder { color: rgb(var(--nc-text-muted)); }
+.mention-picker-list { flex: 1; min-height: 0; padding: 2px 10px 14px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.mention-picker-group + .mention-picker-group { margin-top: 2px; }
+.mention-picker-group-label { margin: 10px 6px 3px; font-size: 12px; font-weight: 600; line-height: 16px; color: rgb(var(--nc-text-muted)); }
+.mention-picker-item { display: flex; align-items: center; gap: 9px; width: 100%; box-sizing: border-box; min-height: 44px; padding: 6px; border: 0; border-radius: 4px; background: transparent; color: rgb(var(--nc-text)); font: inherit; text-align: left; cursor: pointer; transition: background 120ms ease; }
+.mention-picker-item:hover { background: rgb(var(--nc-line) / .1); }
+.mention-picker-item:active { background: rgb(var(--nc-line) / .16); }
+.mention-picker-item:focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: -2px; }
+.mention-picker-item .avatar { width: 32px; height: 32px; font-size: 14px; }
+.mention-picker-item .mention-symbol svg { width: 18px; height: 18px; }
+.mention-picker-identity { display: flex; flex-direction: column; min-width: 0; }
+.mention-picker-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; line-height: 18px; }
+.mention-picker-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 16px; color: rgb(var(--nc-text-muted)); }
+.mention-picker-item:hover .mention-picker-detail,
+.mention-picker-item:focus-visible .mention-picker-detail { color: rgb(var(--nc-text)); }
+.mention-picker-status { flex-shrink: 0; width: 8px; height: 8px; margin-left: auto; border-radius: 50%; background: rgb(var(--nc-text-subtle) / .5); }
+.mention-picker-status[data-status="online"] { background: rgb(var(--nc-online)); }
+.mention-picker-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 36px 8px; color: rgb(var(--nc-text-muted)); font-size: 13px; text-align: center; }
+.mention-picker-empty svg { width: 22px; height: 22px; opacity: .7; }
+/* Coarse pointers and phones get full touch targets; 16px keeps iOS from zooming. */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  .mention-picker-close { width: 44px; height: 44px; }
+  .mention-picker-search { height: 44px; }
+  .mention-picker-search input { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar > .mention-picker, .sidebar > .mention-picker > *, .navigation-item::before,
+  .mention-picker-item, .mention-picker-close, .mention-picker-search { transition: none; }
+}
 
 /* The classic option restores the original member panel without rebuilding it. */
 [data-member-list="classic"] #navigation-channel { border-radius: 6px; }

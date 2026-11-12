@@ -200,7 +200,11 @@
       }
     }
 
-    showMentionList(query) {
+    /**
+     * 提及候选：所有人、AI 角色与已知成员。
+     * 供输入框补全和侧栏提及选择器共用，保持两处身份与排序一致。
+     */
+    mentionCandidates() {
       const allUsers = this.getAllUsers().map(user => {
         const profile = user.profile;
         const id = profile?.id || '';
@@ -219,9 +223,13 @@
           name: ai.displayName, type: 'ai', id: ai.persona, avatar: '', color: '', label: 'AI'
         }))
       );
+      return allUsers;
+    }
+
+    showMentionList(query) {
       const lowerQuery = query.toLowerCase();
 
-      const matches = allUsers
+      const matches = this.mentionCandidates()
         .filter(u => u.name.toLowerCase().startsWith(lowerQuery))
         .sort((a, b) => {
           const rank = u => u.type === 'all' ? 0 : u.type === 'ai' ? 1 : u.status === 'online' ? 2 : 3;

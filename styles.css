@@ -3,8 +3,12 @@
 @import url("/vendor/sekai-design/contract.css");
 @import url("/vendor/sekai-design/world-system.css");
 @import url("/vendor/sekai-design/world-night.css");
+@import url("/css/palettes.css");
 @import url("/css/app-shell.css");
+@import url("/css/navigation.css");
 @import url("/css/renderer.css");
 @import url("/css/notifications.css");
 @import url("/css/image-viewer.css");
 @import url("/css/attachments.css");
+@import url("/css/appearance.css");
+@import url("/css/settings.css");

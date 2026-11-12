@@ -81,7 +81,7 @@ class UIManager {
       main: document.querySelector(".main"),
       nameInput: document.querySelector("#name-input"),
       roomNameInput: document.querySelector("#room-name"),
-      roomName: document.querySelector(".channel > span"),
+      roomName: document.querySelector("#navigation-channel .channel-name"),
       goPublicButton: document.querySelector("#go-public"),
       goPrivateButton: document.querySelector("#go-private"),
       chatroom: document.querySelector("#chatroom"),
@@ -99,6 +99,10 @@ class UIManager {
       uploadFilename: document.querySelector("#uploadFilename"),
       uploadPercent: document.querySelector("#uploadPercent"),
       uploadFill: document.querySelector("#uploadFill"),
+      navigationProfile: document.querySelector("#navigation-profile"),
+      navigationAvatar: document.querySelector("#navigation-avatar"),
+      navigationName: document.querySelector("#navigation-username"),
+      navigationProfileInfo: document.querySelector("#navigation-profile-info"),
     };
 
     this.onSetUser = null;
@@ -264,6 +268,7 @@ class UIManager {
     this.eventBus.on('session:updated', (data) => {
       const previousId = this.currentUser?.id;
       this.currentUser = data.user;
+      this.updateNavigationProfile();
       this.addUserToRoster(data.user.displayName, data.user);
       if (previousId !== data.user.id && this.messages.length && this.elements?.chatlog) this.renderMessages();
     });
@@ -281,6 +286,11 @@ class UIManager {
     });
     this.eventBus.on('voice:changed', state => {
       this.localVoice = state.joined ? { memberId: state.memberId, microphone: state.microphone } : null;
+      const indicator = document.querySelector('#navigation-microphone');
+      const label = state.joined ? state.microphone ? '麦克风已开启' : '麦克风已静音' : '未加入语音';
+      indicator?.querySelector('svg')?.classList.toggle('is-active', !!(state.joined && state.microphone));
+      indicator?.setAttribute('aria-label', label);
+      if (indicator) indicator.title = label;
       this.renderVoiceUsers();
     });
     this.eventBus.on('voice:activity', ids => {
@@ -653,7 +663,10 @@ class UIManager {
     // 下方会从缓存重建模型，未确认预览不跨房间/重新加载保留。
     this.localNakoMessages.clear();
     this.currentRoom = roomname;
-    this.elements.roomName.textContent = roomname;
+    const displayName = roomname === 'nightcord-default' ? '作业' : roomname === 'nightcord-test' ? '测试' : roomname;
+    this.elements.roomName.textContent = displayName;
+    const heading = document.querySelector('#current-channel-name');
+    if (heading) heading.textContent = displayName;
     // 切换到新房间时，尝试从本地存储加载消息并渲染（若随后有 room:ready 会被覆盖为合并后的消息）
     try {
       const local = (this.storage ? this.storage.loadMessages(this.currentRoom || 'nightcord-default') : this.loadLocalMessages(this.currentRoom || 'nightcord-default'));
@@ -707,6 +720,32 @@ class UIManager {
 
   setSessionUnavailable() {
     this.currentUser = null;
+    this.updateNavigationProfile();
+  }
+
+  updateNavigationProfile() {
+    const button = this.elements?.navigationProfile;
+    const avatar = this.elements?.navigationAvatar;
+    if (!button || !avatar) return;
+    button.disabled = !this.currentUser;
+    if (this.elements.navigationProfileInfo) this.elements.navigationProfileInfo.disabled = !this.currentUser;
+    if (!this.currentUser) {
+      avatar.className = 'navigation-avatar avatar bg-default';
+      avatar.textContent = 'N';
+      if (this.elements.navigationName) {
+        this.elements.navigationName.textContent = '未连接';
+        this.elements.navigationName.removeAttribute('title');
+      }
+      return;
+    }
+    const current = this.roster.find(member => member.profile?.id === this.currentUser.id)?.profile || this.currentUser;
+    const fallback = this.generateAvatar(current.displayName);
+    if (this.elements.navigationName) {
+      this.elements.navigationName.textContent = current.displayName;
+      this.elements.navigationName.title = current.displayName;
+    }
+    avatar.className = `navigation-avatar avatar ${fallback.color}`;
+    this.profileUI.avatar(avatar, current, fallback.avatar);
   }
 
   setConnectionStatus(message) {
@@ -804,6 +843,7 @@ class UIManager {
             </span>
             <span class="voice-user-name">${escapeHtml(user.name)}</span>
           </div>
+          <span class="member-video" aria-hidden="true" title="摄像头未开启"><svg width="18" height="16" viewBox="0 0 28 24" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18.5V5.8Q3 3 5.8 3h12.6M10.8 21h7.4q2.8 0 2.8-2.8v-5.6M21 16.3l6 3.5v-13M3 22 25 1"/></svg></span>
           <span class="member-microphone" aria-hidden="true" hidden></span>
         `;
       }
@@ -829,14 +869,15 @@ class UIManager {
       presence.title = presenceState;
       presence.setAttribute('aria-label', presenceState);
       const mic = div.querySelector('.member-microphone');
-      mic.hidden = !user.voice;
-      const microphone = user.voice && (user.voice.memberId === this.localVoice?.memberId ? this.localVoice.microphone : user.voice.microphone ?? user.voice.publishing);
-      const micState = microphone ? '麦克风已开启' : '麦克风已关闭';
-      if (user.voice && mic.dataset.microphone !== String(microphone)) {
+      mic.hidden = user.group !== 'voice';
+      div.querySelector('.member-video').hidden = user.group !== 'voice';
+      const microphone = !!(user.voice && (user.voice.memberId === this.localVoice?.memberId ? this.localVoice.microphone : user.voice.microphone ?? user.voice.publishing));
+      const micState = user.voice ? microphone ? '麦克风已开启' : '麦克风已关闭' : '未加入语音';
+      if (mic.dataset.microphone !== String(microphone)) {
         mic.dataset.microphone = String(microphone);
         mic.innerHTML = microphone
-          ? '<svg viewBox="0 0 16 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="1" width="5" height="10" rx="2.5" fill="currentColor" stroke="none"/><path d="M3 8v2a5 5 0 0 0 10 0V8M8 15v3M4.5 18h7"/></svg>'
-          : '<svg viewBox="0 0 16 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 10V3.5a2.5 2.5 0 0 1 5 0v1.25L5.5 10Z" fill="currentColor" stroke="none"/><path d="M3 8v2a5 5 0 0 0 1.45 3.52M7 14.9a5 5 0 0 0 6-4.9V8M8 15v3M4.5 18h7M1.5 17.5l13-15"/></svg>';
+          ? '<svg width="14" height="16" viewBox="0 0 16 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="4.9" y="1" width="6.2" height="13" rx="3.1" fill="currentColor" stroke="none"/><path d="M2 9v4.5a6 6 0 0 0 12 0V9M8 19.5V23M2 23h12"/></svg>'
+          : '<svg width="14" height="16" viewBox="0 0 16 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 10.65V4.1a3.1 3.1 0 0 1 6.2 0v.6Z" fill="currentColor" stroke="none"/><path d="M2 9v4.5a6 6 0 0 0 .9 3.2M6 19.15a6 6 0 0 0 8-5.65V9M8 19.5V23M2 23h12M1 21 15 3"/></svg>';
       }
       mic.title = micState;
       div.title = `${user.name} · ${presenceState}${user.voice ? ` · ${micState}` : ''}`;
@@ -2162,6 +2203,7 @@ class UIManager {
     const entry = { ...this.generateAvatar(username), profile };
     if (index !== -1) this.roster[index] = entry;
     else this.roster.push(entry);
+    if (profile?.id && profile.id === this.currentUser?.id) this.updateNavigationProfile();
     this.renderVoiceUsers();
   }
 
@@ -2727,19 +2769,68 @@ class UIManager {
     const chatHeader = document.querySelector('.chat-header');
     const toggle = document.querySelector('.sidebar-toggle');
     if (!sidebar || !chatHeader || !toggle) return;
+    const main = this.elements.main;
+    const scrim = document.querySelector('.navigation-scrim');
+    const members = document.querySelector('#navigation-members');
+    const profile = this.elements.navigationProfile;
     const mobile = window.matchMedia('(max-width: 768px)');
+    let membersCollapsed = false;
     const sync = () => {
-      const open = !mobile.matches || sidebar.classList.contains('show');
+      const drawerOpen = mobile.matches && sidebar.classList.contains('show');
+      const open = !mobile.matches || drawerOpen;
       sidebar.inert = !open;
+      sidebar.classList.toggle('members-collapsed', !mobile.matches && membersCollapsed);
+      main.inert = drawerOpen;
+      if (scrim) scrim.hidden = !drawerOpen;
       toggle.setAttribute('aria-expanded', String(open));
+      if (members) {
+        const visible = mobile.matches ? drawerOpen : !membersCollapsed;
+        members.setAttribute('aria-expanded', String(visible));
+        members.setAttribute('aria-label', mobile.matches ? '关闭导航' : visible ? '收起成员列表' : '展开成员列表');
+      }
     };
     const close = () => { sidebar.classList.remove('show'); sync(); };
-    toggle.addEventListener('click', () => { sidebar.classList.toggle('show'); sync(); });
-    mobile.addEventListener('change', () => { close(); });
+    toggle.addEventListener('click', () => {
+      sidebar.classList.toggle('show');
+      sync();
+      if (sidebar.classList.contains('show')) document.querySelector('#navigation-chat')?.focus({ preventScroll: true });
+    });
+    mobile.addEventListener('change', () => {
+      const focusInside = sidebar.contains(document.activeElement);
+      const focusOnToggle = document.activeElement === toggle;
+      close();
+      if (mobile.matches && focusInside) toggle.focus({ preventScroll: true });
+      else if (!mobile.matches && focusOnToggle) document.querySelector('#navigation-chat')?.focus({ preventScroll: true });
+    });
+    scrim?.addEventListener('click', () => { close(); toggle.focus({ preventScroll: true }); });
+    members?.addEventListener('click', () => {
+      if (mobile.matches) { close(); toggle.focus({ preventScroll: true }); }
+      else { membersCollapsed = !membersCollapsed; sync(); }
+    });
+    const chat = () => {
+      if (mobile.matches) close();
+      this.isAtBottom = true;
+      this.elements.chatlog.scrollTop = this.elements.chatlog.scrollHeight;
+      if (mobile.matches) toggle.focus({ preventScroll: true });
+      else this.elements.chatInput.focus({ preventScroll: true });
+    };
+    document.querySelector('#navigation-chat')?.addEventListener('click', chat);
+    document.querySelector('#navigation-channel')?.addEventListener('click', chat);
+    profile?.addEventListener('click', () => {
+      if (this.currentUser) this.profileUI.open(this.currentUser);
+    });
+    this.elements.navigationProfileInfo?.addEventListener('click', () => {
+      if (this.currentUser) this.profileUI.open(this.currentUser);
+    });
+    document.querySelector('#navigation-mentions')?.addEventListener('click', () => {
+      if (mobile.matches) close();
+      this.autocomplete?.insertAtSymbol();
+    });
     sync();
     
     // 点击侧边栏外部区域关闭侧边栏
     document.addEventListener('click', (e) => {
+      if (e.target.closest('dialog')) return;
       if (sidebar.classList.contains('show')) {
         // 检查点击是否在侧边栏外部且不是头部按钮
         if (!sidebar.contains(e.target) && !e.target.closest('.chat-header')) {
@@ -2754,9 +2845,22 @@ class UIManager {
       if (mobile.matches && event.target.closest('.channel')) close();
     });
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && mobile.matches && sidebar.classList.contains('show') && !document.querySelector('dialog[open]')) {
+      if (!mobile.matches || !sidebar.classList.contains('show') || document.querySelector('dialog[open]')) return;
+      if (event.key === 'Escape') {
         close();
         toggle.focus();
+      } else if (event.key === 'Tab') {
+        const controls = [...sidebar.querySelectorAll('button:not(:disabled), a[href], [tabindex="0"]')]
+          .filter(element => element.getClientRects().length);
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
       }
     });
   }

@@ -30,7 +30,7 @@ test('message rendering batches updates without losing or duplicating messages',
         #messages { width: 600px; height: 300px; overflow-y: auto; }
         .message { display: flex; min-height: 40px; padding: 8px; }
       </style>
-      <div class="channel"><span></span></div>
+      <div class="channel" id="navigation-channel"><span class="channel-icon"></span><span class="channel-name"></span></div>
       <div id="messages"></div><textarea id="messageInput"></textarea>
       <div id="online-users"></div><div id="voice-users"></div><div id="offline-users"></div>` }));
     await page.goto('http://nightcord-rendering.test/');
@@ -84,9 +84,12 @@ test('message rendering batches updates without losing or duplicating messages',
       ui.addUserToRoster(guest.displayName, guest);
       const row = ui.elements.roster.firstElementChild;
       const initial = groups();
+      const callIconsHidden = () => row.querySelector('.member-microphone').hidden && row.querySelector('.member-video').hidden;
+      const textIconsHidden = callIconsHidden();
       const members = [{ memberId: 'voice-one', user: pass, publishing: true }, { memberId: 'voice-two', user: guest, publishing: true, microphone: false }];
       ui.eventBus.emit('voice:state', { snapshot: { revision: 1, members } });
       const voice = groups();
+      const voiceIconsVisible = !row.querySelector('.member-microphone').hidden && !row.querySelector('.member-video').hidden;
       const mobile = row.querySelector('.member-presence').dataset.presence;
       const micOn = row.querySelector('.member-microphone').dataset.microphone;
       const guestMic = ui.elements.voiceRoster.lastElementChild.querySelector('.member-microphone').dataset.microphone;
@@ -98,6 +101,7 @@ test('message rendering batches updates without losing or duplicating messages',
       ui.eventBus.emit('voice:state', { snapshot: { revision: 1, members } });
       ui.addUserToRoster('Renamed', { ...pass, displayName: 'Renamed', isMobile: false });
       const returned = groups();
+      const returnedIconsHidden = callIconsHidden();
       const desktop = row.querySelector('.member-presence').dataset.presence;
       const sameRow = row === ui.elements.roster.firstElementChild;
       ui.removeUserFromRoster('Renamed', pass.id);
@@ -110,7 +114,7 @@ test('message rendering batches updates without losing or duplicating messages',
       ui.profileUI.open = profile => opened.push(profile.displayName);
       row.focus(); row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       ui.eventBus.emit('roster:clear');
-      return { initial, voice, returned, departed, guestGone, mobile, desktop, micOn, guestMic, localMute, speaking, sameRow, offlineState, opened, cleared: groups() };
+      return { initial, voice, returned, departed, guestGone, mobile, desktop, micOn, guestMic, localMute, speaking, sameRow, offlineState, textIconsHidden, voiceIconsVisible, returnedIconsHidden, opened, cleared: groups() };
     });
     assert.deepEqual(result.initial, { online: ['sekai:one', 'guest:two'], voice: [], offline: ['sekai:offline'] });
     assert.deepEqual(result.voice, { online: [], voice: ['sekai:one', 'guest:two'], offline: ['sekai:offline'] });
@@ -120,6 +124,7 @@ test('message rendering batches updates without losing or duplicating messages',
     assert.equal(result.mobile, 'mobile'); assert.equal(result.desktop, 'online');
     assert.equal(result.micOn, 'true'); assert.equal(result.guestMic, 'false'); assert.equal(result.localMute, 'false');
     assert.ok(result.speaking && result.sameRow && result.offlineState);
+    assert.ok(result.textIconsHidden && result.voiceIconsVisible && result.returnedIconsHidden);
     assert.deepEqual(result.opened, ['Renamed']);
     assert.deepEqual(result.cleared, { online: [], voice: [], offline: [] });
   });

@@ -4,6 +4,16 @@
 
 ## Key 格式
 
+- 外观配色：
+  - Key: `nightcord-palette`
+  - Value: `gray-purple` 或 `indigo`，默认 `gray-purple`；未知值也回退到 `gray-purple`。
+  - 设置中选择后立即生效；刷新恢复、同源标签页同步。存储不可用时仍可切换本次页面的配色，设置内提示无法保存。只记录配色，不改变布局或风格。
+
+- 成员列表样式：
+  - Key: `nightcord-member-list`
+  - Value: `current`（新版）或 `classic`（旧版），默认 `classic`；未知值回退到旧版。已有选择优先。
+  - 仅改变 `member-list-panel` 内的分组图标、频道和成员行样式，与配色独立。即时生效、刷新恢复、同源标签页同步，不重新创建成员节点。文字聊天和离线成员在两版中均不显示摄像头 / 麦克风图标。
+
 - 聊天消息（按房间）：
   - Key: `nightcord-messages:<roomname>`
   - Value: JSON 数组，元素格式为 { user, text, timestamp, profile, sender }

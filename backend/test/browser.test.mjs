@@ -65,17 +65,56 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
       await page.waitForFunction(() => nightcord.chatRoom.wsManager.ready);
       return page;
     }
+    async function assertChannelRoom(page) {
+      const channel = page.locator('#navigation-channel');
+      assert.equal(await channel.locator('.channel-icon svg').count(), 1, 'room initialization preserves the channel icon');
+      const expected = await page.evaluate(() => nightcord.ui.currentRoom === 'nightcord-default' ? '作业' : nightcord.ui.currentRoom === 'nightcord-test' ? '测试' : nightcord.ui.currentRoom);
+      assert.equal((await channel.locator('.channel-name').textContent()).trim(), expected);
+      assert.equal(await page.locator('#current-channel-name').textContent(), expected);
+    }
     const guest = await pageFor(false, { width: 1280, height: 900 });
+    await assertChannelRoom(guest);
     const guestId = await guest.evaluate(() => nightcord.ui.currentUser.id);
     const cookies = await guest.context().cookies(apiBase);
     assert.ok(cookies.some(cookie => cookie.name === '__Host-nightcord_guest' && cookie.httpOnly && cookie.secure));
     assert.equal(await guest.evaluate(() => document.cookie.includes('nightcord_guest')), false);
     const member = await pageFor(true, { width: 390, height: 844 });
+    await assertChannelRoom(member);
     await guest.waitForFunction(() => nightcord.ui.roster.length === 2);
     const profiles = await guest.evaluate(() => nightcord.ui.roster.map(u => u.profile));
     assert.equal(new Set(profiles.map(u => u.id)).size, 2);
     assert.ok(profiles.every(u => u.displayName === 'Shared name'));
     assert.equal(await member.evaluate(() => nightcord.ui.currentUser.id), 'sekai:stable-subject');
+    // The reference puts the account strip under the member list, outside the rail.
+    const sidebarLayout = await guest.evaluate(() => {
+      const rail = document.querySelector('.navigation-rail').getBoundingClientRect();
+      const account = document.querySelector('.sidebar-account').getBoundingClientRect();
+      const profile = document.querySelector('#navigation-profile').getBoundingClientRect();
+      const settings = document.querySelector('#navigation-settings').getBoundingClientRect();
+      return { railRight: rail.right, accountLeft: account.left, accountBottom: account.bottom, profileLeft: profile.left, settingsTop: settings.top, accountTop: account.top };
+    });
+    assert.equal(sidebarLayout.accountLeft, sidebarLayout.railRight);
+    assert.equal(sidebarLayout.accountBottom, 900);
+    assert.ok(sidebarLayout.profileLeft >= sidebarLayout.accountLeft);
+    assert.ok(sidebarLayout.settingsTop < sidebarLayout.accountTop / 2, 'settings stays with the upper icon stack');
+    assert.equal(await guest.locator('#navigation-username').textContent(), 'Shared name');
+    // The new rail preserves the draft while the desktop member panel is hidden.
+    await guest.locator('#messageInput').fill('Unsent navigation draft');
+    await guest.locator('#navigation-members').click();
+    assert.equal(await guest.locator('.sidebar').evaluate(el => el.getBoundingClientRect().width), 56);
+    assert.equal(await guest.locator('#member-list-panel').isVisible(), false);
+    assert.equal(await guest.locator('.sidebar-account').isVisible(), false);
+    await guest.locator('#navigation-chat').click();
+    assert.equal(await guest.locator('#messageInput').inputValue(), 'Unsent navigation draft');
+    assert.equal(await guest.locator('#messageInput').evaluate(el => el === document.activeElement), true);
+    await guest.locator('#navigation-members').click();
+    assert.equal(await guest.locator('.sidebar-account').isVisible(), true);
+    await guest.locator('#messageInput').fill('');
+    await guest.locator('#navigation-profile').click();
+    assert.equal(await guest.locator('dialog .profile-id').textContent(), guestId);
+    await guest.keyboard.press('Escape');
+    await guest.locator('dialog').waitFor({ state: 'detached' });
+    assert.equal(await guest.locator('#navigation-profile').evaluate(el => el === document.activeElement), true);
     async function openOwnProfile(page) {
       if (page.viewportSize().width <= 768 && !await page.locator('.sidebar').evaluate(el => el.classList.contains('show'))) {
         await page.getByRole('button', { name: '切换成员列表' }).click();
@@ -94,6 +133,13 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     await member.keyboard.press('Escape');
     await dialog.waitFor({ state: 'detached' });
     assert.equal(await member.evaluate(() => document.activeElement.matches('.voice-user')), true);
+    // Closing a profile returns to the mobile navigation drawer. Dismiss it
+    // before composing; its inert background must never receive keystrokes.
+    assert.equal(await member.locator('.main').evaluate(el => el.inert), true);
+    await member.keyboard.press('Escape');
+    assert.equal(await member.locator('.main').evaluate(el => el.inert), false);
+    assert.equal(await member.locator('.sidebar').evaluate(el => el.inert), true);
+    assert.equal(await member.locator('.sidebar-toggle').evaluate(el => el === document.activeElement), true);
     const text = 'Verified browser message';
     await member.locator('#messageInput').fill(text);
     await member.locator('#messageInput').press('Enter');
@@ -122,6 +168,7 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     assert.equal(await guest.evaluate(text => nightcord.ui.messages.find(m => m.text === text).profile.displayName, text), 'Shared name');
     await guest.reload({ waitUntil: 'domcontentloaded' });
     await guest.waitForFunction(() => nightcord.chatRoom.wsManager.ready && nightcord.ui.roster.length === 2);
+    await assertChannelRoom(guest);
     assert.equal(await guest.evaluate(() => nightcord.ui.currentUser.id), guestId);
     assert.equal(await guest.evaluate(text => nightcord.ui.messages.filter(m => m.text === text && m.profile?.id === 'sekai:stable-subject').length, text), 1);
     await openOwnProfile(guest);

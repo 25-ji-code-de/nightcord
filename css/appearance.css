@@ -1,0 +1,78 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* Bridge palettes to the existing component contract. No geometry or motion. */
+:root.world-night[data-palette] {
+  color-scheme: dark;
+  --sekai-canvas: var(--nc-canvas);
+  --sekai-surface: var(--nc-sidebar);
+  --sekai-surface-raised: var(--nc-panel);
+  --sekai-surface-sunken: var(--nc-input);
+  --sekai-surface-hover: var(--nc-hover);
+  --sekai-surface-card: var(--nc-card);
+  --sekai-surface-card-live: var(--nc-card-live);
+  --sekai-divider: var(--nc-divider);
+  --sekai-line: var(--nc-line);
+  --sekai-line-a: var(--nc-line-alpha);
+  --sekai-line-strong: var(--nc-line);
+  --sekai-fg: var(--nc-text);
+  --sekai-fg-muted: var(--nc-text-muted);
+  --sekai-fg-subtle: var(--nc-text-subtle);
+  --sekai-accent: var(--nc-accent);
+  --sekai-accent-hover: var(--nc-accent-hover);
+  --sekai-accent-deep: var(--nc-accent-fill);
+  --sekai-accent-fill: var(--nc-accent-fill);
+}
+
+body, .chat-root, .main { background: rgb(var(--nc-canvas)); color: rgb(var(--nc-text)); }
+.sidebar { background: rgb(var(--nc-sidebar)); }
+.server-header, .chat-header { border-bottom-color: rgb(var(--nc-divider)); }
+.server-header:hover { background: rgb(var(--nc-hover) / .5); }
+.chat-header { background: rgb(var(--nc-header) / var(--nc-header-alpha)); }
+.channel, .voice-user:hover { background: rgb(var(--nc-selection)); }
+.section-label, .message-time, .input-btn, .sticker-broken { color: rgb(var(--nc-text-muted)); }
+.member-list {
+  --member-online: rgb(var(--nc-online));
+  --member-text: rgb(var(--nc-member-text));
+  --member-muted: rgb(var(--nc-member-muted));
+  --member-microphone: rgb(var(--nc-member-microphone));
+  --member-surface: rgb(var(--nc-sidebar));
+  --member-hover: rgb(var(--nc-selection));
+  --member-device-screen: rgb(var(--nc-device-screen));
+}
+.input-box { background: rgb(var(--nc-composer)); }
+.input-area { background: rgb(var(--nc-canvas)); }
+.input { color: rgb(var(--nc-text)); scrollbar-color: rgb(var(--nc-accent) / .3) transparent; }
+.input::placeholder { color: rgb(var(--nc-text-subtle)); }
+.input::-webkit-scrollbar-thumb { background: rgb(var(--nc-accent) / .3); }
+.input::-webkit-scrollbar-thumb:hover { background: rgb(var(--nc-accent) / .5); }
+.input-btn:hover { background: rgb(var(--nc-hover)); color: rgb(var(--nc-text)); }
+.message-reply-btn { background: rgb(var(--nc-sidebar)); border-color: rgb(var(--nc-divider)); }
+.message-reply-btn:hover { background: rgb(var(--nc-canvas)); color: rgb(var(--nc-text)); }
+.message-reply-btn:active { background: rgb(var(--nc-sidebar)); }
+.message-file { background: rgb(var(--nc-attachment)); color: rgb(var(--nc-text-on-attachment)); }
+.file-icon { background: rgb(var(--nc-attachment-icon)); }
+.file-size, .file-download, .file-icon { color: rgb(var(--nc-text-on-attachment-muted)); }
+.file-download:hover, .sticker-loading { background: rgb(var(--nc-hover)); }
+.name-chooser-content, .auth-error-panel { background: rgb(var(--nc-panel)); }
+.name-input, .name-input:focus { background: rgb(var(--nc-input)); color: rgb(var(--nc-text)); }
+.sekai-code-inline { background: rgb(var(--nc-panel)); }
+.sekai-text-node strong { color: rgb(var(--nc-text)); }
+
+/* Rich media keeps its current construction; the indigo palette supplies ink. */
+[data-palette="indigo"] .messages { scrollbar-color: rgb(var(--nc-input)) rgb(var(--nc-sidebar)); }
+[data-palette="indigo"] .sekai-file-card { background: rgb(var(--nc-attachment)); color: rgb(var(--nc-text-on-attachment)); }
+[data-palette="indigo"] .sekai-file-card:hover { background: rgb(var(--nc-attachment) / .85); }
+[data-palette="indigo"] .sekai-file-icon { background: rgb(var(--nc-panel) / .25); color: rgb(var(--nc-icon)); }
+[data-palette="indigo"] .sekai-file-name { color: rgb(var(--nc-text-on-attachment)); }
+[data-palette="indigo"] :is(.sekai-file-meta, .sekai-file-action) { color: rgb(var(--nc-text-on-attachment-muted)); opacity: 1; }
+[data-palette="indigo"] :is(.sekai-link-site, .sekai-link-desc, .sekai-link-arrow) { color: rgb(var(--nc-text-muted)); }
+[data-palette="indigo"] .sekai-link-title { color: rgb(var(--nc-text)); }
+[data-palette="indigo"] .sekai-code-block { background: rgb(var(--nc-panel)); color: rgb(var(--nc-text-muted)); }
+[data-palette="indigo"] .sekai-text-node em { color: rgb(var(--nc-text-muted)); }
+[data-palette="indigo"] .sekai-reply-chip { background: rgb(var(--nc-panel) / .5); color: rgb(var(--nc-text-muted)); border-left-color: rgb(var(--nc-accent-fill)); }
+[data-palette="indigo"] .sekai-reply-chip:hover { background: rgb(var(--nc-hover)); color: rgb(var(--nc-text)); border-left-color: rgb(var(--nc-accent)); }
+[data-palette="indigo"] :is(.mention-list, .file-upload-menu, .file-upload-progress) { background: rgb(var(--nc-panel)); border-color: rgb(var(--nc-divider)); }
+[data-palette="indigo"] :is(.mention-item:hover, .mention-item.selected, .file-upload-menu-item:hover) { background: rgb(var(--nc-hover)); }
+[data-palette="indigo"] .drag-overlay { background: rgb(var(--nc-canvas) / .9); }
+@media (max-width: 768px) {
+  .chat-header { background: rgb(var(--nc-header) / var(--nc-header-alpha)); }
+}

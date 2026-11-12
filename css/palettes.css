@@ -1,0 +1,77 @@
+/*
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * Nightcord palettes. Shared by the application and the design preview.
+ * Select data-palette="gray-purple" or data-palette="indigo" on an ancestor.
+ * Space-separated RGB, as in the existing SEKAI color contract.
+ * Colors only: no layout, font, radius or motion settings.
+ * Sources and inferred values: docs/design/palette-notes.md.
+ */
+[data-palette="gray-purple"] {
+  /* Existing colors; navigation extends the deepest existing surface. */
+  --nc-navigation: 43 38 51;       /* #2B2633 */
+  --nc-sidebar: 63 53 91;          /* #3F355B */
+  --nc-canvas: 80 71 106;          /* #50476A */
+  --nc-header: 78 72 104;          /* #4E4868 */
+  --nc-header-alpha: 0.8;
+  --nc-composer: 63 53 91;         /* #3F355B */
+  --nc-selection: 80 71 106;       /* #50476A */
+  --nc-hover: 61 55 80;            /* #3D3750 */
+  --nc-attachment: 43 38 51;       /* #2B2633 */
+  --nc-attachment-icon: 61 55 80;  /* #3D3750 */
+  --nc-panel: 43 38 51;           /* #2B2633 */
+  --nc-input: 30 27 36;           /* #1E1B24 */
+  --nc-divider: 43 38 51;         /* #2B2633 */
+  --nc-text: 255 255 255;         /* #FFFFFF */
+  --nc-text-muted: 189 189 189;   /* #BDBDBD */
+  --nc-text-on-attachment: 255 255 255;
+  --nc-text-on-attachment-muted: 189 189 189;
+  --nc-icon: 222 218 234;         /* #DEDAEA */
+  --nc-accent: 167 139 250;       /* #A78BFA */
+  --nc-accent-hover: 196 181 253;
+  --nc-accent-fill: 124 111 172;  /* #7C6FAC */
+  --nc-online: 178 247 239;       /* #B2F7EF */
+  --nc-text-subtle: 136 136 136;
+  --nc-member-text: 238 235 244;
+  --nc-member-muted: 137 130 159;
+  --nc-member-microphone: 189 181 208;
+  --nc-device-screen: 40 40 63;
+  --nc-card: 47 39 63;
+  --nc-card-live: 53 46 70;
+  --nc-line: 255 255 255;
+  --nc-line-alpha: 0.08;
+}
+[data-palette="indigo"] {
+  /* Stable close-up samples, rather than the blue-lit wide shot. */
+  --nc-navigation: 21 22 41;      /* #151629 — sampled */
+  --nc-sidebar: 46 47 91;         /* #2E2F5B — sampled */
+  --nc-canvas: 61 64 112;         /* #3D4070 — sampled */
+  /* Other surfaces reconstruct the relative steps in wide shots. */
+  --nc-header: 61 64 112;         /* #3D4070 */
+  --nc-header-alpha: 1;
+  --nc-composer: 51 54 91;        /* #33365B */
+  --nc-selection: 60 61 109;      /* #3C3D6D */
+  --nc-hover: 54 55 97;           /* #363761 */
+  --nc-attachment: 81 86 135;     /* #515687 */
+  --nc-attachment-icon: 81 86 135;
+  --nc-panel: 36 38 66;           /* #242642 */
+  --nc-input: 30 32 60;           /* #1E203C */
+  --nc-divider: 33 35 67;         /* #212343 */
+  --nc-text: 238 242 255;         /* #EEF2FF */
+  --nc-text-muted: 190 197 227;   /* #BEC5E3 */
+  --nc-text-on-attachment: 238 242 255;
+  --nc-text-on-attachment-muted: 208 213 237; /* #D0D5ED */
+  --nc-icon: 211 220 248;         /* #D3DCF8 */
+  --nc-accent: 181 189 245;       /* #B5BDF5 */
+  --nc-accent-hover: 211 220 248;
+  --nc-accent-fill: 84 90 149;    /* #545A95 */
+  --nc-online: 71 184 95;         /* #47B85F */
+  --nc-text-subtle: 159 169 205;
+  --nc-member-text: 238 242 255;
+  --nc-member-muted: 159 169 205;
+  --nc-member-microphone: 190 197 227;
+  --nc-device-screen: 24 26 51;
+  --nc-card: 36 38 66;
+  --nc-card-live: 46 49 82;
+  --nc-line: 211 220 248;
+  --nc-line-alpha: 0.12;
+}

@@ -847,7 +847,7 @@ class UIManager {
             </span>
             <span class="voice-user-name">${escapeHtml(user.name)}</span>
           </div>
-          <span class="member-video" aria-hidden="true" title="摄像头未开启"><svg width="18" height="16" viewBox="0 0 28 24" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18.5V5.8Q3 3 5.8 3h12.6M10.8 21h7.4q2.8 0 2.8-2.8v-5.6M21 16.3l6 3.5v-13M3 22 25 1"/></svg></span>
+          <span class="member-video" aria-hidden="true" title="摄像头未开启"><svg width="18" height="16" viewBox="0 0 28 24" fill="currentColor" aria-hidden="true" focusable="false" data-navigation-icon="camera"><path fill-rule="evenodd" d="M3.7 16.3V6.6C3.7 5.1 4.3 4.65 5.8 4.65H15.95Q16.35 4.65 16.65 4.36L17.6 3.41Q18.2 2.78 17.4 2.63C17 2.5 16.9 2.5 16.1 2.5H5.7C3.6 2.5 1.65 3.98 1.65 6V17.9Q1.65 18.95 2.4 18.35L3.3 17.45Q3.7 17.05 3.7 16.3ZM24.3 7.1Q24.3 6.7 24.6 6.39L25.65 5.36Q26.35 4.85 26.35 6.45V16.45C26.35 18.7 25.75 19.65 24.55 19.55C23.75 19.55 23.3 19.07 22.3 18.6L21.3 18Q20.65 17.6 20.43 18.35C19.8 20.7 18.2 21.47 16.1 21.47H10.4Q9.55 21.47 10.1 20.8L11.23 19.65Q11.52 19.37 12.2 19.37H16.15C17.65 19.37 18.48 18.9 18.48 17.2V12.7Q18.48 12.1 18.9 11.69L20.17 10.43Q20.57 10.05 20.57 10.75V14.25Q20.57 15.2 21.3 15.65L23.7 17.05Q24.3 17.4 24.3 16.45Z"/><path d="M4 22 24 2" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg></span>
           <span class="member-microphone" aria-hidden="true" hidden></span>
         `;
       }
@@ -880,8 +880,8 @@ class UIManager {
       if (mic.dataset.microphone !== String(microphone)) {
         mic.dataset.microphone = String(microphone);
         mic.innerHTML = microphone
-          ? '<svg width="14" height="16" viewBox="0 0 16 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="4.9" y="1" width="6.2" height="13" rx="3.1" fill="currentColor" stroke="none"/><path d="M2 9v4.5a6 6 0 0 0 12 0V9M8 19.5V23M2 23h12"/></svg>'
-          : '<svg width="14" height="16" viewBox="0 0 16 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 10.65V4.1a3.1 3.1 0 0 1 6.2 0v.6Z" fill="currentColor" stroke="none"/><path d="M2 9v4.5a6 6 0 0 0 .9 3.2M6 19.15a6 6 0 0 0 8-5.65V9M8 19.5V23M2 23h12M1 21 15 3"/></svg>';
+          ? '<svg width="14" height="16" viewBox="0 0 16 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="mic"><rect class="microphone-capsule-on" x="4.8" y="1" width="6.4" height="12.7" rx="3.2" fill="currentColor" stroke="none"/><path class="microphone-support-on" d="M2 9.5v3a6 6 0 0 0 12 0v-3M8 18.5V22M2 22h12"/></svg>'
+          : '<svg width="14" height="16" viewBox="0 0 16 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="mic-off"><path class="microphone-capsule-off" d="M4.9 10.65V4.1a3.1 3.1 0 0 1 6.2 0v.6Z" fill="currentColor" stroke="none"/><path class="microphone-support-off" d="M2 9v4.5a6 6 0 0 0 .9 3.2M6 19.15a6 6 0 0 0 8-5.65V9M8 19.5V23M2 23h12"/><path class="microphone-slash" d="M1 21 15 3"/></svg>';
       }
       mic.title = micState;
       div.title = `${user.name} · ${presenceState}${user.voice ? ` · ${micState}` : ''}`;

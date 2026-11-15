@@ -534,6 +534,14 @@ document.addEventListener('DOMContentLoaded', () => {
           </label>
         </div>
       </fieldset>
+      <label class="settings-toggle" for="rounded-corners-toggle">
+        <span class="settings-toggle-copy">
+          <span class="settings-toggle-title" id="rounded-corners-title">圆角</span>
+          <span class="settings-description" id="rounded-corners-description">默认开启，关闭后界面统一使用直角。</span>
+        </span>
+        <input type="checkbox" role="switch" id="rounded-corners-toggle" aria-labelledby="rounded-corners-title" aria-describedby="rounded-corners-description" checked>
+        <span class="settings-toggle-track" aria-hidden="true"></span>
+      </label>
     </div>
     <footer class="settings-footer"><p id="palette-status" role="status">选择后立即生效，自动保存在此浏览器。</p></footer>
   </dialog>

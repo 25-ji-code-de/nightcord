@@ -76,3 +76,20 @@ body, .chat-root, .main { background: rgb(var(--nc-canvas)); color: rgb(var(--nc
 @media (max-width: 768px) {
   .chat-header { background: rgb(var(--nc-header) / var(--nc-header-alpha)); }
 }
+
+/* Explicit global preference: include fixed/inline radii and dynamic overlays.
+ * Removing the preference restores each component's original radius. */
+:root[data-rounded-corners="off"],
+:root[data-rounded-corners="off"] *,
+:root[data-rounded-corners="off"] *::before,
+:root[data-rounded-corners="off"] *::after {
+  border-radius: 0 !important;
+}
+/* Keep browser-specific pseudo-elements separate so unsupported ones cannot
+ * invalidate the other rules. */
+:root[data-rounded-corners="off"] *::-webkit-scrollbar-thumb { border-radius: 0 !important; }
+:root[data-rounded-corners="off"] *::-webkit-scrollbar-track { border-radius: 0 !important; }
+:root[data-rounded-corners="off"] input::-webkit-slider-thumb { border-radius: 0 !important; }
+:root[data-rounded-corners="off"] input::-webkit-slider-runnable-track { border-radius: 0 !important; }
+:root[data-rounded-corners="off"] input::-moz-range-thumb { border-radius: 0 !important; }
+:root[data-rounded-corners="off"] input::-moz-range-track { border-radius: 0 !important; }

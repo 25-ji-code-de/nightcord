@@ -14,6 +14,11 @@
   - Value: `current`（新版）或 `classic`（旧版），默认 `classic`；未知值回退到旧版。已有选择优先。
   - 仅改变 `member-list-panel` 内的分组图标、频道和成员行样式，与配色独立。即时生效、刷新恢复、同源标签页同步，不重新创建成员节点。文字聊天和离线成员在两版中均不显示摄像头 / 麦克风图标。
 
+- 界面圆角：
+  - Key: `nightcord-rounded-corners`
+  - Value: `on`（圆角）或 `off`（直角），默认 `on`；未知值回退到圆角。
+  - 与配色、成员列表样式独立。首次绘制前恢复选择；切换即时生效、自动保存、同源标签页同步。存储不可用时仍可切换，设置内提示无法保存。
+
 - 聊天消息（按房间）：
   - Key: `nightcord-messages:<roomname>`
   - Value: JSON 数组，元素格式为 { user, text, timestamp, profile, sender }

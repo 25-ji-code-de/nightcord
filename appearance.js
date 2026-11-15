@@ -4,10 +4,12 @@
 
   const key = 'nightcord-palette';
   const memberListKey = 'nightcord-member-list';
+  const roundedCornersKey = 'nightcord-rounded-corners';
   const palettes = { 'gray-purple': { name: '灰紫', canvas: '#50476a' }, indigo: { name: '靛蓝', canvas: '#3d4070' } };
   const memberLists = { current: '新版', classic: '旧版' };
   const normalize = value => Object.hasOwn(palettes, value) ? value : 'gray-purple';
   const normalizeMemberList = value => Object.hasOwn(memberLists, value) ? value : 'classic';
+  const normalizeRoundedCorners = value => value === 'off' ? 'off' : 'on';
   const read = (storageKey = key, validate = normalize) => {
     try { return validate(localStorage.getItem(storageKey)); }
     catch { return validate(null); }
@@ -27,6 +29,12 @@
     return memberList;
   };
   applyMemberList(read(memberListKey, normalizeMemberList));
+  const applyRoundedCorners = value => {
+    const roundedCorners = normalizeRoundedCorners(value);
+    document.documentElement.dataset.roundedCorners = roundedCorners;
+    return roundedCorners;
+  };
+  applyRoundedCorners(read(roundedCornersKey, normalizeRoundedCorners));
 
   document.addEventListener('DOMContentLoaded', () => {
     const trigger = document.querySelector('#navigation-settings');
@@ -34,12 +42,15 @@
     if (!trigger || !dialog) return;
     const options = [...dialog.querySelectorAll('input[name="nightcord-palette"]')];
     const memberListOptions = [...dialog.querySelectorAll('input[name="nightcord-member-list"]')];
+    const roundedCornersToggle = dialog.querySelector('#rounded-corners-toggle');
     const status = dialog.querySelector('#palette-status');
     const sync = palette => options.forEach(option => { option.checked = option.value === palette; });
     const syncMemberList = value => memberListOptions.forEach(option => { option.checked = option.value === value; });
+    const syncRoundedCorners = value => { roundedCornersToggle.checked = value === 'on'; };
     let previousFocus;
     sync(document.documentElement.dataset.palette);
     syncMemberList(document.documentElement.dataset.memberList);
+    syncRoundedCorners(document.documentElement.dataset.roundedCorners);
 
     trigger.addEventListener('click', () => {
       if (dialog.open) return;
@@ -59,7 +70,7 @@
       if (event.key !== 'Tab') return;
       // A native radio group contributes only the selected option to Tab order.
       const first = dialog.querySelector('.settings-close');
-      const last = memberListOptions.find(option => option.checked);
+      const last = roundedCornersToggle;
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last?.focus();
@@ -105,6 +116,16 @@
         }
       });
     }
+    roundedCornersToggle.addEventListener('change', () => {
+      const roundedCorners = applyRoundedCorners(roundedCornersToggle.checked ? 'on' : 'off');
+      const message = roundedCorners === 'on' ? '已开启圆角' : '已关闭圆角，界面已切换为直角';
+      try {
+        localStorage.setItem(roundedCornersKey, roundedCorners);
+        status.textContent = `${message}，已自动保存。`;
+      } catch {
+        status.textContent = `${message}；此浏览器无法保存，刷新后会恢复默认。`;
+      }
+    });
     window.addEventListener('storage', event => {
       if (event.key === key || event.key === null) {
         const palette = apply(read());
@@ -115,6 +136,11 @@
         const memberList = applyMemberList(read(memberListKey, normalizeMemberList));
         syncMemberList(memberList);
         status.textContent = `成员列表：${memberLists[memberList]}。`;
+      }
+      if (event.key === roundedCornersKey || event.key === null) {
+        const roundedCorners = applyRoundedCorners(read(roundedCornersKey, normalizeRoundedCorners));
+        syncRoundedCorners(roundedCorners);
+        status.textContent = roundedCorners === 'on' ? '圆角已开启。' : '圆角已关闭。';
       }
     });
   }, { once: true });

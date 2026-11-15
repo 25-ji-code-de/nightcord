@@ -4,6 +4,13 @@
 
 ## Key 格式
 
+- 侧边栏任务与收件箱已读状态：
+  - Key: `nightcord-sidebar:<encodeURIComponent(roomname)>:<encodeURIComponent(userId)>`
+  - Value: `{ tasks: [{ id, title, done, due }], read: { "<timestamp>:<senderId>": true } }`。
+  - 当前身份由服务端确认后启用；按身份和房间隔离。最多 200 项任务（标题 200 字），已读标记最多保留 2000 条。截止日期 `due` 为 `YYYY-MM-DD` 或空字符串。
+  - 收件箱从已加载聊天记录中取最新的最多 2000 条提及，不重复保存消息内容。任务及已读状态刷新后恢复，并响应同源标签页更新；不跨设备同步。访客 Cookie 清除后会产生新身份，原任务不会自动转移。
+  - 存储不可用时保留当前页面内的改动并明确提示；清除站点数据会删除这些内容。删除任务可在当前窗口撤销最近一次操作。
+
 - 外观配色：
   - Key: `nightcord-palette`
   - Value: `gray-purple` 或 `indigo`，默认 `gray-purple`；未知值也回退到 `gray-purple`。

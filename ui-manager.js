@@ -693,6 +693,7 @@ class UIManager {
     } catch (e) {
       // ignore
     }
+    this.eventBus.emit('room:changed', { roomname });
   }
 
   // 如果 StorageManager 不可用，保留一组兼容的本地 helper（非常规情况）
@@ -724,6 +725,7 @@ class UIManager {
 
   setSessionUnavailable() {
     this.currentUser = null;
+    this.eventBus.emit('session:unavailable');
     this.updateNavigationProfile();
   }
 
@@ -2444,6 +2446,7 @@ class UIManager {
     open.addEventListener('click', () => {
       const message = this.messageIndex.get(Number(data.timestamp));
       if (message) {
+        this.sidebarFeatures?.close(false);
         message.scrollIntoView({ block: 'center' });
         message.tabIndex = -1;
         message.focus({ preventScroll: true });

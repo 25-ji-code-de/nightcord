@@ -37,6 +37,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
   <link rel="stylesheet" href="/css/voice.css">
   <link rel="stylesheet" href="/css/appearance.css">
   <link rel="stylesheet" href="/css/settings.css">
+  <link rel="stylesheet" href="/css/sidebar-tools.css">
 </head>
 
 <body>
@@ -93,9 +94,9 @@ Copyright (C) 2025 The 25-ji-code-de Team
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="house"><path d="M14.9 3.7a1.55 1.55 0 0 1 2.2 0L28 14.6q.6.6.6 1.5v11.7q0 1.2-1.2 1.2h-6.7q-1.2 0-1.2-1.2v-6.4q0-.8-.8-.8h-5.4q-.8 0-.8.8v6.4q0 1.2-1.2 1.2H4.6q-1.2 0-1.2-1.2V16.1q0-.9.6-1.5Z"/></svg>
             <span class="navigation-tooltip" aria-hidden="true">聊天</span>
           </button>
-          <button type="button" class="navigation-item" aria-label="搜索（暂未开放）" disabled>
+          <button type="button" class="navigation-item" id="navigation-search" aria-label="搜索" aria-controls="sidebar-tools">
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="search"><circle cx="13.5" cy="13.5" r="11.2"/><path d="m21.65 21.65 7.05 7.05"/></svg>
-            <span class="navigation-tooltip" aria-hidden="true">搜索（暂未开放）</span>
+            <span class="navigation-tooltip" aria-hidden="true">搜索</span>
           </button>
           <button type="button" class="navigation-item" aria-label="私信（暂未开放）" disabled>
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="plane"><path d="m2.8 2.8 26.4 8.8-11 6.6-6.6 11Z"/><path d="m2.8 2.8 15.4 15.4"/></svg>
@@ -105,21 +106,21 @@ Copyright (C) 2025 The 25-ji-code-de Team
             <svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true" focusable="false" data-navigation-icon="at"><path fill-rule="evenodd" d="M16.1 2.5C8.2 2.5 3 8.15 3 16.2C3 24.5 8.2 29.5 16.2 29.5C19.6 29.5 22.7 28.65 25 27C25.4 26.7 25.35 26.3 25.05 25.98C24.75 25.65 24.4 25.65 24.05 25.88C21.5 27.4 18.7 28 16.2 28C9 28 4.5 23.45 4.5 16.2C4.5 9 9.2 3.85 16.1 3.85C23.25 3.85 27.65 8.1 27.65 14.8C27.65 18.95 26.75 21 24 21C21.35 21 21.325 18.75 21.325 16.2V11.08Q21.3 10.28 20.65 10.35Q19.55 10.35 19.55 11.1V11.5Q19.55 12.13 19 11.75C17.75 10.6 16.55 10.16 15.2 10.16C13.1 10.12 11.4 11.2 10.42 13.1C9.75 14.65 9.48 16.65 10.06 18.3C10.76 20.8 12.8 22.6 15.65 22.2C17.35 21.95 18.55 21.2 19.45 19.65C20.1 21.65 21.8 22.4 23.6 22.35C27.05 22.3 29.05 20.3 29.05 15.9C29.05 7.65 24.35 2.5 16.1 2.5ZM15.05 11.88C17 11.65 19.45 12.9 19.45 15V17.1C19.25 18.55 18.4 19.85 16.7 20.4C14.9 20.95 13.2 20.25 12 18.7C11.35 17.8 11.45 15.1 12 14.15C12.65 12.85 13.7 12.08 15.05 11.88Z"/></svg>
             <span class="navigation-tooltip" aria-hidden="true">提及成员</span>
           </button>
-          <button type="button" class="navigation-item" aria-label="收件箱（暂未开放）" disabled>
+          <button type="button" class="navigation-item" id="navigation-inbox" aria-label="收件箱" aria-controls="sidebar-tools">
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="envelope"><rect x="2.3" y="6.2" width="27.4" height="19.6" rx=".9"/><path d="m2.7 6.8 12.45 13.05q.85.9 1.7 0L29.3 6.8"/></svg>
-            <span class="navigation-tooltip" aria-hidden="true">收件箱（暂未开放）</span>
+            <span class="navigation-tooltip" aria-hidden="true">收件箱</span>
           </button>
           <button type="button" class="navigation-item" id="navigation-members" aria-label="收起成员列表" aria-controls="member-list-panel" aria-expanded="true">
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="chevrons"><path d="m2.7 15.5 12.7-12.7q.6-.6 1.2 0l12.7 12.7M2.7 29.2l12.7-12.7q.6-.6 1.2 0l12.7 12.7"/></svg>
             <span class="navigation-tooltip" aria-hidden="true">成员列表</span>
           </button>
-          <button type="button" class="navigation-item" aria-label="任务（暂未开放）" disabled>
+          <button type="button" class="navigation-item" id="navigation-tasks" aria-label="任务" aria-controls="sidebar-tools">
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="check"><circle cx="16" cy="16" r="14.25" stroke-width="1.5"/><path fill="currentColor" stroke="none" d="M20.95 8.58h1.43q.32 0 .14.33l-7.84 14.22q-.18.35-.62.35-.41 0-.69-.45l-4.14-6.73q-.18-.3.09-.49l.88-.63q.3-.18.5.14l3.08 5.02q.25.41.5-.04l6.3-11.44q.14-.28.37-.28Z"/></svg>
-            <span class="navigation-tooltip" aria-hidden="true">任务（暂未开放）</span>
+            <span class="navigation-tooltip" aria-hidden="true">任务</span>
           </button>
-          <button type="button" class="navigation-item" aria-label="帮助（暂未开放）" disabled>
+          <button type="button" class="navigation-item" id="navigation-help" aria-label="帮助" aria-controls="sidebar-tools">
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="help"><circle cx="16" cy="16" r="13.6"/><path d="M12.1 12.3c0-2.35 1.55-3.8 4-3.8 2.35 0 3.9 1.4 3.9 3.55 0 3.35-4.25 3.45-4.25 6.35v.65" stroke-width="2.2"/><circle cx="15.75" cy="23" r="1.1" fill="currentColor" stroke="none"/></svg>
-            <span class="navigation-tooltip" aria-hidden="true">帮助（暂未开放）</span>
+            <span class="navigation-tooltip" aria-hidden="true">帮助</span>
           </button>
           <button type="button" class="navigation-item navigation-settings" id="navigation-settings" aria-label="设置" aria-haspopup="dialog" aria-controls="appearance-settings">
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="gear"><path d="M12.546 6.064Q12.915 5.911 13.005 5.521L13.51 3.338Q13.656 2.705 14.306 2.705L17.694 2.705Q18.344 2.705 18.49 3.338L18.995 5.521Q19.085 5.911 19.454 6.064L20.583 6.532Q20.953 6.685 21.292 6.473L23.192 5.286Q23.743 4.941 24.203 5.401L26.599 7.797Q27.059 8.257 26.714 8.808L25.527 10.708Q25.315 11.047 25.468 11.417L25.936 12.546Q26.089 12.915 26.479 13.005L28.662 13.51Q29.295 13.656 29.295 14.306L29.295 17.694Q29.295 18.344 28.662 18.49L26.479 18.995Q26.089 19.085 25.936 19.454L25.468 20.583Q25.315 20.953 25.527 21.292L26.714 23.192Q27.059 23.743 26.599 24.203L24.203 26.599Q23.743 27.059 23.192 26.714L21.292 25.527Q20.953 25.315 20.583 25.468L19.454 25.936Q19.085 26.089 18.995 26.479L18.49 28.662Q18.344 29.295 17.694 29.295L14.306 29.295Q13.656 29.295 13.51 28.662L13.005 26.479Q12.915 26.089 12.546 25.936L11.417 25.468Q11.047 25.315 10.708 25.527L8.808 26.714Q8.257 27.059 7.797 26.599L5.401 24.203Q4.941 23.743 5.286 23.192L6.473 21.292Q6.685 20.953 6.532 20.583L6.064 19.454Q5.911 19.085 5.521 18.995L3.338 18.49Q2.705 18.344 2.705 17.694L2.705 14.306Q2.705 13.656 3.338 13.51L5.521 13.005Q5.911 12.915 6.064 12.546L6.532 11.417Q6.685 11.047 6.473 10.708L5.286 8.808Q4.941 8.257 5.401 7.797L7.797 5.401Q8.257 4.941 8.808 5.286L10.708 6.473Q11.047 6.685 11.417 6.532Z"/><circle cx="16" cy="16" r="4.45"/></svg>
@@ -573,6 +574,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <script src="/ui-manager.js"></script>
   <script src="/voice-manager.js"></script>
   <script src="/voice-ui.js"></script>
+  <script src="/sidebar-features.js"></script>
   <script src="/nightcord.js"></script>
   <script src="/boot.js"></script>
   <script src="/pangu.js"></script>

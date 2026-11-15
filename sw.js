@@ -52,6 +52,7 @@ const PRECACHE = [
   '/css/voice.css',
   '/css/appearance.css',
   '/css/settings.css',
+  '/css/sidebar-tools.css',
   // index.html 中的脚本
   '/appearance.js',
   '/purify.js',
@@ -80,6 +81,7 @@ const PRECACHE = [
   '/ui-manager.js',
   '/voice-manager.js',
   '/voice-ui.js',
+  '/sidebar-features.js',
   '/nightcord.js',
   '/boot.js',
   '/pangu.js',

@@ -29,6 +29,8 @@ class Nightcord {
       eventBus: this.eventBus
     });
     this.ui = new UIManager(this.eventBus);
+    this.sidebarFeatures = new SidebarFeatures(this.ui);
+    this.ui.sidebarFeatures = this.sidebarFeatures;
     this.voice = new VoiceManager({ eventBus: this.eventBus, chatRoom: this.chatRoom });
     this.voiceUI = new VoiceUI(this.voice, this.eventBus);
 

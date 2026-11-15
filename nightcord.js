@@ -175,9 +175,16 @@ class Nightcord {
     // voiceJoined：本地上一次是否处于语音通话中，用于判断“刚加入”或“刚退出”。
     let voiceJoined = false;
     let voiceMembers = new Set();
-    this.eventBus.on('voice:changed', ({ joined, members }) => {
+    this.eventBus.on('voice:changed', state => {
+      // Keep the notification path tolerant of partial state updates. Voice
+      // state is internal today, but a transient teardown or an older caller
+      // may omit the member snapshot; that must not poison the event bus.
+      if (!state || typeof state !== 'object' || typeof state.joined !== 'boolean') return;
+      if (state.joined && !Array.isArray(state.members)) return;
+      const joined = state.joined;
+      const members = Array.isArray(state.members) ? state.members : [];
       // joined：这次事件上报时，本地当前是否处于语音通话中。
-      const memberIds = new Set(members.map(member => member.memberId));
+      const memberIds = new Set(members.map(member => member?.memberId).filter(Boolean));
       // joined 与 voiceJoined 不同时，说明状态刚刚发生了加入/退出变化。
       if (joined !== voiceJoined) {
         playSound(joined ? 'join' : 'quit');

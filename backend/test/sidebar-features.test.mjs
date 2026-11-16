@@ -108,6 +108,10 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     assert.equal(await page.locator('.tools-help summary').textContent(), '发送消息、表情与附件');
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#navigation-help').evaluate(node => node === document.activeElement), true);
+    await page.locator('#navigation-help').click();
+    await page.keyboard.press('Control+k');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#navigation-search').evaluate(node => node === document.activeElement), true);
     assert.equal(await page.evaluate(() => !!window.injected), false);
     await page.evaluate(() => {
       for (let index = 0; index < 55; index++) ui.addChatMessage('Pagination', `page ${index}`, Date.now() + index, undefined, undefined, peer);
@@ -261,6 +265,15 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     await page.locator('#navigation-search').click();
     await page.getByRole('button', { name: '打开导航', exact: true }).click();
     assert.equal(await page.locator('.sidebar').evaluate(node => node.classList.contains('show')), true);
+    assert.equal(await page.locator('.tools-menu').getAttribute('aria-expanded'), 'true');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#sidebar-tools').isVisible(), true);
+    assert.equal(await page.locator('.tools-menu').evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator('.tools-menu').getAttribute('aria-expanded'), 'false');
+    await page.locator('.tools-menu').click();
+    await page.locator('.navigation-scrim').click({ position: { x: 650, y: 50 } });
+    assert.equal(await page.locator('.tools-menu').evaluate(node => node === document.activeElement), true);
+    await page.locator('.tools-menu').click();
     await page.locator('#navigation-inbox').click();
     await page.locator('.tool-message-link').first().click();
     assert.equal(await page.locator('.sidebar').evaluate(node => node.classList.contains('show')), false);

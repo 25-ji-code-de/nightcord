@@ -2781,6 +2781,7 @@ class UIManager {
     const members = document.querySelector('#navigation-members');
     const profile = this.elements.navigationProfile;
     const mobile = window.matchMedia('(max-width: 768px)');
+    const visibleToggle = () => main.classList.contains('tool-view') ? document.querySelector('.tools-menu') || toggle : toggle;
     let membersCollapsed = false;
     const sync = () => {
       const drawerOpen = mobile.matches && sidebar.classList.contains('show');
@@ -2790,6 +2791,7 @@ class UIManager {
       main.inert = drawerOpen;
       if (scrim) scrim.hidden = !drawerOpen;
       toggle.setAttribute('aria-expanded', String(open));
+      document.querySelector('.tools-menu')?.setAttribute('aria-expanded', String(open));
       if (members) {
         const visible = mobile.matches ? drawerOpen : !membersCollapsed;
         members.setAttribute('aria-expanded', String(visible));
@@ -2804,15 +2806,15 @@ class UIManager {
     });
     mobile.addEventListener('change', () => {
       const focusInside = sidebar.contains(document.activeElement);
-      const focusOnToggle = document.activeElement === toggle;
+      const focusOnToggle = document.activeElement === visibleToggle();
       close();
-      if (mobile.matches && focusInside) toggle.focus({ preventScroll: true });
+      if (mobile.matches && focusInside) visibleToggle().focus({ preventScroll: true });
       else if (!mobile.matches && focusOnToggle) document.querySelector('#navigation-chat')?.focus({ preventScroll: true });
     });
-    scrim?.addEventListener('click', () => { close(); toggle.focus({ preventScroll: true }); });
+    scrim?.addEventListener('click', () => { close(); visibleToggle().focus({ preventScroll: true }); });
     members?.addEventListener('click', () => {
       this.closeMentionPicker({ restoreFocus: false });
-      if (mobile.matches) { close(); toggle.focus({ preventScroll: true }); }
+      if (mobile.matches) { close(); visibleToggle().focus({ preventScroll: true }); }
       else { membersCollapsed = !membersCollapsed; sync(); }
     });
     const chat = () => {
@@ -2866,7 +2868,7 @@ class UIManager {
       if (!mobile.matches || !sidebar.classList.contains('show') || document.querySelector('dialog[open]')) return;
       if (event.key === 'Escape') {
         close();
-        toggle.focus();
+        visibleToggle().focus();
       } else if (event.key === 'Tab') {
         const controls = [...sidebar.querySelectorAll('button:not(:disabled), a[href], [tabindex="0"]')]
           .filter(element => element.getClientRects().length);

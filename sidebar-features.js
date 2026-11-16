@@ -168,6 +168,8 @@
       const header = element('header', 'chat-header tools-header');
       const menu = button('', () => document.querySelector('.sidebar-toggle')?.click(), 'tools-menu');
       menu.setAttribute('aria-label', '打开导航');
+      menu.setAttribute('aria-controls', 'member-sidebar');
+      menu.setAttribute('aria-expanded', 'false');
       const menuIcon = document.querySelector('.sidebar-toggle svg')?.cloneNode(true);
       if (menuIcon) menu.append(menuIcon);
       this.headerIcon = element('span', 'tools-header-icon');
@@ -217,8 +219,11 @@
       document.querySelector(`#navigation-${this.kind}`)?.classList.remove('is-active');
       document.querySelector(`#navigation-${this.kind}`)?.removeAttribute('aria-current');
       document.querySelector('#navigation-chat')?.setAttribute('aria-current', 'page');
-      if (restoreFocus && this.returnFocus?.isConnected) {
-        const target = this.returnFocus.closest('[inert]') ? document.querySelector('.sidebar-toggle') : this.returnFocus;
+      if (restoreFocus) {
+        const visible = node => node?.isConnected && node.getClientRects().length && !node.closest('[inert]');
+        const navigation = document.querySelector(`#navigation-${this.kind}`);
+        const target = visible(this.returnFocus) ? this.returnFocus
+          : visible(navigation) ? navigation : document.querySelector('.sidebar-toggle');
         target?.focus({ preventScroll: true });
       }
       this.returnFocus = null;

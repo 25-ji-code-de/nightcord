@@ -1354,10 +1354,12 @@ class UIManager {
           if (pangu) {
             // 保护 SEKAI / Markdown 语法不被 pangu 插入空格
             const placeholders = [];
+            let placeholderPrefix = '__SEKAI_';
+            while (message.includes(placeholderPrefix)) placeholderPrefix = `_${placeholderPrefix}`;
             const protect = (match) => {
               const index = placeholders.length;
               placeholders.push(match);
-              return `__SEKAI_${index}__`;
+              return `${placeholderPrefix}${index}__`;
             };
 
             // 0. 保护 SEKAI v2 multi-line blocks (<$SEKAI:…>\n…\n<&SEKAI>)
@@ -1378,9 +1380,9 @@ class UIManager {
 
             message = pangu.spacingText(message);
 
-            placeholders.forEach((original, index) => {
-              message = message.replace(`__SEKAI_${index}__`, original);
-            });
+            for (let index = placeholders.length - 1; index >= 0; index--) {
+              message = message.replace(`${placeholderPrefix}${index}__`, placeholders[index]);
+            }
           }
 
           // 发送侧 stamp 保持 v1 短语法（256 预算 + autocomplete 生态）

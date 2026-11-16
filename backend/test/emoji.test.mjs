@@ -112,6 +112,49 @@ test('Unicode emoji rendering and native copying', { timeout: 30_000 }, async t 
     assert.equal(await nodes.count(), 128);
     assert.equal(await page.locator('#messages .message-text').textContent(), text);
 
+    const stickerCases = [
+      '你好 [mfy_虚无的脸阴暗表情]',
+      '**[mfy_虚无的脸阴暗表情]**',
+      '__SEKAI_0__ [mfy_虚无的脸阴暗表情]',
+    ];
+    for (let index = 0; index < stickerCases.length; index++) {
+      await input.fill(stickerCases[index]);
+      await input.press('Enter');
+      await page.waitForFunction(expectedCount => sent.length === expectedCount, index + 2);
+    }
+    assert.deepEqual(await page.evaluate(() => sent.slice(1)), stickerCases);
+
+    const manyNestedStickers = Array.from({ length: 12 }, (_, index) => `**[sticker_${index}]**`).join(' ');
+    const protectedCases = [
+      { label: 'italic around a sticker', text: '*[sticker]*' },
+      { label: 'strikethrough around a sticker', text: '~~[sticker]~~' },
+      { label: 'spoiler around a sticker', text: '||[sticker]||' },
+      { label: 'inline code around a sticker', text: '`[sticker]`' },
+      { label: 'nested markdown around a sticker', text: '**||`[sticker]`||**' },
+      { label: 'markdown and a separate sticker', text: '**bold** [sticker]' },
+      { label: 'multiple stickers', text: '[first] [second] [third]' },
+      { label: 'sticker adjacent to punctuation', text: '([first]),[second]!' },
+      { label: 'sticker across line breaks', text: 'before\n[sticker]\nafter' },
+      { label: 'literal default placeholder beside a sticker', text: '__SEKAI_0__ [sticker]' },
+      { label: 'several literal placeholder prefixes beside a sticker', text: '__SEKAI_0__ ___SEKAI_0__ ____SEKAI_0__ [sticker]' },
+      { label: 'literal placeholder without protected syntax', text: '__SEKAI_0__ ___SEKAI_12__' },
+      { label: 'SEKAI v2 token', text: '<$SEKAI:Stamp::stamp0042>' },
+      { label: 'markdown around SEKAI v2 token', text: '**<$SEKAI:Stamp::stamp0042>**' },
+      { label: 'SEKAI v2 token and sticker', text: '<$SEKAI:Stamp::stamp0042> [sticker]' },
+      { label: 'SEKAI v2 multiline block', text: '<$SEKAI:Format:preserve=true>\nline one\n<&SEKAI>' },
+      { label: 'SEKAI v2 multiline block containing sticker syntax', text: '<$SEKAI:Format:preserve=true>\n[sticker]\n<&SEKAI>' },
+      { label: 'multiple SEKAI v2 multiline blocks', text: '<$SEKAI:Format:preserve=true>\none\n<&SEKAI>\n<$SEKAI:Format:preserve=true>\ntwo\n<&SEKAI>' },
+      { label: 'nested markdown across many placeholder indices', text: manyNestedStickers },
+      { label: '256-character message containing a protected sticker', text: `${'a'.repeat(250)}[x]bbb` },
+    ];
+    for (let index = 0; index < protectedCases.length; index++) {
+      const { label, text: message } = protectedCases[index];
+      await input.fill(message);
+      await input.press('Enter');
+      await page.waitForFunction(expectedCount => sent.length === expectedCount, index + stickerCases.length + 2);
+      assert.equal(await page.evaluate(() => sent.at(-1)), message, label);
+    }
+
     await page.evaluate(() => ui.eventBus.emit('room:ready', {
       roomname: 'emoji-test', messages: [{ user: 'User', text: sent[0], timestamp: Date.now() }]
     }));

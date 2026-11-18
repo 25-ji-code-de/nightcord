@@ -87,6 +87,7 @@ class UIManager {
       chatroom: document.querySelector("#chatroom"),
       chatlog: document.querySelector("#messages"),
       chatInput: document.querySelector("#messageInput"),
+      stickerButton: document.querySelector('.input-btns button[title="表情"]'),
       roster: document.querySelector("#online-users"),
       voiceRoster: document.querySelector("#voice-users"),
       offlineRoster: document.querySelector("#offline-users"),
@@ -169,6 +170,7 @@ class UIManager {
       this.autocomplete = new AutocompleteManager({
         input: this.elements.chatInput,
         list: document.querySelector('#mention-list'),
+        stickerButton: this.elements.stickerButton,
         atButton: document.querySelector('.input-btns button[title="@"]'),
         getAllUsers: () => this.getAllUsers(),
         formatMention: mention => this.mentions?.format(mention) || null,
@@ -1439,11 +1441,23 @@ class UIManager {
      * - Otherwise, inserts paired [] and places the caret between them.
      *
      * @param {HTMLInputElement|HTMLTextAreaElement} input - The input element to modify.
+     * @param {boolean} fromButton - Track a new empty pair while browsing stickers.
      */
-    const handleLeftBracket = (input) => {
+    const handleLeftBracket = (input, fromButton = false) => {
       const val = input.value || '';
       const start = input.selectionStart ?? 0;
       const end = input.selectionEnd ?? start;
+
+      if (start === end && val.charAt(start) === ']') {
+        input.setSelectionRange(start + 1, start + 1);
+        if (window.innerWidth > 768) input.focus();
+        return;
+      }
+
+      if (fromButton && val.length + 2 > MAX_MESSAGE_LENGTH) {
+        this.showError('消息剩余空间不足，无法插入表情括号。');
+        return;
+      }
 
       if (start !== end) {
         // wrap selection with [ ... ] and place caret after the closing bracket
@@ -1456,19 +1470,15 @@ class UIManager {
         return;
       }
 
-      // if next char is ']', skip over it
-      if (val.charAt(start) === ']') {
-        input.setSelectionRange(start + 1, start + 1);
-        if (window.innerWidth > 768) input.focus();
-        return;
-      }
-
       // insert paired [] and put caret between
       const newVal = val.slice(0, start) + '[]' + val.slice(end);
       input.value = newVal;
       const caretPos = start + 1;
       input.setSelectionRange(caretPos, caretPos);
       input.dispatchEvent(new Event('input', { bubbles: true }));
+      if (fromButton && this.autocomplete?.isOpen('sticker')) {
+        this.autocomplete.pendingStickerPair = { start, value: newVal };
+      }
       if (window.innerWidth > 768) input.focus();
     };
 
@@ -1533,26 +1543,16 @@ class UIManager {
       chatInput.focus();
     }
 
-    // 表情按钮：使用与按键 '[' 相同的自动配对逻辑
-    try {
-      const emojiBtn = document.querySelector('.input-btns button[title="表情"]');
-      if (emojiBtn) {
-        emojiBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const input = this.elements.chatInput;
-          if (!input) return;
-          handleLeftBracket(input);
-        });
+    this.elements.stickerButton?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.autocomplete?.isOpen('sticker')) {
+        this.autocomplete.hideList();
+        if (window.innerWidth > 768) chatInput.focus();
+        return;
       }
-    } catch (e) {
-      const emojiBtn = document.querySelector('.input-btns button[title="表情"]');
-      if (!emojiBtn) {
-        console.warn('绑定表情按钮失败: 未找到表情按钮元素', e);
-      } else {
-        console.warn('绑定表情按钮失败: 事件监听器绑定异常', e, e && e.stack);
-      }
-    }
+      handleLeftBracket(chatInput, true);
+    });
 
     window.bindComposerFormat?.(this, MAX_MESSAGE_LENGTH);
 

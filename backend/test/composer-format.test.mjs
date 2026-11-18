@@ -48,6 +48,65 @@ test('text tools insert into the draft and round-trip through the message render
     }, selector);
   }
 
+  await t.test('browsing stickers restores the draft while typing or picking keeps the sticker', async () => {
+    await page.evaluate(() => {
+      ui.autocomplete.getStickers = () => ['ick', 'mzk'].map(category => ({
+        category, code: category + '_笑', label: '笑', searchKey: 'xiao', url: '/icons/composer-tools.svg',
+      }));
+    });
+    const button = page.getByRole('button', { name: '表情', exact: true });
+    const list = page.locator('#mention-list');
+    const draft = '已有[]，前后';
+    const start = draft.indexOf('后');
+    await input.fill(draft);
+    await input.evaluate((el, pos) => el.setSelectionRange(pos, pos), start);
+
+    for (const close of [
+      () => button.click(),
+      () => page.keyboard.press('Escape'),
+      () => page.locator('#messages').click(),
+    ]) {
+      await button.click();
+      assert.equal(await input.inputValue(), '已有[]，前[]后');
+      await list.getByRole('tab', { name: '晓山瑞希' }).click();
+      await close();
+      assert.equal(await list.isVisible(), false);
+      assert.equal(await input.inputValue(), draft);
+      assert.equal(await input.evaluate(el => el.selectionStart), start);
+    }
+
+    await button.click();
+    await trigger.click();
+    await panel.locator('[data-mark=bold]').click();
+    assert.equal(await input.inputValue(), '已有[]，前****后');
+
+    await input.fill('');
+    await button.click();
+    await page.keyboard.insertText('笑');
+    await input.press('Escape');
+    assert.equal(await input.inputValue(), '[笑]');
+
+    await input.fill('');
+    await button.click();
+    await list.locator('[data-code="mzk_笑"]').click();
+    assert.equal(await input.inputValue(), '[mzk_笑]');
+
+    await input.fill('');
+    await input.press('[');
+    await input.press('Escape');
+    assert.equal(await input.inputValue(), '[]');
+
+    const desktop = page.viewportSize();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await input.fill('');
+    await button.click();
+    await button.click();
+    assert.equal(await input.inputValue(), '');
+    assert.equal(await list.isVisible(), false);
+    assert.equal(await input.evaluate(el => el === document.activeElement), false);
+    await page.setViewportSize(desktop);
+  });
+
   for (const [mark, selector] of Object.entries({ bold: 'strong', italic: 'em', strike: 'del', spoiler: '.sekai-spoiler', inline: 'code', quote: 'blockquote' })) {
     await open('前文字后', 1, 3);
     await panel.locator('[data-mark="' + mark + '"]').click();

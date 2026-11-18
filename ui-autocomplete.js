@@ -23,10 +23,11 @@
  */
 (function (global) {
   class AutocompleteManager {
-    constructor({ input, list, atButton, getAllUsers, getStickers, getEmojis, formatMention, renderAvatar, onError } = {}) {
+    constructor({ input, list, atButton, stickerButton, getAllUsers, getStickers, getEmojis, formatMention, renderAvatar, onError } = {}) {
       this.input = input;
       this.list = list;
       this.atButton = atButton;
+      this.stickerButton = stickerButton;
       this.getAllUsers = getAllUsers || (() => []);
       this.getStickers = getStickers || (() => []);
       this.getEmojis = getEmojis || (() => []);
@@ -37,6 +38,7 @@
       this.autocompleteIndex = 0;
       this.autocompleteType = null; // 'mention' | 'sticker' | 'emoji'
       this.autocompleteStart = 0;
+      this.pendingStickerPair = null;
 
       this.init();
     }
@@ -48,8 +50,17 @@
       this.input.addEventListener('keydown', (e) => this.handleNav(e));
 
       document.addEventListener('click', (e) => {
-        if (!this.list.contains(e.target) && e.target !== this.input && (!this.atButton || e.target !== this.atButton)) {
+        if (!this.list.contains(e.target) && e.target !== this.input && !this.stickerButton?.contains(e.target)) {
           this.hideList();
+        }
+      }, true);
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !e.isComposing && this.isOpen('sticker') &&
+            (this.list.contains(e.target) || this.stickerButton?.contains(e.target))) {
+          e.preventDefault();
+          this.hideList();
+          this.stickerButton?.focus();
         }
       });
 
@@ -62,8 +73,8 @@
       }
     }
 
-    isOpen() {
-      return !!(this.list && !this.list.classList.contains('hidden'));
+    isOpen(type = this.autocompleteType) {
+      return !!(this.list && type === this.autocompleteType && !this.list.classList.contains('hidden'));
     }
 
     insertAtSymbol() {
@@ -92,6 +103,9 @@
       const targetInput = e.target || this.input;
       const text = targetInput.value;
       const cursor = targetInput.selectionStart;
+      if (this.pendingStickerPair && text !== this.pendingStickerPair.value) {
+        this.pendingStickerPair = null;
+      }
 
       // Emoji (:shortcode:). Require a boundary before the opening colon so
       // URL schemes and times do not open the picker.
@@ -553,6 +567,12 @@
 
     hideList() {
       if (!this.list) return;
+      const pair = this.pendingStickerPair;
+      this.pendingStickerPair = null;
+      if (pair && this.input.value === pair.value) {
+        this.input.setRangeText('', pair.start, pair.start + 2, 'preserve');
+        this.input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
       this.list.classList.add('hidden');
       this.list.classList.remove('picker-mode');
       this.autocompleteIndex = 0;

@@ -44,9 +44,7 @@ html = html.replace(/<svg\b[^>]*\bclass="sidebar-microphone[^"]*"[^>]*>[\s\S]*?<
 html = sync(html);
 
 const uiPath = join(root, 'ui-manager.js');
-let ui = sync(readFileSync(uiPath, 'utf8'), true);
-// Upgrade the previous unmarked muted icon once. Future runs sync its marker.
-ui = ui.replace(/(:\s*')<svg width="14" height="16" viewBox="0 0 16 24"[^>]*>[\s\S]*?<\/svg>(')/, (_, start, end) => `${start}${inline('mic-off', 'width="14" height="16"')}${end}`);
+const ui = sync(readFileSync(uiPath, 'utf8'), true);
 
 writeFileSync(htmlPath, html);
 writeFileSync(uiPath, ui);

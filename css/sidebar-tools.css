@@ -86,6 +86,9 @@ body:has(.main.tool-view) .mention-notice { top: auto; bottom: calc(20px + env(s
 .tools-help summary::after { content: '+'; position: absolute; right: 4px; color: rgb(var(--nc-text-muted)); font-size: 18px; line-height: 20px; }
 .tools-help details[open] summary::after { content: '−'; }
 .tools-help p { max-width: 70ch; margin: 0 0 20px; color: rgb(var(--nc-text-muted)); font-size: 13px; line-height: 1.9; }
+.tools-help .tools-legal-note { font-size: 12px; }
+.tools-help a { color: inherit; text-underline-offset: .2em; }
+.tools-help .tools-links a { text-decoration: underline; }
 .tools-links { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 24px; }
 .tools-links a { display: inline-flex; align-items: center; min-height: 36px; color: rgb(var(--nc-text-muted)); text-decoration: none; font-size: 12px; }
 .tools-links a:hover { color: rgb(var(--nc-text)); text-decoration: underline; }

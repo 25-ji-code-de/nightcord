@@ -1,0 +1,112 @@
+/* Composer popover uses the same surface, dividers and focus ring as the member picker. */
+.format-panel {
+  position: absolute;
+  z-index: 1001;
+  inset: auto 0 calc(100% + 8px) auto;
+  box-sizing: border-box;
+  width: min(324px, 100%);
+  max-height: min(420px, 55vh, 55dvh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px;
+  background: rgb(var(--nc-panel));
+  color: rgb(var(--nc-text));
+  border: 1px solid rgb(var(--nc-line) / .14);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px #0004;
+  scrollbar-width: thin;
+}
+.format-panel button { font: inherit; background: none; border: 0; color: inherit; cursor: pointer; }
+.format-panel svg {
+  flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor;
+  stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+}
+.format-head { display: flex; align-items: center; gap: 4px; padding: 0 2px 6px 6px; }
+.format-head h2 { margin: 0; flex: 1; font-size: 14px; font-weight: 600; line-height: 20px; }
+.format-icon-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 4px; }
+.format-head svg { width: 16px; height: 16px; color: rgb(var(--nc-text-muted)); }
+.format-tools { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.format-tools button {
+  display: grid; place-content: center; justify-items: center; gap: 5px;
+  min-height: 52px; padding: 2px 0; border-radius: 4px; color: rgb(var(--nc-icon));
+}
+.format-tools span { font-size: 11px; line-height: 16px; color: rgb(var(--nc-text-muted)); }
+.format-entries { margin-top: 8px; border-top: 1px solid rgb(var(--nc-line) / .12); padding-top: 6px; }
+.format-entries button {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px;
+  padding: 0 8px; border-radius: 4px; font-size: 13px; text-align: left;
+}
+.format-entries svg { color: rgb(var(--nc-icon)); }
+.format-entries .format-chevron { width: 14px; height: 14px; margin-left: auto; color: rgb(var(--nc-text-muted)); }
+.format-panel button:hover, #formatBtn[aria-expanded="true"] { color: rgb(var(--nc-text)); background: rgb(var(--nc-hover)); }
+.format-panel :focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: -2px; }
+.format-form { display: grid; gap: 12px; padding: 2px 6px 6px; }
+.format-form label { display: grid; gap: 5px; color: rgb(var(--nc-text-muted)); font-size: 12px; }
+.format-form :is(textarea, select, input:not([type="checkbox"], [type="color"])) {
+  box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 10px;
+  border: 1px solid rgb(var(--nc-line) / .15); border-radius: 5px;
+  background: rgb(var(--nc-input)); color: rgb(var(--nc-text)); font: inherit; font-size: 14px;
+}
+.format-form textarea { resize: vertical; min-height: 52px; max-height: 120px; }
+.format-footer {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  border-top: 1px solid rgb(var(--nc-line) / .1); padding-top: 8px;
+}
+.format-options[open] { flex-basis: 100%; min-width: 0; }
+.format-options summary {
+  display: flex; align-items: center; gap: 4px; width: fit-content; min-height: 32px; padding-inline: 4px;
+  margin-inline-start: -4px; list-style: none; border-radius: 4px; color: rgb(var(--nc-text-muted)); font-size: 12px; cursor: pointer;
+}
+.format-options summary::-webkit-details-marker { display: none; }
+.format-options summary:hover, .format-options summary:focus-visible { color: rgb(var(--nc-text)); background: rgb(var(--nc-hover)); }
+.format-options[open] summary { color: rgb(var(--nc-accent)); }
+.format-options summary svg { width: 13px; height: 13px; transform: rotate(90deg); transition: transform 120ms ease; }
+.format-options[open] summary svg { transform: rotate(-90deg); }
+.format-option-fields { display: grid; gap: 12px; padding-top: 4px; }
+.format-dimensions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.format-form input:disabled { opacity: .5; }
+.format-color-row, .format-color-row label, .format-form .format-check { display: flex; align-items: center; gap: 8px; }
+.format-color-row { justify-content: space-between; }
+.format-form input[type="color"] { width: 32px; height: 28px; padding: 1px; border: 0; background: transparent; cursor: pointer; }
+.format-form label:has(input[type="checkbox"]) { min-height: 28px; cursor: pointer; }
+.format-form input[type="checkbox"] {
+  appearance: none; display: grid; place-content: center; flex: none; box-sizing: border-box;
+  width: 16px; height: 16px; margin: 0; border-radius: 4px; cursor: pointer;
+  border: 1px solid rgb(var(--nc-text-muted) / .7); background: rgb(var(--nc-input));
+}
+.format-form input[type="checkbox"]:checked { border-color: rgb(var(--nc-accent)); background: rgb(var(--nc-accent)); }
+.format-form input[type="checkbox"]:checked::after {
+  content: ''; width: 4px; height: 8px; margin-top: -2px; border: solid rgb(var(--nc-input));
+  border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.format-form input[type="checkbox"]:focus-visible { outline-offset: 2px; }
+.format-truecolor { position: relative; }
+.format-truecolor-mark { white-space: nowrap; font-size: 13px; font-weight: 600; color: rgb(var(--nc-text)); }
+.format-truecolor-mark > :first-child { font-size: .72em; color: rgb(var(--nc-accent)); }
+.format-truecolor-mark > :last-child { font-size: .75em; vertical-align: top; }
+.format-truecolor [role="tooltip"] {
+  position: absolute; z-index: 1; right: 0; bottom: 100%; box-sizing: border-box;
+  width: min(21em, 72vw); padding: 7px 10px; border: 1px solid rgb(var(--nc-line) / .2); border-radius: 5px;
+  background: rgb(var(--nc-panel)); color: rgb(var(--nc-text)); box-shadow: 0 3px 12px #0004;
+  font-size: 12px; line-height: 1.5; visibility: hidden;
+}
+.format-truecolor:not([data-dismissed]):is(:hover, :focus-within) [role="tooltip"] { visibility: visible; }
+@media (forced-colors: active) {
+  .format-form input[type="checkbox"] { appearance: auto; }
+  .format-form input[type="checkbox"]:checked::after { content: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .format-options summary svg { transition: none; }
+}
+.format-form .format-apply {
+  margin-inline-start: auto; padding: 7px 12px; border-radius: 4px;
+  background: rgb(var(--nc-accent) / .16); color: rgb(var(--nc-text)); font-size: 13px;
+}
+.format-form .format-apply:hover { background: rgb(var(--nc-accent) / .28); }
+.format-error { margin: 8px 6px 2px; color: rgb(var(--nc-text)); font-size: 12px; }
+@media (pointer: coarse) {
+  .format-entries button, .format-apply, .format-icon-btn { min-height: 44px; }
+  .format-icon-btn { min-width: 44px; }
+  .format-options summary, .format-form label:has(input[type="checkbox"]) { min-height: 44px; }
+}
+.format-panel[hidden], .format-panel [hidden] { display: none; }

@@ -34,6 +34,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
   <link rel="stylesheet" href="/css/notifications.css">
   <link rel="stylesheet" href="/css/image-viewer.css">
   <link rel="stylesheet" href="/css/attachments.css">
+  <link rel="stylesheet" href="/css/composer-format.css">
   <link rel="stylesheet" href="/css/voice.css">
   <link rel="stylesheet" href="/css/appearance.css">
   <link rel="stylesheet" href="/css/settings.css">
@@ -351,7 +352,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
             <button class="input-btn" title="@">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57V12c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57V12c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
             </button>
-            <button class="input-btn" title="文本">
+            <button type="button" id="formatBtn" class="input-btn" title="文本格式" aria-haspopup="dialog" aria-controls="formatPanel" aria-expanded="false">
               <svg class="composer-text-icon" viewBox="0 0 24 24" width="20" height="20" overflow="visible" fill="currentColor" aria-hidden="true">
                 <path d="M13.64 19.2H10L8.62 15.2H2.96L1.56 19.2H-1.8L3.71 3.2H7.69ZM7.88 12.8 5.66 6.42 3.65 12.8Z"/>
                 <path d="M17.8 11.2h-2.94q.79-4 5.08-4 4.49 0 4.49 3.78l-.03 4.54q0 2.24.78 3.68h-3.46q-.25-.58-.39-1.32-1.37 1.4-3.17 1.4-3.78 0-3.78-3.26 0-2.48 3.1-3.11 2.82-.49 3.6-.89v-.57q0-1.97-1.5-1.97-1.36 0-1.78 1.72Zm3.28 2.46q-.84.32-2.2.6-1.32.29-1.32 1.32 0 1.14 1.22 1.17.96.04 1.69-.6.61-.54.61-1.61Z"/>
@@ -364,6 +365,77 @@ Copyright (C) 2025 The 25-ji-code-de Team
               <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg>
             </button>
           </div>
+          <section id="formatPanel" class="format-panel" role="dialog" aria-labelledby="formatTitle" hidden>
+            <header class="format-head">
+              <button type="button" data-back class="format-icon-btn" aria-label="返回文本格式" hidden><svg aria-hidden="true"><use href="/icons/composer-tools.svg#chevron-left"/></svg></button>
+              <h2 id="formatTitle">文本格式</h2>
+              <button type="button" data-close class="format-icon-btn" aria-label="关闭文本格式"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#x"/></svg></button>
+            </header>
+            <div data-home>
+              <div class="format-tools" role="group" aria-label="常用格式">
+                <button type="button" data-mark="bold" title="加粗"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#bold"/></svg><span>加粗</span></button>
+                <button type="button" data-mark="italic" title="斜体"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#italic"/></svg><span>斜体</span></button>
+                <button type="button" data-mark="strike" title="删除线"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#strikethrough"/></svg><span>删除线</span></button>
+                <button type="button" data-mark="spoiler" title="剧透"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#eye-off"/></svg><span>剧透</span></button>
+                <button type="button" data-mark="inline" title="行内代码"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#code"/></svg><span>行内代码</span></button>
+                <button type="button" data-mark="quote" title="引用"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#quote"/></svg><span>引用</span></button>
+              </div>
+              <div class="format-entries">
+                <button type="button" data-editor="color"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#baseline"/></svg>文字颜色<svg aria-hidden="true" class="format-chevron"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
+                <button type="button" data-editor="code"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#square-code"/></svg>代码块<svg aria-hidden="true" class="format-chevron"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
+                <button type="button" data-editor="link"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#link-2"/></svg>链接卡片<svg aria-hidden="true" class="format-chevron"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
+                <button type="button" data-editor="media"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#images"/></svg>媒体卡片<svg aria-hidden="true" class="format-chevron"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
+              </div>
+            </div>
+            <form class="format-form" hidden>
+              <label data-for="color code"><span data-content-label>文字</span><textarea name="content" rows="2" maxlength="256" required></textarea></label>
+              <div class="format-color-row" data-for="color">
+                <label>颜色 <input type="color" name="ink" value="#a78bfa"></label>
+                <div class="format-truecolor">
+                  <label>
+                    <input type="checkbox" name="preserve" aria-describedby="truecolor-tip">
+                    <span class="format-truecolor-mark"><span aria-hidden="true">◆</span> TrueColor</span>
+                    原色模式
+                  </label>
+                  <span id="truecolor-tip" role="tooltip">TrueColor 保留你选定的文字色值，即使在深色背景上，深色文字也按原色显示。</span>
+                </div>
+              </div>
+              <label data-for="code">语言（可选）<input name="lang" maxlength="32" placeholder="JavaScript" autocomplete="off"></label>
+              <label class="format-check" data-for="code"><input type="checkbox" name="collapse">默认折叠</label>
+              <label data-for="link">网址<input name="url" type="url" required maxlength="256" placeholder="https://" autocomplete="off"></label>
+              <label data-for="link">标题（可选）<input name="caption" maxlength="256"></label>
+              <label data-for="media">媒体类型<select name="kind"><option value="image">图片</option><option value="sticker">自定义贴纸</option><option value="file">文件</option><option value="audio">音频</option><option value="music">音乐</option></select></label>
+              <label data-for="media">资源网址或资源 ID<input name="resource" placeholder="https:// 或已上传的资源 ID" required maxlength="256"></label>
+              <label data-for="image">图片说明（可选）<input name="alt" maxlength="256"></label>
+              <label class="format-check" data-for="image"><input type="checkbox" name="hideImage">点击后显示图片</label>
+              <label data-for="file">文件名称（可选）<input name="filename" maxlength="256"></label>
+              <label data-for="music">曲名<input name="track" required maxlength="256"></label>
+              <label data-for="music">艺术家（可选）<input name="artist" maxlength="256"></label>
+              <div class="format-footer">
+                <details class="format-options">
+                  <summary>更多选项<svg aria-hidden="true"><use href="/icons/composer-tools.svg#chevron-right"/></svg></summary>
+                  <div class="format-option-fields">
+                    <label class="format-check" data-for="color"><input type="checkbox" name="spoiler">隐藏为剧透</label>
+                    <label data-for="code">代码名称<input name="codeName" maxlength="256" placeholder="例如 main.js"></label>
+                    <label data-for="link">卡片简介<textarea name="description" rows="2" maxlength="256"></textarea></label>
+                    <label data-for="link">来源名称<input name="source" maxlength="256" placeholder="默认显示网址域名"></label>
+                    <div data-for="image" class="format-dimensions">
+                      <label>宽度（像素）<input type="number" name="width" min="1" step="1"></label>
+                      <label>高度（像素）<input type="number" name="height" min="1" step="1"></label>
+                    </div>
+                    <label data-for="file">大小（kB）<input type="number" name="size" min="0" step="any"></label>
+                    <label data-for="audio music">时长（秒）<input type="number" name="duration" min="0" step="any"></label>
+                    <div class="format-color-row" data-for="link">
+                      <label><input type="checkbox" name="tint">自定义强调色</label>
+                      <input type="color" name="accent" value="#a78bfa" aria-label="卡片强调色">
+                    </div>
+                  </div>
+                </details>
+                <button type="submit" class="format-apply">插入草稿</button>
+              </div>
+            </form>
+            <p class="format-error" role="status" hidden></p>
+          </section>
           <!-- 文件上传菜单 -->
           <div id="fileUploadMenu" class="file-upload-menu hidden">
             <button class="file-upload-menu-item" data-type="image">
@@ -573,6 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <script src="/mention-service.js"></script>
   <script src="/sekai-image-viewer.js"></script>
   <script src="/ui-autocomplete.js"></script>
+  <script src="/composer-format.js"></script>
   <script src="/user-profile.js"></script>
   <script src="/ui-manager.js"></script>
   <script src="/voice-manager.js"></script>

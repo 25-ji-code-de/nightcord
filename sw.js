@@ -49,6 +49,7 @@ const PRECACHE = [
   '/css/notifications.css',
   '/css/image-viewer.css',
   '/css/attachments.css',
+  '/css/composer-format.css',
   '/css/voice.css',
   '/css/appearance.css',
   '/css/settings.css',
@@ -77,6 +78,7 @@ const PRECACHE = [
   '/mention-service.js',
   '/sekai-image-viewer.js',
   '/ui-autocomplete.js',
+  '/composer-format.js',
   '/user-profile.js',
   '/ui-manager.js',
   '/voice-manager.js',
@@ -89,6 +91,7 @@ const PRECACHE = [
   '/version-checker.js',
   // 图标与 favicon
   '/icons/nightcord-logotype.svg',
+  '/icons/composer-tools.svg',
   '/icons/favicon.svg',
   '/icons/favicon-32.png',
   '/icons/icon-192.png',

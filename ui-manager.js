@@ -1554,6 +1554,8 @@ class UIManager {
       }
     }
 
+    window.bindComposerFormat?.(this, MAX_MESSAGE_LENGTH);
+
     // 附件按钮：显示/隐藏文件上传菜单
     this.setupFileUpload();
   }

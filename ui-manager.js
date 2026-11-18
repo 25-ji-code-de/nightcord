@@ -1381,7 +1381,7 @@ class UIManager {
             message = pangu.spacingText(message);
 
             for (let index = placeholders.length - 1; index >= 0; index--) {
-              message = message.replace(`${placeholderPrefix}${index}__`, placeholders[index]);
+              message = message.replace(`${placeholderPrefix}${index}__`, () => placeholders[index]);
             }
           }
 

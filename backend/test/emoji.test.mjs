@@ -132,6 +132,7 @@ test('Unicode emoji rendering and native copying', { timeout: 30_000 }, async t 
       { label: 'inline code around a sticker', text: '`[sticker]`' },
       { label: 'nested markdown around a sticker', text: '**||`[sticker]`||**' },
       { label: 'markdown and a separate sticker', text: '**bold** [sticker]' },
+      { label: 'literal replacement patterns in nested placeholders', text: "**[price $& $$ $` $']**" },
       { label: 'multiple stickers', text: '[first] [second] [third]' },
       { label: 'sticker adjacent to punctuation', text: '([first]),[second]!' },
       { label: 'sticker across line breaks', text: 'before\n[sticker]\nafter' },

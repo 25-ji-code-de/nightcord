@@ -1431,6 +1431,12 @@ body {
     height: 36px;
     font-size: 16px;
   }
+
+  /* Match the original 16px Aa and its baseline without resizing the 20px SVG. */
+  .composer-text-icon path {
+    transform-origin: center;
+    transform: translateY(-.6px) scale(calc(16 / 18));
+  }
   
   /* 名称选择器优化 */
   .name-chooser-content {

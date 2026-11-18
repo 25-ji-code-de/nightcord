@@ -155,20 +155,41 @@ test('name chooser composition, keyboard navigation and responsive layout', { ti
     assert.equal(await page.locator('#messageInput').inputValue(), '保留草稿');
   });
 
-  await t.test('sticker button keeps its picker open until a sticker is selected', async t => {
-    const page = await fixture(t);
+  await t.test('sticker picker keeps the scrolled category in view until a sticker is selected', async t => {
+    const page = await fixture(t, { width: 375, height: 667 });
     await page.locator('#name-input').fill('访客');
     await page.locator('#name-input').press('Enter');
     await page.route('https://example.com/sticker.png', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"/>' }));
     await page.evaluate(() => {
-      ui.stickerService = { getStickers: () => [{ code: 'airi_test', label: '测试贴纸', category: 'airi', url: 'https://example.com/sticker.png' }] };
+      const stickers = ['ick', 'saki', 'hnm', 'shiho', 'mnr', 'hrk', 'airi', 'szk', 'mzk'].map(category => ({
+        code: category + '_test', label: '测试贴纸', category, url: 'https://example.com/sticker.png',
+      }));
+      ui.stickerService = { getStickers: () => stickers };
       ui.setupChatRoom(() => false);
     });
     await page.locator('button[title="表情"]').click();
     const item = page.locator('.picker-grid-item');
     await item.waitFor({ state: 'visible' });
     assert.equal(await page.locator('#messageInput').inputValue(), '[]');
+    const categories = page.getByRole('tablist');
+    const scrolled = await categories.evaluate(bar => {
+      bar.scrollLeft = bar.scrollWidth;
+      return bar.scrollLeft;
+    });
+    assert.ok(scrolled > 0);
+    const tab = categories.getByRole('tab', { name: '晓山瑞希' });
+    await tab.click();
+    assert.equal(await categories.evaluate(bar => bar.scrollLeft), scrolled);
+    assert.equal(await tab.getAttribute('aria-selected'), 'true');
+    assert.equal(await item.getAttribute('data-code'), 'mzk_test');
     await item.click();
-    assert.equal((await page.locator('#messageInput').inputValue()).trim(), '[airi_test]');
+    assert.equal((await page.locator('#messageInput').inputValue()).trim(), '[mzk_test]');
+    await page.locator('button[title="表情"]').click();
+    assert.equal(await tab.getAttribute('aria-selected'), 'true');
+    assert.ok(await tab.evaluate(button => {
+      const bounds = button.getBoundingClientRect();
+      const bar = button.parentElement.getBoundingClientRect();
+      return bounds.left >= bar.left && bounds.right <= bar.right;
+    }));
   });
 });

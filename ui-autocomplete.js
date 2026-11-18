@@ -463,7 +463,6 @@
       if (!categories.includes(activeCategory)) activeCategory = categories[0];
       this.pickerCategories[type] = activeCategory;
 
-      const categoryItems = items.filter((item) => item.category === activeCategory);
       const categoryButtons = categories.map((category) => `
         <button type="button" class="picker-category${category === activeCategory ? ' active' : ''}"
                 data-category="${escapeHtml(category)}" role="tab"
@@ -472,8 +471,47 @@
         </button>
       `).join('');
 
-      const gridItems = categoryItems.map((item, index) => {
-        const isEmoji = type === 'emoji';
+      this.list.classList.add('picker-mode');
+      this.list.innerHTML = `
+        <div class="picker-categories" role="tablist">${categoryButtons}</div>
+        <div class="picker-grid" role="grid"></div>
+      `;
+
+      const grid = this.list.querySelector('.picker-grid');
+      const tabs = this.list.querySelectorAll('.picker-category');
+      tabs.forEach((button) => {
+        button.addEventListener('click', (event) => {
+          event.stopPropagation();
+          const category = button.dataset.category;
+          if (category === this.pickerCategories[type]) return;
+          this.pickerCategories[type] = category;
+          tabs.forEach((tab) => {
+            tab.classList.toggle('active', tab === button);
+            tab.setAttribute('aria-selected', String(tab === button));
+          });
+          this.renderPickerGrid(grid, items, type, category);
+        });
+      });
+      grid.addEventListener('click', (event) => {
+        const button = event.target.closest('.picker-grid-item');
+        if (!button) return;
+        if (type === 'emoji') this.completeEmoji(button.dataset.shortcode);
+        else this.completeSticker(button.dataset.code);
+      });
+
+      this.renderPickerGrid(grid, items, type, activeCategory);
+      this.list.classList.remove('hidden');
+      if (activeCategory !== categories[0]) {
+        this.list.querySelector('.picker-category.active').scrollIntoView({
+          block: 'nearest', inline: 'nearest', container: 'nearest'
+        });
+      }
+    }
+
+    renderPickerGrid(grid, items, type, category) {
+      const isEmoji = type === 'emoji';
+      const categoryItems = items.filter((item) => item.category === category);
+      grid.innerHTML = categoryItems.map((item, index) => {
         const value = isEmoji ? item.shortcode : item.code;
         const label = isEmoji ? item.shortcode : item.label;
         const dataAttribute = isEmoji ? 'data-shortcode' : 'data-code';
@@ -487,28 +525,7 @@
           </button>
         `;
       }).join('');
-
-      this.list.classList.add('picker-mode');
-      this.list.innerHTML = `
-        <div class="picker-categories" role="tablist">${categoryButtons}</div>
-        <div class="picker-grid" role="grid">${gridItems}</div>
-      `;
-
-      this.list.querySelectorAll('.picker-category').forEach((button) => {
-        button.addEventListener('click', (event) => {
-          event.stopPropagation();
-          this.pickerCategories[type] = button.dataset.category;
-          this.showPicker(items, type);
-        });
-      });
-      this.list.querySelectorAll('.picker-grid-item').forEach((button) => {
-        button.addEventListener('click', () => {
-          if (type === 'emoji') this.completeEmoji(button.dataset.shortcode);
-          else this.completeSticker(button.dataset.code);
-        });
-      });
-
-      this.list.classList.remove('hidden');
+      grid.scrollTop = 0;
       this.autocompleteIndex = 0;
     }
 

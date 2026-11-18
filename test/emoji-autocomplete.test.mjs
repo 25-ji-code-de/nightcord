@@ -47,9 +47,11 @@ function createFixture(value, { emojis = [], stickers = [] } = {}) {
       this.selectionEnd = end;
     }
   };
+  const grid = { innerHTML: '', addEventListener() {} };
   const list = {
     innerHTML: '',
     contains() { return false; },
+    querySelector(selector) { return selector === '.picker-grid' ? grid : null; },
     querySelectorAll() { return []; },
     classList: {
       add: (name) => classes.add(name),
@@ -63,7 +65,7 @@ function createFixture(value, { emojis = [], stickers = [] } = {}) {
     getEmojis: () => emojis,
     getStickers: () => stickers
   });
-  return { manager, input, list };
+  return { manager, input, list, grid };
 }
 
 describe('emoji and sticker pickers', () => {
@@ -78,21 +80,21 @@ describe('emoji and sticker pickers', () => {
   ];
 
   test('empty colons open the categorized emoji grid', () => {
-    const { manager, input, list } = createFixture('::', { emojis });
+    const { manager, input, list, grid } = createFixture('::', { emojis });
     input.dispatchEvent(new Event('input'));
     assert.equal(manager.autocompleteType, 'emoji');
     assert.equal(manager.autocompleteStart, 0);
     assert.equal(list.classList.contains('picker-mode'), true);
     assert.match(list.innerHTML, /class="picker-categories"/);
-    assert.match(list.innerHTML, /data-shortcode="joy"/);
+    assert.match(grid.innerHTML, /data-shortcode="joy"/);
   });
 
   test('empty brackets open the categorized sticker grid', () => {
-    const { manager, input, list } = createFixture('[]', { stickers });
+    const { manager, input, list, grid } = createFixture('[]', { stickers });
     input.dispatchEvent(new Event('input'));
     assert.equal(manager.autocompleteType, 'sticker');
     assert.equal(list.classList.contains('picker-mode'), true);
-    assert.match(list.innerHTML, /data-code="ick_test"/);
+    assert.match(grid.innerHTML, /data-code="ick_test"/);
     assert.match(list.innerHTML, />\s*星乃一歌\s*</);
   });
 

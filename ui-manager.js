@@ -2783,7 +2783,9 @@ class UIManager {
     const members = document.querySelector('#navigation-members');
     const profile = this.elements.navigationProfile;
     const mobile = window.matchMedia('(max-width: 768px)');
-    const visibleToggle = () => main.classList.contains('tool-view') ? document.querySelector('.tools-menu') || toggle : toggle;
+    const toggleSelector = 'button[aria-controls="member-sidebar"]';
+    const drawerToggles = () => main.querySelectorAll(toggleSelector);
+    const focusToggle = () => [...drawerToggles()].find(node => node.getClientRects().length)?.focus({ preventScroll: true });
     let membersCollapsed = false;
     const sync = () => {
       const drawerOpen = mobile.matches && sidebar.classList.contains('show');
@@ -2792,8 +2794,7 @@ class UIManager {
       sidebar.classList.toggle('members-collapsed', !mobile.matches && membersCollapsed && !this.mentionPickerOpen);
       main.inert = drawerOpen;
       if (scrim) scrim.hidden = !drawerOpen;
-      toggle.setAttribute('aria-expanded', String(open));
-      document.querySelector('.tools-menu')?.setAttribute('aria-expanded', String(open));
+      for (const button of drawerToggles()) button.setAttribute('aria-expanded', String(open));
       if (members) {
         const visible = mobile.matches ? drawerOpen : !membersCollapsed;
         members.setAttribute('aria-expanded', String(visible));
@@ -2801,22 +2802,23 @@ class UIManager {
       }
     };
     const close = () => { sidebar.classList.remove('show'); sync(); };
-    toggle.addEventListener('click', () => {
+    main.addEventListener('click', event => {
+      if (!event.target.closest?.(toggleSelector)) return;
       sidebar.classList.toggle('show');
       sync();
       if (sidebar.classList.contains('show')) document.querySelector('#navigation-chat')?.focus({ preventScroll: true });
     });
     mobile.addEventListener('change', () => {
       const focusInside = sidebar.contains(document.activeElement);
-      const focusOnToggle = document.activeElement === visibleToggle();
+      const focusOnToggle = document.activeElement?.matches(toggleSelector);
       close();
-      if (mobile.matches && focusInside) visibleToggle().focus({ preventScroll: true });
+      if (mobile.matches && focusInside) focusToggle();
       else if (!mobile.matches && focusOnToggle) document.querySelector('#navigation-chat')?.focus({ preventScroll: true });
     });
-    scrim?.addEventListener('click', () => { close(); visibleToggle().focus({ preventScroll: true }); });
+    scrim?.addEventListener('click', () => { close(); focusToggle(); });
     members?.addEventListener('click', () => {
       this.closeMentionPicker({ restoreFocus: false });
-      if (mobile.matches) { close(); visibleToggle().focus({ preventScroll: true }); }
+      if (mobile.matches) { close(); focusToggle(); }
       else { membersCollapsed = !membersCollapsed; sync(); }
     });
     const chat = () => {
@@ -2870,7 +2872,7 @@ class UIManager {
       if (!mobile.matches || !sidebar.classList.contains('show') || document.querySelector('dialog[open]')) return;
       if (event.key === 'Escape') {
         close();
-        visibleToggle().focus();
+        focusToggle();
       } else if (event.key === 'Tab') {
         const controls = [...sidebar.querySelectorAll('button:not(:disabled), a[href], [tabindex="0"]')]
           .filter(element => element.getClientRects().length);
@@ -2933,7 +2935,6 @@ class UIManager {
       if (event.target.closest?.('#mention-picker, #navigation-mentions, dialog')) return;
       this.closeMentionPicker({ restoreFocus: false });
     });
-    this.renderMentionPicker();
   }
 
   openMentionPicker() {
@@ -2967,21 +2968,9 @@ class UIManager {
     const { mentionPickerList: list, mentionPickerQuery: query } = this.elements;
     if (!list) return;
 
-    const candidates = this.autocomplete ? this.autocomplete.mentionCandidates() : [];
     const needle = (query?.value || '').trim().toLocaleLowerCase();
-    const rank = candidate => candidate.type === 'all' ? 0 : candidate.type === 'ai' ? 1 : candidate.status === 'online' ? 2 : 3;
-    const matches = candidates
-      .filter(candidate => !needle || String(candidate.name).toLocaleLowerCase().includes(needle))
-      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-
-    const groups = [
-      { label: '所有人', test: candidate => candidate.type === 'all' },
-      { label: 'AI 助手', test: candidate => candidate.type === 'ai' },
-      { label: '在线成员', test: candidate => candidate.type === 'user' && candidate.status === 'online' },
-      { label: '离线成员', test: candidate => candidate.type === 'user' && candidate.status !== 'online' },
-    ];
-
-    if (matches.length === 0) {
+    const groups = this.autocomplete?.mentionGroups(candidate => candidate.name.toLocaleLowerCase().includes(needle)) || [];
+    if (!groups.length) {
       list.innerHTML = `
         <div class="mention-picker-empty" role="status">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5M8 10.5h5"/></svg>
@@ -2990,41 +2979,33 @@ class UIManager {
       return;
     }
 
-    const sections = groups
-      .map(group => ({ ...group, members: matches.filter(group.test) }))
-      .filter(section => section.members.length > 0);
-    const ordered = sections.flatMap(section => section.members);
-
-    list.innerHTML = sections.map((section, index) => {
+    list.replaceChildren(...groups.map(({ label, members }, index) => {
+      const section = document.createElement('div');
+      section.className = 'mention-picker-group';
+      section.setAttribute('role', 'group');
       const labelId = `mention-picker-group-${index}`;
-      return `
-      <div class="mention-picker-group" role="group" aria-labelledby="${labelId}">
-        <p class="mention-picker-group-label" id="${labelId}">${this.escapeHtml(section.label)}</p>
-        ${section.members.map(candidate => `
-          <button type="button" class="mention-picker-item" data-name="${this.escapeHtml(candidate.name)}" data-type="${this.escapeHtml(candidate.type || 'user')}" data-id="${this.escapeHtml(candidate.id || '')}" title="${this.escapeHtml(candidate.detailTitle || candidate.detail || candidate.label || '')}">
-            <span class="avatar ${this.escapeHtml(candidate.color || '')}" aria-hidden="true">${this.escapeHtml(candidate.avatar || '')}</span>
-            <span class="mention-picker-identity">
-              <span class="mention-picker-name">${this.escapeHtml(candidate.name)}</span>
-              <span class="mention-picker-detail">${this.escapeHtml(candidate.label || candidate.detail || '')}</span>
-            </span>
-            ${candidate.type === 'user' ? `<span class="mention-picker-status" data-status="${candidate.status === 'online' ? 'online' : 'offline'}" aria-hidden="true"></span>` : ''}
-          </button>`).join('')}
-      </div>`;
-    }).join('');
+      section.setAttribute('aria-labelledby', labelId);
+      const heading = document.createElement('p');
+      heading.className = 'mention-picker-group-label'; heading.id = labelId; heading.textContent = label;
+      section.append(heading, ...members.map(candidate => this.mentionPickerItem(candidate)));
+      return section;
+    }));
+  }
 
-    list.querySelectorAll('.mention-picker-item').forEach((item, index) => {
-      const candidate = ordered[index];
-      const avatar = item.querySelector('.avatar');
-      if (candidate.type === 'user') {
-        this.profileUI.avatar(avatar, candidate.profile, candidate.avatar);
-      } else {
-        avatar.classList.add('mention-symbol');
-        avatar.appendChild(this.autocomplete.createMentionIcon(candidate.type));
-      }
-      item.addEventListener('click', () => {
-        this.insertPickerMention({ name: item.dataset.name, type: item.dataset.type, id: item.dataset.id });
-      });
-    });
+  mentionPickerItem(candidate) {
+    const item = document.createElement('button');
+    item.type = 'button'; item.className = 'mention-picker-item'; item.dataset.type = candidate.type;
+    item.title = candidate.detailTitle || candidate.detail || candidate.label || '';
+    item.innerHTML = `
+      <span class="avatar ${this.escapeHtml(candidate.color || '')}" aria-hidden="true">${this.escapeHtml(candidate.avatar || '')}</span>
+      <span class="mention-picker-identity">
+        <span class="mention-picker-name">${this.escapeHtml(candidate.name)}</span>
+        <span class="mention-picker-detail">${this.escapeHtml(candidate.label || candidate.detail || '')}</span>
+      </span>
+      ${candidate.type === 'user' ? `<span class="mention-picker-status" data-status="${candidate.status === 'online' ? 'online' : 'offline'}" aria-hidden="true"></span>` : ''}`;
+    this.autocomplete.renderMentionAvatar(item.querySelector('.avatar'), candidate);
+    item.addEventListener('click', () => this.insertPickerMention(candidate));
+    return item;
   }
 
   insertPickerMention(mention) {

@@ -226,16 +226,24 @@
       return allUsers;
     }
 
+    mentionGroups(matches) {
+      const groups = {
+        all: { label: '所有人', members: [] }, ai: { label: 'AI 助手', members: [] },
+        online: { label: '在线成员', members: [] }, offline: { label: '离线成员', members: [] },
+      };
+      for (const candidate of this.mentionCandidates()) {
+        if (!matches(candidate)) continue;
+        const key = candidate.type === 'user' ? (candidate.status === 'online' ? 'online' : 'offline') : candidate.type;
+        groups[key].members.push(candidate);
+      }
+      const sections = Object.values(groups).filter(group => group.members.length);
+      for (const { members } of sections) members.sort((a, b) => a.name.localeCompare(b.name));
+      return sections;
+    }
+
     showMentionList(query) {
       const lowerQuery = query.toLowerCase();
-
-      const matches = this.mentionCandidates()
-        .filter(u => u.name.toLowerCase().startsWith(lowerQuery))
-        .sort((a, b) => {
-          const rank = u => u.type === 'all' ? 0 : u.type === 'ai' ? 1 : u.status === 'online' ? 2 : 3;
-          if (rank(a) !== rank(b)) return rank(a) - rank(b);
-          return a.name.localeCompare(b.name);
-        });
+      const matches = this.mentionGroups(u => u.name.toLowerCase().startsWith(lowerQuery)).flatMap(group => group.members);
 
       /*
        * u.name 是别人起的名字（roster 与历史消息的发送者）。
@@ -254,15 +262,17 @@
       `, (item) => this.completeMention(item.dataset.name, item.dataset.type, item.dataset.id));
 
       this.list.querySelectorAll('.mention-item').forEach((item, index) => {
-        const user = matches[index];
-        const avatar = item.querySelector('.avatar');
-        if (user.type === 'user') {
-          this.renderAvatar?.(avatar, user.profile);
-        } else {
-          avatar.classList.add('mention-symbol');
-          avatar.appendChild(this.createMentionIcon(user.type));
-        }
+        this.renderMentionAvatar(item.querySelector('.avatar'), matches[index]);
       });
+    }
+
+    renderMentionAvatar(avatar, candidate) {
+      if (candidate.type === 'user') {
+        this.renderAvatar?.(avatar, candidate.profile);
+      } else {
+        avatar.classList.add('mention-symbol');
+        avatar.appendChild(this.createMentionIcon(candidate.type));
+      }
     }
 
     createMentionIcon(type) {

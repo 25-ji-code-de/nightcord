@@ -99,7 +99,7 @@
 
     save(change) {
       const key = this.key();
-      if (!key) return false;
+      if (!key) return null;
       const state = this.read();
       change(state);
       state.read = Object.fromEntries(Object.entries(state.read)
@@ -109,8 +109,20 @@
         localStorage.setItem(key, JSON.stringify(state));
         this.unsaved.delete(key); this.storageError = false;
       } catch { this.unsaved.add(key); this.storageError = true; }
-      this.refresh();
-      return true;
+      return state;
+    }
+
+    saveTasks(change) {
+      const state = this.save(change);
+      if (!state) return;
+      this.renderTasks(state);
+      this.renderStorageWarning();
+    }
+
+    saveRead(change) {
+      const mentions = this.mentions();
+      const state = this.save(state => change(state.read, mentions));
+      if (state) this.refresh(state, mentions);
     }
 
     scheduleRefresh() {
@@ -136,24 +148,27 @@
       }).sort((a, b) => b.timestamp - a.timestamp).slice(0, 2000);
     }
 
-    refresh() {
-      const state = this.read();
-      const unread = this.mentions().filter(message => !state.read[messageKey(message)]).length;
+    refresh(state = this.read(), mentions = this.mentions()) {
+      const unread = mentions.filter(message => !state.read[messageKey(message)]);
       const nav = document.querySelector('#navigation-inbox');
       if (nav) {
         let badge = nav.querySelector('.navigation-badge');
         if (!badge) { badge = element('span', 'navigation-badge'); badge.setAttribute('aria-hidden', 'true'); nav.append(badge); }
-        badge.textContent = unread > 99 ? '99+' : String(unread); badge.hidden = !unread;
-        nav.setAttribute('aria-label', unread ? `收件箱，${unread} 条未读` : '收件箱');
+        badge.textContent = unread.length > 99 ? '99+' : String(unread.length); badge.hidden = !unread.length;
+        nav.setAttribute('aria-label', unread.length ? `收件箱，${unread.length} 条未读` : '收件箱');
       }
       if (!this.panel || this.panel.hidden) return;
       if (this.scope !== this.key()) {
-        this.scope = this.key(); this.limit = PAGE_SIZE; this.undoTasks = null; this.editingTask = null;
+        this.scope = this.key(); this.limit = PAGE_SIZE; this.deletedTask = null; this.editingTask = null;
         this.buildContent();
       }
       if (this.kind === 'search') this.renderSearch();
-      if (this.kind === 'inbox') this.renderInbox(state);
+      if (this.kind === 'inbox') this.renderInbox(state, mentions, unread);
       if (this.kind === 'tasks') this.renderTasks(state);
+      this.renderStorageWarning();
+    }
+
+    renderStorageWarning() {
       this.warning.textContent = this.storageError || this.unsaved.has(this.key())
         ? '浏览器存储不可用或数据无法读取，改动仅在当前页面保留。' : '';
       this.warning.hidden = !this.warning.textContent;
@@ -166,7 +181,8 @@
       this.panel.id = 'sidebar-tools';
       this.panel.setAttribute('aria-labelledby', 'sidebar-tools-title');
       const header = element('header', 'chat-header tools-header');
-      const menu = button('', () => document.querySelector('.sidebar-toggle')?.click(), 'tools-menu');
+      const menu = element('button', 'tools-menu');
+      menu.type = 'button';
       menu.setAttribute('aria-label', '打开导航');
       menu.setAttribute('aria-controls', 'member-sidebar');
       menu.setAttribute('aria-expanded', 'false');
@@ -198,7 +214,7 @@
       if (this.panel.hidden) this.chatScrollTop = this.ui.elements.chatlog.scrollTop;
       document.querySelector(`#navigation-${this.kind}`)?.classList.remove('is-active');
       document.querySelector(`#navigation-${this.kind}`)?.removeAttribute('aria-current');
-      this.kind = kind; this.scope = this.key(); this.limit = PAGE_SIZE; this.undoTasks = null; this.editingTask = null;
+      this.kind = kind; this.scope = this.key(); this.limit = PAGE_SIZE; this.deletedTask = null; this.editingTask = null;
       this.buildContent();
       this.ui.closeNavigationDrawer?.();
       this.ui.elements.main.classList.add('tool-view');
@@ -241,13 +257,13 @@
       if (this.kind === 'help') this.buildHelp();
     }
 
-    resultsList() {
+    resultsList(renderMore = () => this.refresh()) {
       this.count = element('p', 'tools-count'); this.count.setAttribute('role', 'status');
       this.list = element('div', 'tools-results');
       this.list.tabIndex = -1;
       this.more = button('加载更多', () => {
         const previous = this.limit;
-        this.limit += PAGE_SIZE; this.refresh();
+        this.limit += PAGE_SIZE; renderMore();
         this.list.children[previous]?.querySelector('button, input')?.focus();
       });
       this.content.append(this.count, this.list, this.more);
@@ -287,8 +303,8 @@
       jump.title = '跳转到消息';
       row.append(jump);
       if (readState) {
-        const toggle = button(unread ? '标为已读' : '标为未读', () => this.save(state => {
-          if (unread) state.read[key] = true; else delete state.read[key];
+        const toggle = button(unread ? '标为已读' : '标为未读', () => this.saveRead(read => {
+          if (unread) read[key] = true; else delete read[key];
         }));
         toggle.dataset.focus = `read:${key}`; row.append(toggle);
       }
@@ -300,7 +316,7 @@
       if (!target?.isConnected) {
         this.count.textContent = '这条消息尚未显示，请稍后重试。'; return;
       }
-      if (markRead) this.save(state => { state.read[messageKey(message)] = true; });
+      if (markRead) this.saveRead(read => { read[messageKey(message)] = true; });
       this.returnFocus = null;
       this.close(); this.ui.closeNavigationDrawer?.();
       this.ui.isAtBottom = false; this.ui.updateUserActivityTime();
@@ -366,15 +382,13 @@
       this.content.append(element('p', 'tools-description', '提及你的消息，都在这里。'));
       const toolbar = element('div', 'tools-inbox-toolbar');
       toolbar.append(this.filters([['all', '全部提醒'], ['unread', '只看未读']], this.inboxFilter, value => { this.inboxFilter = value; this.refresh(); }));
-      this.markAll = button('全部标为已读', () => this.save(state => {
-        for (const message of this.mentions()) state.read[messageKey(message)] = true;
+      this.markAll = button('全部标为已读', () => this.saveRead((read, mentions) => {
+        for (const message of mentions) read[messageKey(message)] = true;
       }));
       toolbar.append(this.markAll); this.content.append(toolbar); this.resultsList();
     }
 
-    renderInbox(state) {
-      const mentions = this.mentions();
-      const unread = mentions.filter(message => !state.read[messageKey(message)]);
+    renderInbox(state, mentions, unread) {
       const results = this.inboxFilter === 'unread' ? unread : mentions;
       this.markAll.disabled = !unread.length;
       this.count.textContent = `${unread.length} 条未读 · ${mentions.length} 条提醒`;
@@ -399,7 +413,7 @@
         const state = this.read();
         if (id && !state.tasks.some(task => task.id === id)) { this.count.textContent = '该任务已在其他标签页删除，请取消编辑。'; return; }
         if (!id && state.tasks.length >= 200) { this.count.textContent = '已达到 200 项上限，请先删除不需要的任务。'; return; }
-        this.save(next => {
+        this.saveTasks(next => {
           const task = id ? next.tasks.find(task => task.id === id) : null;
           if (task) { task.title = title; task.due = this.taskDue.value; }
           else next.tasks.unshift({ id: crypto.randomUUID(), title, due: this.taskDue.value, done: false });
@@ -408,14 +422,14 @@
       });
       this.taskTitle.addEventListener('input', () => this.taskTitle.setCustomValidity(''));
       this.content.append(this.taskForm, this.filters([['all', '全部任务'], ['active', '未完成'], ['done', '已完成']], this.taskFilter,
-        value => { this.taskFilter = value; this.refresh(); }));
-      this.undo = button('撤销删除', () => {
-        const tasks = this.undoTasks;
-        if (!tasks || this.read().tasks.length + tasks.length > 200) return;
-        this.undoTasks = null;
-        this.save(state => state.tasks.unshift(...tasks.filter(task => !state.tasks.some(existing => existing.id === task.id))));
-      });
-      this.undo.hidden = true; this.content.append(this.undo); this.resultsList();
+        value => { this.taskFilter = value; this.renderTasks(this.read()); }));
+      this.undo = button('撤销删除', () => this.saveTasks(state => {
+        const task = this.deletedTask;
+        if (!task || state.tasks.length >= 200) return;
+        if (!state.tasks.some(existing => existing.id === task.id)) state.tasks.unshift(task);
+        this.deletedTask = null;
+      }));
+      this.undo.hidden = true; this.content.append(this.undo); this.resultsList(() => this.renderTasks(this.read()));
     }
 
     resetTaskForm() {
@@ -428,13 +442,13 @@
       for (const control of this.taskForm.elements) control.disabled = !available;
       const done = state.tasks.filter(task => task.done).length;
       this.count.textContent = available ? `${done} / ${state.tasks.length} 项已完成` : '连接聊天室后即可管理自己的任务。';
-      this.undo.hidden = !this.undoTasks; this.undo.disabled = state.tasks.length >= 200;
+      this.undo.hidden = !this.deletedTask; this.undo.disabled = state.tasks.length >= 200;
       const tasks = state.tasks.filter(task => this.taskFilter === 'all' || (this.taskFilter === 'done') === task.done);
       const rows = tasks.slice(0, this.limit).map(task => {
         const row = element('article', 'tool-task'); row.classList.toggle('is-complete', task.done);
         const label = element('label', 'tool-task-check');
         const check = element('input'); check.type = 'checkbox'; check.checked = task.done; check.dataset.focus = `task:${task.id}`;
-        check.addEventListener('change', () => this.save(state => { const current = state.tasks.find(item => item.id === task.id); if (current) current.done = check.checked; }));
+        check.addEventListener('change', () => this.saveTasks(state => { const current = state.tasks.find(item => item.id === task.id); if (current) current.done = check.checked; }));
         label.append(check, element('span', 'tool-task-title', task.title)); row.append(label);
         if (task.due) {
           const date = element('span', 'tool-task-date', `截止 ${task.due}`);
@@ -447,8 +461,8 @@
           this.taskSubmit.textContent = '保存修改'; this.cancelEdit.hidden = false; this.taskTitle.focus();
         }); edit.dataset.focus = `edit:${task.id}`;
         const remove = button('删除', () => {
-          this.undoTasks = [task];
-          this.save(state => { state.tasks = state.tasks.filter(item => item.id !== task.id); });
+          this.deletedTask = task;
+          this.saveTasks(state => { state.tasks = state.tasks.filter(item => item.id !== task.id); });
           if (this.editingTask === task.id) this.resetTaskForm();
           this.undo.focus();
         }); remove.setAttribute('aria-label', `删除任务：${task.title}`);

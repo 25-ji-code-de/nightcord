@@ -121,7 +121,7 @@ class SekaiRenderer {
     if (this.useDOMPurify) {
       this.purifyConfig = {
         ALLOWED_TAGS: ['strong', 'em', 'del', 'code', 'blockquote', 'br', 'a', 'span', 'div', 'svg', 'path', 'polyline', 'line', 'rect', 'circle', 'polygon', 'img', 'audio', 'button', 'pre'],
-        ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style', 'title', 'src', 'alt', 'loading', 'width', 'height', 'viewBox', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'd', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'transform', 'id', 'preload', 'download', 'data-local-nako-message', 'tabindex', 'role', 'aria-label', 'aria-hidden'],
+        ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style', 'title', 'src', 'alt', 'loading', 'width', 'height', 'viewBox', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'd', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'transform', 'id', 'preload', 'download', 'data-local-nako-message', 'tabindex', 'role', 'aria-label', 'aria-hidden', 'focusable'],
         ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
         KEEP_CONTENT: true,
         RETURN_DOM_FRAGMENT: false,
@@ -201,11 +201,11 @@ class SekaiRenderer {
    */
   _getAudioIcons(size = 16) {
     return {
-      PLAY: `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor"></polygon></svg>`,
-      PAUSE: `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"></rect><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"></rect></svg>`,
-      STOP: `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor"></rect></svg>`,
-      RW: `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><polygon points="11 19 2 12 11 5 11 19" fill="currentColor"></polygon><polygon points="22 19 13 12 22 5 22 19" fill="currentColor"></polygon></svg>`,
-      FF: `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><polygon points="13 19 22 12 13 5 13 19" fill="currentColor"></polygon><polygon points="2 19 11 12 2 5 2 19" fill="currentColor"></polygon></svg>`
+      PLAY: `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" focusable="false"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor"></polygon></svg>`,
+      PAUSE: `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" focusable="false"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"></rect><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"></rect></svg>`,
+      STOP: `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" focusable="false"><rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor"></rect></svg>`,
+      RW: `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" focusable="false"><polygon points="11 19 2 12 11 5 11 19" fill="currentColor"></polygon><polygon points="22 19 13 12 22 5 22 19" fill="currentColor"></polygon></svg>`,
+      FF: `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" focusable="false"><polygon points="13 19 22 12 13 5 13 19" fill="currentColor"></polygon><polygon points="2 19 11 12 2 5 2 19" fill="currentColor"></polygon></svg>`
     };
   }
 
@@ -1165,15 +1165,14 @@ class SekaiRenderer {
         e.preventDefault();
         e.stopPropagation();
         container.classList.add('revealed');
-        container.removeAttribute('role');
-        container.setAttribute('aria-label', desc.alt || desc.name || 'Image');
+        container.setAttribute('aria-label', `预览图片 ${alt}`);
       };
       container.addEventListener('click', reveal, { capture: true, once: true });
       container.addEventListener('keydown', (e) => {
         if ((e.key === 'Enter' || e.key === ' ') && !container.classList.contains('revealed')) {
           reveal(e);
         }
-      });
+      }, { capture: true });
     }
 
     return container;
@@ -1459,6 +1458,10 @@ class SekaiRenderer {
   renderImage(url, alt) {
     const container = document.createElement('div');
     container.className = 'sekai-image-container';
+    container.tabIndex = 0;
+    container.setAttribute('role', 'button');
+    container.setAttribute('aria-label', `预览图片 ${alt || ''}`.trim());
+    container.setAttribute('aria-haspopup', 'dialog');
 
     // Loading State
     container.classList.add('loading');
@@ -1505,6 +1508,13 @@ class SekaiRenderer {
       }
     };
 
+    container.addEventListener('keydown', event => {
+      if (event.defaultPrevented || event.target !== container) return;
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      img.click();
+    });
+
     container.appendChild(img);
     if (alt) {
         const caption = document.createElement('div');
@@ -1526,7 +1536,7 @@ class SekaiRenderer {
     const escapedSize = this.useDOMPurify ? (size || '') : this.escapeHtml(size || '');
 
     card.onclick = (e) => {
-        if (!e.target.closest('.sekai-file-action')) {
+        if (!e.target.closest('a')) {
             window.open(url, '_blank');
         }
     };
@@ -1536,12 +1546,12 @@ class SekaiRenderer {
 
     const fileHTML = `
       <div class="sekai-file-icon">${icon}</div>
-      <div class="sekai-file-details">
+      <a href="${escapedUrl}" target="_blank" rel="noopener" class="sekai-file-details">
         <div class="sekai-file-name" title="${escapedName}">${escapedName}</div>
         <div class="sekai-file-meta">${escapedSize || ext.toUpperCase()}</div>
-      </div>
-      <a href="${escapedUrl}" download="${escapedName}" class="sekai-file-action" title="Download">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      </a>
+      <a href="${escapedUrl}" download="${escapedName}" class="sekai-file-action" title="下载" aria-label="下载 ${escapedName}">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="7 10 12 15 17 10"></polyline>
           <line x1="12" y1="15" x2="12" y2="3"></line>
@@ -1673,6 +1683,7 @@ class SekaiRenderer {
     // Helper for buttons
     const createBtn = (iconSvg, label) => {
         const btn = document.createElement('button');
+        btn.type = 'button';
         btn.className = 'sekai-transport-btn';
         btn.innerHTML = iconSvg;
         btn.setAttribute('aria-label', label);
@@ -1871,6 +1882,7 @@ class SekaiRenderer {
     const ICONS = this._getAudioIcons(16);
 
     const playBtn = document.createElement('button');
+    playBtn.type = 'button';
     playBtn.className = 'sekai-audio-control';
     playBtn.setAttribute('aria-label', 'Play');
 
@@ -2134,6 +2146,8 @@ class SekaiRenderer {
   renderReply(timestamp, preview) {
     const chip = document.createElement('div');
     chip.className = 'sekai-reply-chip';
+    chip.tabIndex = 0;
+    chip.setAttribute('role', 'button');
     chip.title = `点击跳转到 #${timestamp}`;
 
     // Escape user content
@@ -2141,7 +2155,7 @@ class SekaiRenderer {
 
     const replyHTML = `
       <div class="sekai-reply-accent">
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true" focusable="false">
               <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" stroke="none"></path>
           </svg>
       </div>
@@ -2155,6 +2169,11 @@ class SekaiRenderer {
         const event = new CustomEvent('reply-jump', { detail: { timestamp: Number(timestamp) } });
         document.dispatchEvent(event);
     };
+    chip.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      chip.click();
+    });
 
     return chip;
   }
@@ -2254,33 +2273,33 @@ class SekaiRenderer {
 
   getFileIcon(ext) {
     // Audio Icon: A music note with sound waves
-    const audioIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+    const audioIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true" focusable="false">
         <path d="M9 18V5l12-2v13"></path>
         <circle cx="6" cy="18" r="3"></circle>
         <circle cx="18" cy="16" r="3"></circle>
     </svg>`;
 
     // Image Icon: Picture frame with mountain and sun
-    const imageIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+    const imageIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true" focusable="false">
         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
         <circle cx="8.5" cy="8.5" r="1.5"></circle>
         <polyline points="21 15 16 10 5 21"></polyline>
     </svg>`;
     
     // Generic File Icon: Paper with folded corner
-    const defaultIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+    const defaultIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true" focusable="false">
         <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
         <polyline points="13 2 13 9 20 9"></polyline>
     </svg>`;
     
     // Code/Data Icon: Brackets
-    const codeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+    const codeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true" focusable="false">
         <polyline points="16 18 22 12 16 6"></polyline>
         <polyline points="8 6 2 12 8 18"></polyline>
     </svg>`;
     
     // Archive Icon: Box/Zip
-    const archiveIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+    const archiveIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true" focusable="false">
         <polyline points="21 8 21 21 3 21 3 8"></polyline>
         <rect x="1" y="3" width="22" height="5"></rect>
         <line x1="10" y1="12" x2="14" y2="12"></line>

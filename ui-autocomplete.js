@@ -56,11 +56,11 @@
       }, true);
 
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !e.isComposing && this.isOpen('sticker') &&
+        if (e.key === 'Escape' && !e.isComposing && this.isOpen() &&
             (this.list.contains(e.target) || this.stickerButton?.contains(e.target))) {
           e.preventDefault();
           this.hideList();
-          this.stickerButton?.focus();
+          (this.autocompleteType === 'sticker' ? this.stickerButton : this.input)?.focus();
         }
       });
 
@@ -75,6 +75,11 @@
 
     isOpen(type = this.autocompleteType) {
       return !!(this.list && type === this.autocompleteType && !this.list.classList.contains('hidden'));
+    }
+
+    syncExpanded() {
+      this.atButton?.setAttribute('aria-expanded', String(this.isOpen('mention')));
+      this.stickerButton?.setAttribute('aria-expanded', String(this.isOpen('sticker') || this.isOpen('emoji')));
     }
 
     insertAtSymbol() {
@@ -299,6 +304,7 @@
       icon.setAttribute('stroke-linejoin', 'round');
       icon.setAttribute('aria-hidden', 'true');
       icon.setAttribute('focusable', 'false');
+      icon.setAttribute('focusable', 'false');
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', type === 'all'
         ? 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-3.87M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z'
@@ -349,7 +355,7 @@
        */
       this.renderItems(matches, (s) => `
         <div class="mention-item sticker-autocomplete-item" data-code="${escapeHtml(s.code)}">
-          <img src="${escapeHtml(s.url)}" class="sticker-preview" loading="lazy" />
+          <img src="${escapeHtml(s.url)}" class="sticker-preview" loading="lazy" alt="" />
           <div class="sticker-info">
              <div class="sticker-label">${escapeHtml(s.label)}</div>
              <div class="sticker-desc">${escapeHtml(this.getCategoryLabel(s.category))}</div>
@@ -477,8 +483,10 @@
       if (!categories.includes(activeCategory)) activeCategory = categories[0];
       this.pickerCategories[type] = activeCategory;
 
-      const categoryButtons = categories.map((category) => `
+      const panelId = `${this.list.id || 'autocomplete'}-panel`;
+      const categoryButtons = categories.map((category, index) => `
         <button type="button" class="picker-category${category === activeCategory ? ' active' : ''}"
+                id="${panelId}-tab-${index}" aria-controls="${panelId}" tabindex="${category === activeCategory ? '0' : '-1'}"
                 data-category="${escapeHtml(category)}" role="tab"
                 aria-selected="${category === activeCategory ? 'true' : 'false'}">
           ${escapeHtml(this.getCategoryLabel(category))}
@@ -487,8 +495,8 @@
 
       this.list.classList.add('picker-mode');
       this.list.innerHTML = `
-        <div class="picker-categories" role="tablist">${categoryButtons}</div>
-        <div class="picker-grid" role="grid"></div>
+        <div class="picker-categories" role="tablist" aria-label="${type === 'emoji' ? '表情分类' : '贴纸分类'}">${categoryButtons}</div>
+        <div class="picker-grid" role="tabpanel" id="${panelId}" aria-labelledby="${panelId}-tab-${categories.indexOf(activeCategory)}"></div>
       `;
 
       const grid = this.list.querySelector('.picker-grid');
@@ -502,8 +510,22 @@
           tabs.forEach((tab) => {
             tab.classList.toggle('active', tab === button);
             tab.setAttribute('aria-selected', String(tab === button));
+            tab.tabIndex = tab === button ? 0 : -1;
           });
+          grid.setAttribute('aria-labelledby', button.id);
           this.renderPickerGrid(grid, items, type, category);
+        });
+        button.addEventListener('keydown', event => {
+          const index = Array.from(tabs).indexOf(button);
+          let next;
+          if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+          else if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+          else if (event.key === 'Home') next = 0;
+          else if (event.key === 'End') next = tabs.length - 1;
+          else return;
+          event.preventDefault();
+          tabs[next].focus();
+          tabs[next].click();
         });
       });
       grid.addEventListener('click', (event) => {
@@ -515,6 +537,7 @@
 
       this.renderPickerGrid(grid, items, type, activeCategory);
       this.list.classList.remove('hidden');
+      this.syncExpanded();
       if (activeCategory !== categories[0]) {
         this.list.querySelector('.picker-category.active').scrollIntoView({
           block: 'nearest', inline: 'nearest', container: 'nearest'
@@ -533,7 +556,7 @@
         return `
           <button type="button" class="picker-grid-item${index === 0 ? ' active' : ''}"
                   ${dataAttribute}="${escapeHtml(value)}" title="${escapeHtml(title)}"
-                  aria-label="${escapeHtml(title)}" role="gridcell">
+                  aria-label="${escapeHtml(title)}">
             <img src="${escapeHtml(item.url)}" loading="lazy" alt="" />
             <span>${escapeHtml(label)}</span>
           </button>
@@ -558,10 +581,18 @@
       }).join('');
 
       this.list.querySelectorAll('.mention-item').forEach(item => {
+        item.setAttribute('role', 'button');
+        item.tabIndex = 0;
         item.addEventListener('click', () => clickHandler(item));
+        item.addEventListener('keydown', event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          clickHandler(item);
+        });
       });
 
       this.list.classList.remove('hidden');
+      this.syncExpanded();
       this.autocompleteIndex = 0;
     }
 
@@ -574,6 +605,7 @@
         this.input.dispatchEvent(new Event('input', { bubbles: true }));
       }
       this.list.classList.add('hidden');
+      this.syncExpanded();
       this.list.classList.remove('picker-mode');
       this.autocompleteIndex = 0;
     }

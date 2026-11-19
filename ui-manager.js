@@ -87,7 +87,7 @@ class UIManager {
       chatroom: document.querySelector("#chatroom"),
       chatlog: document.querySelector("#messages"),
       chatInput: document.querySelector("#messageInput"),
-      stickerButton: document.querySelector('.input-btns button[title="表情"]'),
+      stickerButton: document.querySelector('#stickerBtn'),
       roster: document.querySelector("#online-users"),
       voiceRoster: document.querySelector("#voice-users"),
       offlineRoster: document.querySelector("#offline-users"),
@@ -130,7 +130,7 @@ class UIManager {
     this.mentionPickerOpen = false;
     this.profileUI = new NightcordProfileUI(this);
 
-    this.systemIcon = `<svg width="24" height="24" viewBox="8 7 34 34" xmlns="http://www.w3.org/2000/svg"><path d="M41 24A16 16 0 1 1 9 24A16 16 0 1 1 41 24ZM41 24A12 12 0 1 1 17 24A12 12 0 1 1 41 24ZM27 24A2 2 0 1 1 23 24A2 2 0 1 1 27 24ZM35 24A2 2 0 1 1 31 24A2 2 0 1 1 35 24Z" fill="white" fill-rule="evenodd"></path></svg>`;
+    this.systemIcon = `<svg width="24" height="24" viewBox="8 7 34 34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><path d="M41 24A16 16 0 1 1 9 24A16 16 0 1 1 41 24ZM41 24A12 12 0 1 1 17 24A12 12 0 1 1 41 24ZM27 24A2 2 0 1 1 23 24A2 2 0 1 1 27 24ZM35 24A2 2 0 1 1 31 24A2 2 0 1 1 35 24Z" fill="white" fill-rule="evenodd"></path></svg>`;
 
     // Storage manager (handles per-room keys and legacy migration)
     try {
@@ -171,7 +171,7 @@ class UIManager {
         input: this.elements.chatInput,
         list: document.querySelector('#mention-list'),
         stickerButton: this.elements.stickerButton,
-        atButton: document.querySelector('.input-btns button[title="@"]'),
+        atButton: document.querySelector('#mentionBtn'),
         getAllUsers: () => this.getAllUsers(),
         formatMention: mention => this.mentions?.format(mention) || null,
         renderAvatar: (element, profile) => this.profileUI.avatar(element, profile),
@@ -872,7 +872,7 @@ class UIManager {
       presence.hidden = presenceKind === 'offline';
       if (presence.dataset.presence !== presenceKind) {
         presence.dataset.presence = presenceKind;
-        presence.innerHTML = presenceKind === 'mobile' ? '<svg viewBox="0 0 12 19" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="1" y="1" width="10" height="17" rx=".8"/><path d="M4.5 2h3"/></svg>' : '';
+        presence.innerHTML = presenceKind === 'mobile' ? '<svg viewBox="0 0 12 19" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true" focusable="false"><rect x="1" y="1" width="10" height="17" rx=".8"/><path d="M4.5 2h3"/></svg>' : '';
       }
       presence.title = presenceState;
       presence.setAttribute('aria-label', presenceState);
@@ -1560,6 +1560,11 @@ class UIManager {
     this.setupFileUpload();
   }
 
+  setFileUploadMenuOpen(open) {
+    this.elements.fileUploadMenu?.classList.toggle('hidden', !open);
+    this.elements.attachmentBtn?.setAttribute('aria-expanded', String(open));
+  }
+
   /**
    * 设置文件上传功能
    */
@@ -1575,13 +1580,13 @@ class UIManager {
     attachmentBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      fileUploadMenu.classList.toggle('hidden');
+      this.setFileUploadMenuOpen(fileUploadMenu.classList.contains('hidden'));
     });
 
     // 点击其他地方关闭菜单
     document.addEventListener('click', (e) => {
       if (!attachmentBtn.contains(e.target) && !fileUploadMenu.contains(e.target)) {
-        fileUploadMenu.classList.add('hidden');
+        this.setFileUploadMenuOpen(false);
       }
     });
 
@@ -1591,7 +1596,7 @@ class UIManager {
       item.addEventListener('click', (e) => {
         e.preventDefault();
         const type = item.dataset.type;
-        fileUploadMenu.classList.add('hidden');
+        this.setFileUploadMenuOpen(false);
 
         if (type === 'image') {
           imageInput.click();
@@ -1603,6 +1608,16 @@ class UIManager {
       });
     });
 
+    const dismissMenu = event => {
+      if (event.key !== 'Escape' || event.isComposing || fileUploadMenu.classList.contains('hidden')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.setFileUploadMenuOpen(false);
+      attachmentBtn.focus();
+    };
+    attachmentBtn.addEventListener('keydown', dismissMenu);
+    fileUploadMenu.addEventListener('keydown', dismissMenu);
+
     // 拖拽上传支持
     const dropZone = document.body;
     let dragCounter = 0;
@@ -1612,7 +1627,7 @@ class UIManager {
     overlay.className = 'drag-overlay hidden';
     overlay.innerHTML = `
       <div class="drag-message">
-        <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+        <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor" aria-hidden="true" focusable="false"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
         <span>释放文件以上传</span>
       </div>
     `;
@@ -2341,9 +2356,12 @@ class UIManager {
 
     // 移除可能残留的旧弹层，避免叠加
     const existing = document.getElementById('auth-error-overlay');
-    if (existing) existing.remove();
+    if (existing) {
+      existing.close();
+      existing.remove();
+    }
 
-    const overlay = document.createElement('div');
+    const overlay = document.createElement('dialog');
     overlay.id = 'auth-error-overlay';
     overlay.className = 'auth-error-overlay';
     overlay.setAttribute('role', 'alertdialog');
@@ -2357,7 +2375,7 @@ class UIManager {
     overlay.innerHTML = `
       <div class="auth-error-dialog">
         <div class="auth-error-icon" aria-hidden="true">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="12"></line>
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
@@ -2375,9 +2393,10 @@ class UIManager {
       </div>
     `;
 
-    const close = () => {
+    const close = () => overlay.close();
+    overlay.addEventListener('close', () => {
       overlay.remove();
-    };
+    });
 
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
@@ -2391,10 +2410,26 @@ class UIManager {
       });
     }
     overlay.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      } else if (e.key === 'Tab') {
+        const buttons = overlay.querySelectorAll('button');
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     });
 
     document.body.appendChild(overlay);
+    overlay.showModal();
     // 聚焦首个按钮，便于键盘操作
     const firstBtn = overlay.querySelector('.auth-error-btn');
     if (firstBtn) firstBtn.focus();
@@ -2566,9 +2601,11 @@ class UIManager {
    */
   createReplyButton(msg) {
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'message-reply-btn';
     btn.title = '回复此消息';
-    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor">
+    btn.setAttribute('aria-label', btn.title);
+    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" aria-hidden="true" focusable="false">
       <path d="M760-200v-160q0-50-35-85t-85-35H273l144 144-57 56-240-240 240-240 57 56-144 144h367q83 0 141.5 58.5T840-360v160h-80Z"/>
     </svg>`;
 
@@ -2975,7 +3012,7 @@ class UIManager {
     if (!groups.length) {
       list.innerHTML = `
         <div class="mention-picker-empty" role="status">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5M8 10.5h5"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5M8 10.5h5"/></svg>
           <span>没有找到匹配的成员</span>
         </div>`;
       return;

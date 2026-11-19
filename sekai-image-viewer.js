@@ -58,8 +58,9 @@ class SekaiImageViewer {
   }
 
   createViewer() {
-    const viewer = document.createElement('div');
+    const viewer = document.createElement('dialog');
     viewer.className = 'sekai-image-viewer';
+    viewer.setAttribute('aria-label', '图片预览');
     viewer.innerHTML = `
       <div class="sekai-viewer-backdrop"></div>
       <div class="sekai-viewer-container">
@@ -69,50 +70,50 @@ class SekaiImageViewer {
         </div>
       </div>
       
-      <button class="sekai-viewer-close-fixed" title="关闭 (ESC)">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+      <button type="button" class="sekai-viewer-close-fixed" title="关闭 (ESC)" aria-label="关闭">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
         </svg>
       </button>
 
       <div class="sekai-viewer-toolbar">
-        <button class="sekai-viewer-btn" data-action="zoom-out" title="缩小 (Scroll Down)">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+        <button type="button" class="sekai-viewer-btn" data-action="zoom-out" title="缩小 (Scroll Down)" aria-label="缩小">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
             <line x1="8" y1="11" x2="14" y2="11"></line>
           </svg>
         </button>
         <span class="sekai-viewer-scale">100%</span>
-        <button class="sekai-viewer-btn" data-action="zoom-in" title="放大 (Scroll Up)">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+        <button type="button" class="sekai-viewer-btn" data-action="zoom-in" title="放大 (Scroll Up)" aria-label="放大">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
             <line x1="11" y1="8" x2="11" y2="14"></line>
             <line x1="8" y1="11" x2="14" y2="11"></line>
           </svg>
         </button>
-        <button class="sekai-viewer-btn" data-action="rotate" title="旋转 (R)">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+        <button type="button" class="sekai-viewer-btn" data-action="rotate" title="旋转 (R)" aria-label="旋转">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
             <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"></path>
           </svg>
         </button>
-        <button class="sekai-viewer-btn" data-action="reset" title="重置 (Space)">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+        <button type="button" class="sekai-viewer-btn" data-action="reset" title="重置 (Space)" aria-label="重置">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
             <path d="M3 3v5h5"></path>
           </svg>
         </button>
-        <button class="sekai-viewer-btn" data-action="download" title="下载 (D)">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+        <button type="button" class="sekai-viewer-btn" data-action="download" title="下载 (D)" aria-label="下载">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>
           </svg>
         </button>
-        <button class="sekai-viewer-btn" data-action="close" title="关闭 (ESC)">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+        <button type="button" class="sekai-viewer-btn" data-action="close" title="关闭 (ESC)" aria-label="关闭">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
@@ -157,6 +158,25 @@ class SekaiImageViewer {
       }
     });
 
+    this.viewer.addEventListener('cancel', event => {
+      event.preventDefault();
+      this.close();
+    });
+    this.viewer.addEventListener('focusin', () => this.resetIdle());
+    this.viewer.addEventListener('keydown', event => {
+      if (event.key !== 'Tab') return;
+      const buttons = this.viewer.querySelectorAll('button');
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+
     // Backdrop click to close
     this.backdrop.addEventListener('click', () => this.close());
 
@@ -165,7 +185,7 @@ class SekaiImageViewer {
       if (!this.isOpen) return;
 
       switch (e.key) {
-        case 'Escape': this.close(); break;
+        case 'Escape': e.preventDefault(); this.close(); break;
         case '+': case '=': this.zoomIn(); break;
         case '-': case '_': this.zoomOut(); break;
         case 'r': case 'R':
@@ -175,7 +195,9 @@ class SekaiImageViewer {
             this.rotate();
           }
           break;
-        case ' ': e.preventDefault(); this.reset(); break;
+        case ' ':
+          if (e.target.closest('button')) break;
+          e.preventDefault(); this.reset(); break;
         case 'd': case 'D': this.download(); break;
       }
     });
@@ -496,12 +518,18 @@ class SekaiImageViewer {
   }
 
   open(imageSrc, filename = '') {
+    if (!this.isOpen) {
+      this.previousFocus = document.activeElement;
+      this.previousOverflow = document.body.style.overflow;
+    }
     this.currentImage = imageSrc;
     this.isOpen = true;
     this.resetTouchState();
     this.reset();
 
     this.viewer.classList.add('active');
+    if (!this.viewer.open) this.viewer.showModal();
+    this.fixedCloseBtn.focus({ preventScroll: true });
     this.loading.style.display = 'flex';
     this.image.style.opacity = '0';
     document.body.style.overflow = 'hidden';
@@ -519,6 +547,7 @@ class SekaiImageViewer {
     this.viewer.addEventListener('click', this.boundResetIdle);
 
     // Load image
+    this.image.alt = filename || '图片预览';
     this.image.src = imageSrc;
     this.image.onload = () => {
       this.loading.style.display = 'none';
@@ -527,6 +556,8 @@ class SekaiImageViewer {
   }
 
   close() {
+    if (!this.isOpen) return;
+    this.viewer.close();
     this.isOpen = false;
     this.resetTouchState();
     this.viewer.classList.remove('active');
@@ -538,7 +569,8 @@ class SekaiImageViewer {
     window.removeEventListener('keydown', this.boundResetIdle);
     this.viewer.removeEventListener('click', this.boundResetIdle);
 
-    document.body.style.overflow = '';
+    document.body.style.overflow = this.previousOverflow;
+    if (this.previousFocus?.isConnected) this.previousFocus.focus({ preventScroll: true });
     this.image.src = '';
     this.reset();
   }
@@ -549,7 +581,8 @@ class SekaiImageViewer {
     clearTimeout(this.idleTimer);
     this.idleTimer = setTimeout(() => {
       // Don't hide if dragging or hovering toolbar (optional, but good UX)
-      if (this.isOpen && !this.isDragging) {
+      const controlFocused = this.viewer.contains(document.activeElement) && document.activeElement.tagName === 'BUTTON';
+      if (this.isOpen && !this.isDragging && !controlFocused) {
         this.viewer.classList.add('ui-hidden');
       }
     }, this.idleDelay);

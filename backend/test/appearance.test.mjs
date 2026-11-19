@@ -74,7 +74,9 @@ test('appearance settings independently apply palettes and member styles, preser
     assert.equal(await page.locator('#navigation-chat svg').evaluate(node => node.getBoundingClientRect().width), 28);
     const beforeMessages = await page.locator('#messages').textContent();
     await page.locator('#messageInput').fill('Unsent appearance draft');
+    assert.equal(await page.locator('#navigation-settings').getAttribute('aria-controls'), null);
     await page.getByRole('button', { name: '设置', exact: true }).click();
+    assert.equal(await page.locator('#navigation-settings').getAttribute('aria-controls'), 'appearance-settings');
     assert.equal(await grayPurple.isChecked(), true);
     assert.equal(await classic.isChecked(), true);
     assert.equal(await grayPurple.evaluate(node => document.activeElement === node), true);

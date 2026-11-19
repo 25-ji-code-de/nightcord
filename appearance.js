@@ -56,6 +56,7 @@
       if (dialog.open) return;
       previousFocus = document.activeElement;
       document.body.appendChild(dialog);
+      trigger.setAttribute('aria-controls', dialog.id);
       dialog.showModal();
       options.find(option => option.checked)?.focus({ preventScroll: true });
     });
@@ -87,6 +88,7 @@
     dialog.addEventListener('pointerdown', event => { startedOutside = outside(event); });
     dialog.addEventListener('click', event => { if (startedOutside && outside(event)) dialog.close(); });
     dialog.addEventListener('close', () => {
+      trigger.removeAttribute('aria-controls');
       dialog.remove();
       const target = previousFocus?.isConnected && !previousFocus.closest('[inert]')
         ? previousFocus : document.querySelector('.sidebar-toggle');

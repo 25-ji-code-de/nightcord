@@ -26,6 +26,10 @@ class Element {
 
   appendChild() {}
   closest() { return null; }
+  setAttribute() {}
+  focus() {}
+  showModal() { this.open = true; }
+  close() { this.open = false; }
 
   querySelector(selector) {
     if (!this.children.has(selector)) {

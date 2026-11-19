@@ -41,7 +41,7 @@ window.bindComposerFormat = function (ui, limit) {
     start = input.selectionStart;
     end = input.selectionEnd;
     ui.autocomplete?.hideList();
-    ui.elements.fileUploadMenu?.classList.add('hidden');
+    ui.setFileUploadMenuOpen(false);
     showHome();
     panel.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');

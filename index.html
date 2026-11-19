@@ -47,7 +47,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
     <div class="name-chooser-content">
       <div class="logo-area">
         <!-- Nightcord mark：48 整数网格；viewBox 保留现有紧凑留白。 -->
-        <svg width="60" height="60" viewBox="8 7 34 34" xmlns="http://www.w3.org/2000/svg">
+        <svg width="60" height="60" viewBox="8 7 34 34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
           <path fill="#ffffff" fill-opacity="0.9" fill-rule="evenodd" d="M41 24A16 16 0 1 1 9 24A16 16 0 1 1 41 24ZM41 24A12 12 0 1 1 17 24A12 12 0 1 1 41 24ZM27 24A2 2 0 1 1 23 24A2 2 0 1 1 27 24ZM35 24A2 2 0 1 1 31 24A2 2 0 1 1 35 24Z"></path>
         </svg>
       </div>
@@ -60,9 +60,9 @@ Copyright (C) 2025 The 25-ji-code-de Team
         <div id="name-error" class="input-error" aria-live="polite"></div>
       </div>
       
-      <button id="name-submit" class="name-submit">
+      <button type="button" id="name-submit" class="name-submit">
         <span id="chooser-submit-text">进入 Nightcord</span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <polyline points="9 18 15 12 9 6"></polyline>
         </svg>
       </button>
@@ -71,15 +71,15 @@ Copyright (C) 2025 The 25-ji-code-de Team
         <span>or</span>
       </div>
 
-      <button id="sekai-pass-login" class="sekai-pass-login">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <button type="button" id="sekai-pass-login" class="sekai-pass-login">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
           <path d="M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2V5c0-1.1-.89-2-2-2zm0 16H5V5h14v14zm-7-2h-3v-1h3v1zm5 0h-1v-1h1v1zm0-2h-1v-1h1v1zm0-2h-1v-1h1v1zm0-2h-1v-1h1v1zM8 12c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm0 1.5c-2.33 0-4.31 1.46-5.11 3.5h10.22c-.8-2.04-2.78-3.5-5.11-3.5z"/>
         </svg>
         <span>使用 SEKAI Pass 登录</span>
       </button>
 
-      <button id="chooser-close" class="chooser-close hidden" title="关闭">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <button type="button" id="chooser-close" class="chooser-close hidden" title="关闭" aria-label="关闭">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
         </svg>
@@ -123,7 +123,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="help"><circle cx="16" cy="16" r="13.6"/><path d="M12.1 12.3c0-2.35 1.55-3.8 4-3.8 2.35 0 3.9 1.4 3.9 3.55 0 3.35-4.25 3.45-4.25 6.35v.65" stroke-width="2.2"/><circle cx="15.75" cy="23" r="1.1" fill="currentColor" stroke="none"/></svg>
             <span class="navigation-tooltip" aria-hidden="true">帮助</span>
           </button>
-          <button type="button" class="navigation-item navigation-settings" id="navigation-settings" aria-label="设置" aria-haspopup="dialog" aria-controls="appearance-settings">
+          <button type="button" class="navigation-item navigation-settings" id="navigation-settings" aria-label="设置" aria-haspopup="dialog">
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="gear"><path d="M12.546 6.064Q12.915 5.911 13.005 5.521L13.51 3.338Q13.656 2.705 14.306 2.705L17.694 2.705Q18.344 2.705 18.49 3.338L18.995 5.521Q19.085 5.911 19.454 6.064L20.583 6.532Q20.953 6.685 21.292 6.473L23.192 5.286Q23.743 4.941 24.203 5.401L26.599 7.797Q27.059 8.257 26.714 8.808L25.527 10.708Q25.315 11.047 25.468 11.417L25.936 12.546Q26.089 12.915 26.479 13.005L28.662 13.51Q29.295 13.656 29.295 14.306L29.295 17.694Q29.295 18.344 28.662 18.49L26.479 18.995Q26.089 19.085 25.936 19.454L25.468 20.583Q25.315 20.953 25.527 21.292L26.714 23.192Q27.059 23.743 26.599 24.203L24.203 26.599Q23.743 27.059 23.192 26.714L21.292 25.527Q20.953 25.315 20.583 25.468L19.454 25.936Q19.085 26.089 18.995 26.479L18.49 28.662Q18.344 29.295 17.694 29.295L14.306 29.295Q13.656 29.295 13.51 28.662L13.005 26.479Q12.915 26.089 12.546 25.936L11.417 25.468Q11.047 25.315 10.708 25.527L8.808 26.714Q8.257 27.059 7.797 26.599L5.401 24.203Q4.941 23.743 5.286 23.192L6.473 21.292Q6.685 20.953 6.532 20.583L6.064 19.454Q5.911 19.085 5.521 18.995L3.338 18.49Q2.705 18.344 2.705 17.694L2.705 14.306Q2.705 13.656 3.338 13.51L5.521 13.005Q5.911 12.915 6.064 12.546L6.532 11.417Q6.685 11.047 6.473 10.708L5.286 8.808Q4.941 8.257 5.401 7.797L7.797 5.401Q8.257 4.941 8.808 5.286L10.708 6.473Q11.047 6.685 11.417 6.532Z"/><circle cx="16" cy="16" r="4.45"/></svg>
             <span class="navigation-tooltip" aria-hidden="true">设置</span>
           </button>
@@ -137,13 +137,13 @@ Copyright (C) 2025 The 25-ji-code-de Team
       </div>
       <div class="sidebar-content" id="member-list-panel">
         <button type="button" class="channel" id="navigation-channel" aria-label="返回聊天">
-          <span class="channel-icon"><svg width="24" height="24" viewBox="8 7 34 34" xmlns="http://www.w3.org/2000/svg">
+          <span class="channel-icon"><svg width="24" height="24" viewBox="8 7 34 34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
               <path
                 d="M41 24A16 16 0 1 1 9 24A16 16 0 1 1 41 24ZM41 24A12 12 0 1 1 17 24A12 12 0 1 1 41 24ZM27 24A2 2 0 1 1 23 24A2 2 0 1 1 27 24ZM35 24A2 2 0 1 1 31 24A2 2 0 1 1 35 24Z"
                 fill="white" fill-rule="evenodd"></path>
             </svg></span>
           <span class="channel-name">作业</span>
-          <svg class="channel-add" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="currentColor"/><path d="M10 6v8M6 10h8" fill="none" stroke="rgb(var(--nc-selection))" stroke-width="1.5"/></svg>
+          <svg class="channel-add" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="8" fill="currentColor"/><path d="M10 6v8M6 10h8" fill="none" stroke="rgb(var(--nc-selection))" stroke-width="1.5"/></svg>
         </button>
         <div class="section-label" id="online-users-label">
           <svg class="section-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" data-navigation-icon="text"><path fill-rule="evenodd" d="M4.15 2.4H19.55C20.85 2.4 21.7 2.68 21.94 4L22.35 7.9C22.65 9.2 21.55 10.25 20.1 10.25C18.65 10.25 18.35 8.93 17.15 7.7C16.75 7.2 15.6 6.9 15.55 7.92L15.55 15.4C15.6 16.8 15.7 17.15 16.4 17.25C17.75 17.35 18.45 18.25 18.45 19.35C18.45 20.58 17.8 21.55 16.5 21.55H8.1C6.6 21.55 5.85 20.6 5.85 19.4C5.85 18.25 6.65 17.35 7.7 17.23Q8.55 17.22 8.55 16.25L8.5 9.15C8.45 7.6 8.7 7 7.8 7.3C6.5 7.55 6.05 9.7 4.88 10.05C3.15 11 1.65 9.8 1.65 8.3L2.15 4.2C2.3 3.08 3 2.4 4.15 2.4ZM4.45 4.15H19.5Q20.1 4.15 20.2 4.85L20.55 7.7Q20.65 8.55 20.13 8.55Q19.85 8.55 19.4 7.77C17.85 5.35 16.65 5.45 14.7 5.45Q13.8 5.45 13.8 6.35V15.5C13.85 17.45 14 18.6 15.05 18.78L16.1 18.99Q16.85 19.1 16.55 19.6Q16.45 19.83 15.9 19.83H8.15Q7.65 19.83 7.65 19.45Q7.65 19.15 8.28 18.99C10.1 18.8 10.3 17.7 10.3 15.6L10.18 9C10.18 7.4 10.1 6.55 10.03 5.9Q9.95 5.45 9.3 5.45H8.55C6.7 5.45 5.7 6.6 4.5 8.2Q4.27 8.55 4 8.55Q3.4 8.55 3.53 7.72L3.93 4.77Q3.95 4.15 4.45 4.15Z"/></svg>
@@ -170,11 +170,11 @@ Copyright (C) 2025 The 25-ji-code-de Team
             <p class="mention-picker-hint">选中后插入到输入框光标处</p>
           </div>
           <button type="button" class="mention-picker-close" aria-label="关闭提及选择器">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M6 18 18 6"/></svg>
           </button>
         </header>
         <label class="mention-picker-search">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5"/></svg>
           <input type="search" id="mention-picker-query" placeholder="搜索成员" autocomplete="off" aria-label="搜索成员" aria-controls="mention-picker-list">
         </label>
         <div class="mention-picker-list" id="mention-picker-list" role="group" aria-label="成员列表"></div>
@@ -189,7 +189,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
           <span class="sidebar-microphone-status" id="navigation-microphone" role="img" aria-label="未加入语音" title="未加入语音">
             <svg class="sidebar-microphone" viewBox="0 0 16 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="mic-state"><path class="microphone-capsule-off" d="M4.9 10.65V4.1a3.1 3.1 0 0 1 6.2 0v.6Z" fill="currentColor" stroke="none"/><path class="microphone-support-off" d="M2 9v4.5a6 6 0 0 0 .9 3.2M6 19.15a6 6 0 0 0 8-5.65V9M8 19.5V23M2 23h12"/><path class="microphone-slash" d="M1 21 15 3"/><rect class="microphone-capsule-on" x="4.8" y="1" width="6.4" height="12.7" rx="3.2" fill="currentColor" stroke="none"/><path stroke-width="1.9" class="microphone-support-on" d="M2 9.5v3a6 6 0 0 0 12 0v-3M8 18.5V22M2 22h12"/></svg>
           </span>
-          <button type="button" class="sidebar-account-action" id="navigation-profile-info" aria-label="查看个人资料" title="查看个人资料" aria-haspopup="dialog" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v.5"/></svg></button>
+          <button type="button" class="sidebar-account-action" id="navigation-profile-info" aria-label="查看个人资料" title="查看个人资料" aria-haspopup="dialog" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v.5"/></svg></button>
         </div>
       </div>
     </div>
@@ -198,9 +198,9 @@ Copyright (C) 2025 The 25-ji-code-de Team
     <main class="main">
       <div class="chat-header">
         <button type="button" class="sidebar-toggle" aria-label="切换成员列表" aria-controls="member-sidebar" aria-expanded="false">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <div class="channel-icon"><svg width="24" height="24" viewBox="8 7 34 34" xmlns="http://www.w3.org/2000/svg">
+        <div class="channel-icon"><svg width="24" height="24" viewBox="8 7 34 34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
             <path
               d="M41 24A16 16 0 1 1 9 24A16 16 0 1 1 41 24ZM41 24A12 12 0 1 1 17 24A12 12 0 1 1 41 24ZM27 24A2 2 0 1 1 23 24A2 2 0 1 1 27 24ZM35 24A2 2 0 1 1 31 24A2 2 0 1 1 35 24Z"
               fill="white" fill-rule="evenodd"></path>
@@ -210,21 +210,21 @@ Copyright (C) 2025 The 25-ji-code-de Team
         <div class="chat-header-actions">
           <div class="voice-toolbar" data-voice-toolbar hidden>
             <button type="button" class="voice-trigger" data-voice-toggle popovertarget="voice-panel" aria-controls="voice-panel" aria-expanded="false" aria-label="打开房间语音面板">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14v-3a9 9 0 0 1 18 0v3"/><rect x="3" y="12" width="4" height="8" rx="2"/><rect x="17" y="12" width="4" height="8" rx="2"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 14v-3a9 9 0 0 1 18 0v3"/><rect x="3" y="12" width="4" height="8" rx="2"/><rect x="17" y="12" width="4" height="8" rx="2"/></svg>
               <span data-voice-label>语音</span>
               <span class="voice-count" data-voice-count hidden>0</span>
               <span class="voice-indicator" aria-hidden="true"></span>
             </button>
             <button type="button" class="voice-quick-mic" data-voice-quick-mic aria-label="取消静音麦克风" title="取消静音麦克风" aria-pressed="false" hidden>
-              <svg class="voice-mic-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg>
-              <svg class="voice-mic-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M9 9v3a3 3 0 0 0 5.1 2.1M9 5a3 3 0 0 1 6 0v4M5 10v2a7 7 0 0 0 12 4.9M19 10v2a7 7 0 0 1-.2 1.8M12 19v3m-4 0h8"/></svg>
+              <svg class="voice-mic-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg>
+              <svg class="voice-mic-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 3 18 18M9 9v3a3 3 0 0 0 5.1 2.1M9 5a3 3 0 0 1 6 0v4M5 10v2a7 7 0 0 0 12 4.9M19 10v2a7 7 0 0 1-.2 1.8M12 19v3m-4 0h8"/></svg>
             </button>
             <section id="voice-panel" class="voice-panel" popover="auto" role="dialog" aria-labelledby="voice-title">
               <!-- Conference terminal: fixed lamps and keys surround one recessed display. -->
               <div class="voice-housing-header">
                 <h2 id="voice-title">房间语音</h2>
                 <button type="button" class="voice-close" popovertarget="voice-panel" popovertargetaction="hide" aria-label="收起语音面板" title="收起语音面板">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M6 12h12"/></svg>
                 </button>
               </div>
               <div class="voice-hardware-status">
@@ -246,14 +246,14 @@ Copyright (C) 2025 The 25-ji-code-de Team
                     </div>
                     <div class="voice-view" data-voice-view="call">
                       <div class="voice-idle" data-voice-idle>
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14v-3a9 9 0 0 1 18 0v3"/><rect x="3" y="12" width="4" height="8" rx="2"/><rect x="17" y="12" width="4" height="8" rx="2"/></svg>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 14v-3a9 9 0 0 1 18 0v3"/><rect x="3" y="12" width="4" height="8" rx="2"/><rect x="17" y="12" width="4" height="8" rx="2"/></svg>
                         <p>接通后默认为“仅收听”模式<br><span>准备好后，请开启麦克风</span></p>
                       </div>
                       <ul class="voice-members" data-voice-members aria-label="语音成员" hidden></ul>
                       <button type="button" class="voice-screen-link voice-settings" data-voice-settings>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 7h2m6 0h8M4 17h8m6 0h2"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 7h2m6 0h8M4 17h8m6 0h2"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>
                         <span>输入设备</span>
-                        <svg class="voice-screen-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                        <svg class="voice-screen-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m9 6 6 6-6 6"/></svg>
                       </button>
                     </div>
                   </div>
@@ -261,7 +261,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
                     <div class="voice-display-header">
                       <div class="voice-display-title">
                         <button type="button" class="voice-back" data-voice-back aria-label="返回通话">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m14 6-6 6 6 6"/></svg>
                         </button>
                         <h3 data-voice-screen-title tabindex="-1">输入设备</h3>
                       </div>
@@ -297,33 +297,33 @@ Copyright (C) 2025 The 25-ji-code-de Team
               </div>
               <div class="voice-output-controls" role="group" aria-label="总收听音量">
                 <button type="button" class="voice-output-mute voice-small-key" data-voice-output-mute aria-label="静音收听" aria-pressed="false" title="静音收听">
-                  <svg class="voice-speaker-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 5-6 4H2v6h3l6 4V5Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg>
-                  <svg class="voice-speaker-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 5-6 4H2v6h3l6 4V5Zm6 4 5 6m0-6-5 6"/></svg>
+                  <svg class="voice-speaker-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m11 5-6 4H2v6h3l6 4V5Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg>
+                  <svg class="voice-speaker-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m11 5-6 4H2v6h3l6 4V5Zm6 4 5 6m0-6-5 6"/></svg>
                 </button>
                 <span class="voice-output-caption" aria-hidden="true">收听音量</span>
                 <div class="voice-volume-rocker">
-                  <button type="button" class="voice-small-key" data-voice-output-down aria-label="降低总收听音量" title="降低总收听音量"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
-                  <button type="button" class="voice-small-key" data-voice-output-up aria-label="提高总收听音量" title="提高总收听音量"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
+                  <button type="button" class="voice-small-key" data-voice-output-down aria-label="降低总收听音量" title="降低总收听音量"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/></svg></button>
+                  <button type="button" class="voice-small-key" data-voice-output-up aria-label="提高总收听音量" title="提高总收听音量"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M5 12h14M12 5v14"/></svg></button>
                 </div>
               </div>
               <div class="voice-controls">
                 <button type="button" class="voice-key voice-key--microphone" data-voice-mic aria-label="取消静音麦克风" aria-pressed="false" disabled>
                   <span class="voice-key-face">
-                    <svg class="voice-mic-on" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg>
-                    <svg class="voice-mic-off" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M9 9v3a3 3 0 0 0 5.1 2.1M9 5a3 3 0 0 1 6 0v4M5 10v2a7 7 0 0 0 12 4.9M19 10v2a7 7 0 0 1-.2 1.8M12 19v3m-4 0h8"/></svg>
+                    <svg class="voice-mic-on" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg>
+                    <svg class="voice-mic-off" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 3 18 18M9 9v3a3 3 0 0 0 5.1 2.1M9 5a3 3 0 0 1 6 0v4M5 10v2a7 7 0 0 0 12 4.9M19 10v2a7 7 0 0 1-.2 1.8M12 19v3m-4 0h8"/></svg>
                   </span>
                   <span data-voice-mic-label>麦克风</span>
                 </button>
                 <div class="voice-call-key">
                   <button type="button" class="voice-key voice-key--join" data-voice-join>
                     <span class="voice-key-face">
-                      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.96.36 1.9.7 2.8a2 2 0 0 1-.45 2.11L8.09 9.9a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.84.58 2.8.7A2 2 0 0 1 22 16.92Z"/></svg>
+                      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.96.36 1.9.7 2.8a2 2 0 0 1-.45 2.11L8.09 9.9a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.84.58 2.8.7A2 2 0 0 1 22 16.92Z"/></svg>
                     </span>
                     <span data-voice-join-label>接入语音</span>
                   </button>
                   <button type="button" class="voice-key voice-key--leave" data-voice-leave aria-label="结束通话" hidden>
                     <span class="voice-key-face">
-                      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15a12 12 0 0 1 16 0l2-3a2 2 0 0 0-.5-2.7 17 17 0 0 0-19 0A2 2 0 0 0 2 12l2 3Z"/><path d="M7 13v-3m10 3v-3"/></svg>
+                      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 15a12 12 0 0 1 16 0l2-3a2 2 0 0 0-.5-2.7 17 17 0 0 0-19 0A2 2 0 0 0 2 12l2 3Z"/><path d="M7 13v-3m10 3v-3"/></svg>
                     </span>
                     <span data-voice-leave-label>结束通话</span>
                   </button>
@@ -343,48 +343,48 @@ Copyright (C) 2025 The 25-ji-code-de Team
       <div class="input-area">
         <div class="input-box">
           <div id="mention-list" class="mention-list hidden"></div>
-          <textarea class="input" id="messageInput" placeholder="发送消息" rows="1"></textarea>
+          <textarea class="input" id="messageInput" aria-label="发送消息" placeholder="发送消息" rows="1"></textarea>
           <!-- 隐藏的文件输入 -->
           <input type="file" id="imageInput" accept="image/*" style="display:none;">
           <input type="file" id="musicInput" accept="audio/*" style="display:none;">
           <input type="file" id="fileInput" style="display:none;">
           <div class="input-btns sekai-composer__actions">
-            <button class="input-btn" title="@">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57V12c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57V12c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+            <button type="button" id="mentionBtn" class="input-btn" title="@" aria-label="提及成员" aria-controls="mention-list" aria-expanded="false">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57V12c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57V12c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
             </button>
-            <button type="button" id="formatBtn" class="input-btn" title="文本格式" aria-haspopup="dialog" aria-controls="formatPanel" aria-expanded="false">
-              <svg class="composer-text-icon" viewBox="0 0 24 24" width="20" height="20" overflow="visible" fill="currentColor" aria-hidden="true">
+            <button type="button" id="formatBtn" class="input-btn" title="文本格式" aria-label="文本格式" aria-haspopup="dialog" aria-controls="formatPanel" aria-expanded="false">
+              <svg class="composer-text-icon" viewBox="0 0 24 24" width="20" height="20" overflow="visible" fill="currentColor" aria-hidden="true" focusable="false">
                 <path d="M13.64 19.2H10L8.62 15.2H2.96L1.56 19.2H-1.8L3.71 3.2H7.69ZM7.88 12.8 5.66 6.42 3.65 12.8Z"/>
                 <path d="M17.8 11.2h-2.94q.79-4 5.08-4 4.49 0 4.49 3.78l-.03 4.54q0 2.24.78 3.68h-3.46q-.25-.58-.39-1.32-1.37 1.4-3.17 1.4-3.78 0-3.78-3.26 0-2.48 3.1-3.11 2.82-.49 3.6-.89v-.57q0-1.97-1.5-1.97-1.36 0-1.78 1.72Zm3.28 2.46q-.84.32-2.2.6-1.32.29-1.32 1.32 0 1.14 1.22 1.17.96.04 1.69-.6.61-.54.61-1.61Z"/>
               </svg>
             </button>
-            <button class="input-btn" title="表情">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
+            <button type="button" id="stickerBtn" class="input-btn" title="表情" aria-label="表情" aria-controls="mention-list" aria-expanded="false">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
             </button>
-            <button class="input-btn" id="attachmentBtn" title="附件">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg>
+            <button type="button" id="attachmentBtn" class="input-btn" title="附件" aria-label="附件" aria-controls="fileUploadMenu" aria-expanded="false">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg>
             </button>
           </div>
           <section id="formatPanel" class="format-panel" role="dialog" aria-labelledby="formatTitle" hidden>
             <header class="format-head">
-              <button type="button" data-back class="format-icon-btn" aria-label="返回文本格式" hidden><svg aria-hidden="true"><use href="/icons/composer-tools.svg#chevron-left"/></svg></button>
+              <button type="button" data-back class="format-icon-btn" aria-label="返回文本格式" hidden><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#chevron-left"/></svg></button>
               <h2 id="formatTitle">文本格式</h2>
-              <button type="button" data-close class="format-icon-btn" aria-label="关闭文本格式"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#x"/></svg></button>
+              <button type="button" data-close class="format-icon-btn" aria-label="关闭文本格式"><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#x"/></svg></button>
             </header>
             <div data-home>
               <div class="format-tools" role="group" aria-label="常用格式">
-                <button type="button" data-mark="bold" title="加粗"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#bold"/></svg><span>加粗</span></button>
-                <button type="button" data-mark="italic" title="斜体"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#italic"/></svg><span>斜体</span></button>
-                <button type="button" data-mark="strike" title="删除线"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#strikethrough"/></svg><span>删除线</span></button>
-                <button type="button" data-mark="spoiler" title="剧透"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#eye-off"/></svg><span>剧透</span></button>
-                <button type="button" data-mark="inline" title="行内代码"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#code"/></svg><span>行内代码</span></button>
-                <button type="button" data-mark="quote" title="引用"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#quote"/></svg><span>引用</span></button>
+                <button type="button" data-mark="bold" title="加粗"><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#bold"/></svg><span>加粗</span></button>
+                <button type="button" data-mark="italic" title="斜体"><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#italic"/></svg><span>斜体</span></button>
+                <button type="button" data-mark="strike" title="删除线"><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#strikethrough"/></svg><span>删除线</span></button>
+                <button type="button" data-mark="spoiler" title="剧透"><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#eye-off"/></svg><span>剧透</span></button>
+                <button type="button" data-mark="inline" title="行内代码"><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#code"/></svg><span>行内代码</span></button>
+                <button type="button" data-mark="quote" title="引用"><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#quote"/></svg><span>引用</span></button>
               </div>
               <div class="format-entries">
-                <button type="button" data-editor="color"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#baseline"/></svg>文字颜色<svg aria-hidden="true" class="format-chevron"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
-                <button type="button" data-editor="code"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#square-code"/></svg>代码块<svg aria-hidden="true" class="format-chevron"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
-                <button type="button" data-editor="link"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#link-2"/></svg>链接卡片<svg aria-hidden="true" class="format-chevron"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
-                <button type="button" data-editor="media"><svg aria-hidden="true"><use href="/icons/composer-tools.svg#images"/></svg>媒体卡片<svg aria-hidden="true" class="format-chevron"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
+                <button type="button" data-editor="color"><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#baseline"/></svg>文字颜色<svg aria-hidden="true" class="format-chevron" focusable="false"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
+                <button type="button" data-editor="code"><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#square-code"/></svg>代码块<svg aria-hidden="true" class="format-chevron" focusable="false"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
+                <button type="button" data-editor="link"><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#link-2"/></svg>链接卡片<svg aria-hidden="true" class="format-chevron" focusable="false"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
+                <button type="button" data-editor="media"><svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#images"/></svg>媒体卡片<svg aria-hidden="true" class="format-chevron" focusable="false"><use href="/icons/composer-tools.svg#chevron-right"/></svg></button>
               </div>
             </div>
             <form class="format-form" hidden>
@@ -413,7 +413,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
               <label data-for="music">艺术家（可选）<input name="artist" maxlength="256"></label>
               <div class="format-footer">
                 <details class="format-options">
-                  <summary>更多选项<svg aria-hidden="true"><use href="/icons/composer-tools.svg#chevron-right"/></svg></summary>
+                  <summary>更多选项<svg aria-hidden="true" focusable="false"><use href="/icons/composer-tools.svg#chevron-right"/></svg></summary>
                   <div class="format-option-fields">
                     <label class="format-check" data-for="color"><input type="checkbox" name="spoiler">隐藏为剧透</label>
                     <label data-for="code">代码名称<input name="codeName" maxlength="256" placeholder="例如 main.js"></label>
@@ -437,21 +437,21 @@ Copyright (C) 2025 The 25-ji-code-de Team
             <p class="format-error" role="status" hidden></p>
           </section>
           <!-- 文件上传菜单 -->
-          <div id="fileUploadMenu" class="file-upload-menu hidden">
-            <button class="file-upload-menu-item" data-type="image">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <div id="fileUploadMenu" class="file-upload-menu hidden" role="group" aria-label="上传附件">
+            <button type="button" class="file-upload-menu-item" data-type="image">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false">
                 <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
               </svg>
               <span>图片</span>
             </button>
-            <button class="file-upload-menu-item" data-type="music">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <button type="button" class="file-upload-menu-item" data-type="music">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false">
                 <path d="M12 3v9.28c-.47-.17-.97-.28-1.5-.28C8.01 12 6 14.01 6 16.5S8.01 21 10.5 21c2.31 0 4.2-1.75 4.45-4H15V6h4V3h-7z"/>
               </svg>
               <span>音乐</span>
             </button>
-            <button class="file-upload-menu-item" data-type="file">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <button type="button" class="file-upload-menu-item" data-type="file">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false">
                 <path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/>
               </svg>
               <span>文件</span>
@@ -525,7 +525,7 @@ function renderMessages() {
               <div class="file-name">${msg.file.name}</div>
               <div class="file-size">${msg.file.size}</div>
             </div>
-            <button class="file-download" title="下载">⬇️</button>
+            <button type="button" class="file-download" title="下载">⬇️</button>
           </div>
         ` : ''}
       </div>
@@ -561,7 +561,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <h1 id="settings-title">设置</h1>
       </div>
       <button type="button" class="settings-close" aria-label="关闭设置">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M6 18 18 6"/></svg>
       </button>
     </header>
     <div class="settings-content">
@@ -577,7 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="palette-preview-sidebar"><i></i><i></i><i></i></span>
                 <span class="palette-preview-chat"><span class="palette-preview-header"></span><span class="palette-preview-message"><i></i><span><b></b><b></b></span></span><span class="palette-preview-message"><i></i><span><b></b><b></b></span></span><span class="palette-preview-composer"></span></span>
               </span>
-              <span class="palette-option-heading"><span id="palette-gray-purple-title">灰紫</span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span></span>
+              <span class="palette-option-heading"><span id="palette-gray-purple-title">灰紫</span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6"/></svg></span></span>
             </span>
           </label>
           <label class="palette-option">
@@ -588,7 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="palette-preview-sidebar"><i></i><i></i><i></i></span>
                 <span class="palette-preview-chat"><span class="palette-preview-header"></span><span class="palette-preview-message"><i></i><span><b></b><b></b></span></span><span class="palette-preview-message"><i></i><span><b></b><b></b></span></span><span class="palette-preview-composer"></span></span>
               </span>
-              <span class="palette-option-heading"><span id="palette-indigo-title">靛蓝</span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span></span>
+              <span class="palette-option-heading"><span id="palette-indigo-title">靛蓝</span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6"/></svg></span></span>
             </span>
           </label>
         </div>
@@ -599,13 +599,13 @@ document.addEventListener('DOMContentLoaded', () => {
           <label class="palette-option">
             <input type="radio" name="nightcord-member-list" value="current" aria-labelledby="member-list-current-title">
             <span class="palette-option-body">
-              <span class="palette-option-heading"><span id="member-list-current-title">新版</span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span></span>
+              <span class="palette-option-heading"><span id="member-list-current-title">新版</span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6"/></svg></span></span>
             </span>
           </label>
           <label class="palette-option">
             <input type="radio" name="nightcord-member-list" value="classic" aria-labelledby="member-list-classic-title" checked>
             <span class="palette-option-body">
-              <span class="palette-option-heading"><span id="member-list-classic-title">旧版</span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span></span>
+              <span class="palette-option-heading"><span id="member-list-classic-title">旧版</span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6"/></svg></span></span>
             </span>
           </label>
         </div>

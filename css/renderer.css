@@ -944,6 +944,8 @@
 }
 
 .sekai-file-details {
+  color: inherit;
+  text-decoration: none;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1071,6 +1073,11 @@
   background: rgba(65, 55, 90, 0.5);
   color: #eee;
   border-left-color: #9d8ec4;
+}
+
+:is(.sekai-reply-chip, .sekai-image-container, .sekai-file-details):focus-visible {
+  outline: 2px solid #d1c1f2;
+  outline-offset: 3px;
 }
 
 .sekai-reply-accent {

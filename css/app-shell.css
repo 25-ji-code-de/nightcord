@@ -928,6 +928,11 @@ body {
    登录失败发生在进入聊天室之前，没有消息流可写，用独立模态承载。
    视觉与 .name-chooser 对齐（深色卡片 + 圆角 + 上浮动画）。 */
 .auth-error-overlay {
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  color: inherit;
   position: fixed;
   top: 0;
   left: 0;
@@ -942,6 +947,10 @@ body {
   animation: fadeIn 0.3s ease-out;
   padding: 20px;
   box-sizing: border-box;
+}
+
+.auth-error-overlay:not([open]) {
+  display: none;
 }
 
 .auth-error-dialog {

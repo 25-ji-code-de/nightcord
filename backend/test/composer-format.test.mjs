@@ -7,7 +7,7 @@ import { chromium } from 'playwright';
 const root = new URL('../../', import.meta.url);
 const origin = 'http://composer.nightcord.test';
 const scripts = ['purify.js', 'sekai-escape.js', 'event-bus.js', 'ai-config.js', 'storage-manager.js',
-  'file-upload-service.js', 'sekai-renderer.js', 'ui-autocomplete.js', 'composer-format.js',
+  'file-upload-service.js', 'sekai-renderer.js', 'sekai-image-viewer.js', 'mention-service.js', 'ui-autocomplete.js', 'composer-format.js',
   'user-profile.js', 'ui-manager.js', 'pangu.js'];
 
 test('text tools insert into the draft and round-trip through the message renderer', async t => {
@@ -200,5 +200,87 @@ test('text tools insert into the draft and round-trip through the message render
   assert.equal(await panel.isVisible(), false);
   assert.equal(await input.inputValue(), '草稿');
   assert.equal(await page.evaluate(() => sent.length), 14);
+
+  await t.test('composer controls expose their state and support keyboard selection', async () => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const attachment = page.locator('#attachmentBtn');
+    assert.equal(await attachment.getAttribute('aria-expanded'), 'true');
+    await page.locator('#fileUploadMenu button').first().press('Escape');
+    assert.equal(await attachment.getAttribute('aria-expanded'), 'false');
+    assert.equal(await attachment.evaluate(el => el === document.activeElement), true);
+    await attachment.click();
+    await trigger.click();
+    assert.equal(await attachment.getAttribute('aria-expanded'), 'false');
+    await panel.locator('[data-close]').click();
+
+    await input.fill('');
+    await page.locator('#stickerBtn').click();
+    assert.equal(await page.locator('#stickerBtn').getAttribute('aria-expanded'), 'true');
+    const tabs = page.getByRole('tab');
+    await tabs.first().focus();
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await tabs.nth(1).getAttribute('aria-selected'), 'true');
+    assert.equal(await tabs.first().getAttribute('tabindex'), '-1');
+    assert.equal(await page.getByRole('tabpanel').getAttribute('aria-labelledby'), await tabs.nth(1).getAttribute('id'));
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('.picker-grid-item').evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press('Space');
+    assert.match(await input.inputValue(), /mzk_/);
+    assert.equal(await page.locator('#stickerBtn').getAttribute('aria-expanded'), 'false');
+
+    await page.evaluate(() => {
+      ui.autocomplete.getAllUsers = () => [];
+      ui.autocomplete.mentionGroups = () => [{ members: [{ name: '测试成员', id: 'guest:test', type: 'user', avatar: '测', color: '' }] }];
+    });
+    await input.fill('');
+    await page.locator('#mentionBtn').click();
+    assert.equal(await page.locator('#mentionBtn').getAttribute('aria-expanded'), 'true');
+    await page.locator('.mention-item').press('Enter');
+    assert.equal(await page.locator('#mentionBtn').getAttribute('aria-expanded'), 'false');
+    assert.match(await input.inputValue(), /测试成员/);
+  });
+
+  await t.test('modal dialogs contain focus, restore it and preserve image spoiler behavior', async () => {
+    await page.evaluate(() => {
+      const image = ui.sekaiRenderer.renderImageV2({ spoiler: 'true', alt: '测试图片' }, '/icons/favicon.svg');
+      document.querySelector('#messages').append(image);
+    });
+    const image = page.locator('.sekai-image-spoiler');
+    await image.press('Enter');
+    assert.equal(await page.getByRole('dialog', { name: '图片预览' }).count(), 0);
+    await image.press('Enter');
+    const viewer = page.getByRole('dialog', { name: '图片预览' });
+    assert.equal(await viewer.evaluate(el => el.contains(document.activeElement)), true);
+    assert.equal(await viewer.locator('img').getAttribute('alt'), '测试图片');
+    await viewer.locator('button').last().focus();
+    await page.keyboard.press('Tab');
+    assert.equal(await viewer.locator('button').first().evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await viewer.locator('button').last().evaluate(el => el === document.activeElement), true);
+    await viewer.getByRole('button', { name: '放大', exact: true }).press('Space');
+    assert.ok(await page.evaluate(() => sekaiImageViewer.scale > 1));
+    await page.keyboard.press('Escape');
+    assert.equal(await image.evaluate(el => el === document.activeElement), true);
+
+    await input.focus();
+    await page.evaluate(() => ui.showAuthError({ code: 'TEST', title: '测试错误' }));
+    const error = page.getByRole('alertdialog', { name: '测试错误' });
+    await page.keyboard.press('Tab');
+    assert.equal(await error.evaluate(el => el.contains(document.activeElement)), true);
+    await page.evaluate(() => ui.showAuthError({ code: 'TEST', title: '替换错误' }));
+    assert.equal(await page.locator('#auth-error-overlay').count(), 1);
+    await page.keyboard.press('Escape');
+    assert.equal(await input.evaluate(el => el === document.activeElement), true);
+    await page.locator('#auth-error-overlay').waitFor({ state: 'detached' });
+
+    await page.evaluate(() => {
+      window.replyJumps = 0;
+      document.addEventListener('reply-jump', () => replyJumps++);
+      document.querySelector('#messages').append(ui.sekaiRenderer.renderReply(123, '原消息'));
+    });
+    await page.locator('.sekai-reply-chip').press('Space');
+    assert.equal(await page.evaluate(() => replyJumps), 1);
+    assert.equal(await page.locator('button:not([type])').count(), 0);
+  });
   assert.deepEqual(errors, []);
 });

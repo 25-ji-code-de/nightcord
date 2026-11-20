@@ -72,28 +72,6 @@ Nightcord
       └── StorageManager (存储访问)
 ```
 
-### 文件组织与边界
-
-| 位置 | 职责 |
-| --- | --- |
-| `nightcord.js`、`js/app/` | 组装模块、绑定回调和管理身份流程 |
-| `nightcord-mgr.js`、`js/services/message-commands.js` | 房间、用户及消息业务；不访问 DOM 或浏览器存储 |
-| `js/services/ai-conversation.js` | 从事件建立独立消息上下文，确认 AI 回传，通过注入的回调请求和广播回复 |
-| `websocket-mgr.js` | 通用 JSON WebSocket 连接、收发与重连；不解释聊天消息 |
-| `js/network/chat-session.js` | 聊天协议的访客 Cookie 初始化、认证握手、续期和发送就绪判断 |
-| `ui-manager.js`、`js/ui/` | UI 协调和具体视图；用户输入通过回调上交，显示通过事件更新 |
-| `sekai-renderer.js`、`js/renderer/` | 渲染入口与文本、图片、卡片、音频模块；`parser.js` 和 `resources.js` 可在无 DOM 环境中使用 |
-| `sidebar-features.js`、`js/sidebar/` | 侧栏协调、搜索与收件箱、任务表单及票据；`storage.js` 管理按房间和身份隔离的持久化状态 |
-| `css/app-shell/`、`css/renderer/` | 按界面职责拆分的样式，保留原有层叠顺序 |
-
-UI 子组件共享 `UIManager` 提供的视图上下文；根入口保留原有方法作为显式委托接口。组件不修改入口的 prototype，也不通过运行时脚本注入来补全方法。业务服务通过构造参数接收数据提供者、存储接口和回调，不读取 UI 的消息数组。
-
-项目继续使用经典脚本。`index.html` 按依赖顺序加载组件，`scripts/browser-components.json` 记录各入口的组件清单，隔离测试通过 `scripts/browser-source.mjs` 加载相同代码。新增组件时同步更新页面和 `sw.js` 的预缓存；`scripts/build-pages.mjs` 会复制 `js/` 和 `css/` 到发布目录。原有 CSS 入口保留为兼容导入文件，页面直接加载拆分后的样式。
-
-单个手写前端 JS/CSS 文件以 500 行以内为目标，超过 700 行必须按职责拆分。生成的数据、第三方代码、后端生成的类型声明不适用此限制。`test/architecture.test.mjs` 检查行数、脚本顺序、全局声明冲突、分层依赖和离线资源覆盖。
-
-验证命令：根目录运行 `node --test test/*.test.mjs` 和 `node scripts/build-pages.mjs`；在 `backend/` 运行 `npm run check`、`npm test`、`npm run test:browser`。附件、媒体控件和名称选择另由 `node --test test/composer-uploads.test.mjs test/media-controls.test.mjs test/name-chooser.test.mjs` 覆盖。浏览器测试可通过 `NIGHTCORD_TEST_CHROMIUM` 指定本机 Chromium 路径。
-
 ---
 
 ## 设计原则
@@ -580,7 +558,7 @@ class MessageValidator {
   }
 }
 
-// 业务层校验原始消息；HTML 转义和 DOMPurify 净化在渲染层执行。
+// 在业务逻辑层使用
 chatRoom.sendMessage = (message) => {
   message = MessageValidator.validate(message);
   // 继续发送

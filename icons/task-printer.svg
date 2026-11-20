@@ -1,0 +1,17 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-only. Original front elevation after the TM-U220. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220">
+  <defs>
+    <linearGradient id="body" x2=".85" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#535454"/><stop offset=".32" stop-color="#343635"/><stop offset=".8" stop-color="#282929"/><stop offset="1" stop-color="#191a1a"/></linearGradient>
+    <linearGradient id="lid" x2="0" y2="1"><stop stop-color="#676968"/><stop offset=".045" stop-color="#444645"/><stop offset=".58" stop-color="#373938"/><stop offset=".88" stop-color="#474847"/><stop offset="1" stop-color="#333534"/></linearGradient>
+    <linearGradient id="lip" x2="0" y2="1"><stop stop-color="#1c1d1c"/><stop offset=".45" stop-color="#929791"/><stop offset=".6" stop-color="#c7cbc3"/><stop offset="1" stop-color="#424640"/></linearGradient>
+  </defs>
+  <path d="M34 19 Q110 12 186 19 Q193 45 195 104 L199 160 196 207 Q111 213 25 207 L22 164 Q25 75 34 19Z" fill="url(#body)" stroke="#202220" stroke-width="2"/>
+  <path d="M41 25 Q109 19 178 25 L183 65 37 65Z" fill="#292b29"/><path d="M52 25 Q112 20 168 25" stroke="#666866" fill="none"/>
+  <path d="M35 36 Q110 29 184 36 L188 83 Q191 119 188 153 L169 158 165 175 Q110 182 55 174 L52 157 29 151 Q26 109 35 36Z" fill="url(#lid)" stroke="#202220"/>
+  <path d="M58 68 Q110 66 164 68 L164 82 57 82Z" fill="#141614"/><path d="M59 74 H162" stroke="url(#lip)" stroke-width="5"/>
+  <path d="M177 43 h7 l2 23 h-9Z" fill="#292b2a" stroke="#515351"/>
+  <path d="M61 169 Q110 174 159 169 L158 186 61 186Z" fill="#1e201f"/>
+  <path d="M61 184 Q110 187 158 184 L158 196 Q110 199 61 196Z" fill="#b6b7b0"/>
+  <circle cx="73" cy="191" r="2" fill="#333633"/><circle cx="83" cy="191" r="2" fill="#393d39"/><path d="M95 191h21" stroke="#777a74"/>
+  <path d="M170 192h18v9h-18z" fill="#141514" stroke="#555653"/><path d="M172 194h13v4h-13z" fill="#343734"/>
+</svg>

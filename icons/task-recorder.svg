@@ -1,0 +1,14 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-only. Original front elevation after the BX2000J. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220">
+  <defs>
+    <linearGradient id="case" x2=".85" y2="1"><stop stop-color="#fcfcf7"/><stop offset=".4" stop-color="#e4e7e2"/><stop offset=".84" stop-color="#d1d7d5"/><stop offset="1" stop-color="#929d9f"/></linearGradient>
+    <linearGradient id="hood" x2="0" y2="1"><stop stop-color="#f9faf6"/><stop offset=".45" stop-color="#edf0eb"/><stop offset="1" stop-color="#c7cfce"/></linearGradient>
+    <linearGradient id="slot" x2="0" y2="1"><stop stop-color="#737f7e"/><stop offset=".25" stop-color="#313c3e"/><stop offset="1" stop-color="#b6c2c3"/></linearGradient>
+  </defs>
+  <path d="M49 25 Q55 9 71 8 H157 Q175 9 181 35 L183 185 Q183 203 173 205 Q113 210 44 203 Q36 202 36 192 V68 Q36 42 49 25Z" fill="url(#case)" stroke="#a7b0b0"/>
+  <path d="M49 27 Q56 10 72 9 H155 Q173 10 177 35 L172 81 Q171 89 165 89 L52 86 Q46 86 45 79Z" fill="url(#hood)" stroke="#a5adab"/>
+  <path d="M68 22 Q111 20 153 23 L155 30 Q113 28 65 30Z" fill="url(#slot)"/>
+  <path d="M62 95 Q104 89 158 97 Q171 100 173 114 L172 179 Q171 192 157 195 Q111 200 61 192 Q49 190 48 176 L47 118 Q48 99 62 95Z" fill="#a7b0b5" stroke="#bec9cc" stroke-width="3"/>
+  <path d="M63 99 Q112 94 157 101 Q166 103 168 115 L167 177 Q166 187 156 190 Q110 195 62 187 Q54 186 53 176 L52 119 Q52 104 63 99Z" fill="#293449" stroke="#626e7c" stroke-width="2"/>
+  <path d="M43 201h17v5H43zm114 2h17v4h-17z" fill="#929c9b"/>
+</svg>

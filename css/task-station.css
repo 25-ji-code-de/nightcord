@@ -1,0 +1,267 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+[data-tool="tasks"] .tools-content {
+  --paper: #faf8f0;
+  --ink: #292a29;
+  --ink-muted: #686962;
+  --red: #963e36;
+  --red-paper: #f3e5dc;
+  --blueprint: #5b7078;
+  --rule: #b4bfbe;
+  --type: var(--sekai-font-mono);
+  max-width: 1040px;
+  container-type: inline-size;
+  font-family: var(--sekai-font-sans);
+}
+.task-icon { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* The canvas belongs to the room; paper and hardware keep their own materials. */
+.task-station-head { display: grid; grid-template-columns: minmax(0, 1fr) 312px; align-items: center; gap: 24px; margin-bottom: 28px; }
+.task-desk-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.task-desk-copy { width: 100%; margin-bottom: 8px; }
+.task-desk-copy h2 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.4; }
+.task-desk-copy p { margin: 8px 0 0; color: rgb(var(--nc-text-muted)); font-size: 13px; line-height: 1.6; }
+.task-local { color: rgb(var(--nc-text-muted)); font-size: 11px; }
+.task-rack-heading, .task-toolbar, .task-faceplate { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.task-rack-heading h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.task-rack-heading .tools-count { margin: 0; color: rgb(var(--nc-text-muted)); font-size: 11px; }
+.task-pad-toggle, .task-issue, .ticket-transfer, .pocket-action {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  box-sizing: border-box; min-height: 40px; padding: 8px 14px;
+  border: 1px solid #1c1d20; border-radius: var(--sekai-radius-control);
+  font: inherit; font-size: 13px; line-height: 1.4; cursor: pointer;
+}
+.task-pad-toggle, .task-issue, .ticket-transfer, .pocket-action {
+  background: linear-gradient(145deg, #ffffff0b, #0000000a), rgb(var(--sekai-device-key));
+  color: rgb(var(--sekai-device-fg));
+  border-color: rgb(var(--sekai-device-chassis));
+  box-shadow: inset 1px 1px 0 #ffffff1c, 0 2px 0 #17151d80, 1px 3px 3px #18151e26;
+}
+:is(.task-pad-toggle, .task-issue, .ticket-transfer, .pocket-action):hover:not(:disabled) { background-color: rgb(var(--sekai-device-key-hover)); }
+:is(.task-pad-toggle, .task-issue, .ticket-transfer, .pocket-action):active:not(:disabled) { transform: translateY(1px); box-shadow: inset 0 1px 3px #0005, 0 1px 0 #17151d80; }
+:is(.task-pad-toggle, .task-issue, .ticket-transfer, .pocket-action):disabled { color: rgb(var(--sekai-device-fg) / .4); cursor: default; }
+.task-bench { display: grid; grid-template-columns: repeat(2, minmax(0, 144px)); align-items: end; justify-content: end; gap: 24px; padding: 0 0 4px; }
+.task-printer, .task-clock { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; container-type: inline-size; }
+.printer-cover, .recorder-body { position: relative; width: 100%; aspect-ratio: 1; order: 2; background: center/contain no-repeat; filter: drop-shadow(2px 3px 2px #12121a55); }
+.printer-cover { background-image: url('/icons/task-printer.svg'); }
+.recorder-body { background-image: url('/icons/task-recorder.svg'); }
+.clock-dial { position: absolute; inset: 0; width: 100%; height: 100%; }
+.task-faceplate { order: 3; justify-content: center; gap: 6px; margin-top: 6px; }
+.task-faceplate h2 { margin: 0; color: rgb(var(--nc-text-muted)); font-size: 11px; font-weight: 500; }
+.task-printer-state { font-size: 11px; color: rgb(var(--nc-text-muted)); }
+.task-printer-state.is-ready::before { content: ''; display: inline-block; margin-right: 4px; width: 4px; height: 4px; border-radius: 50%; background: #b0c4b5; }
+.device-pocket { position: relative; z-index: 1; order: 1; width: 100%; display: grid; justify-items: center; }
+.device-pocket:empty { display: none; }
+/* Scale a whole sheet; counter-scale overlap to keep it seated in the slot. */
+.pocket-sheet { position: relative; z-index: 1; width: 276px; zoom: .333333; background: var(--paper); }
+.printer-mouth .pocket-sheet { margin-bottom: -99cqw; }
+/* The recorder only shows a small thumbnail; long histories stay on the full card. */
+.clock-throat .pocket-sheet { zoom: .2; max-height: 420px; overflow: hidden; margin-bottom: -55cqw; }
+.pocket-choices { order: -1; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 4px 0 8px; }
+.pocket-action { min-height: 36px; padding: 6px 8px; font-size: 12px; }
+.task-station-notice { margin: 0 0 16px; font-size: 13px; }
+.task-station-notice:empty { display: none; }
+
+/* QT-6000 reference: a framed touchscreen, registration at the left,
+   entry at the right and finalization below. This is separate from the printer. */
+.order-pad {
+  --order-muted: rgb(var(--sekai-device-fg) / .72);
+  box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 0 28px; padding: 16px;
+  border: 1px solid #17171d; border-top-color: #515057; border-radius: 12px;
+  background: linear-gradient(145deg, #ffffff09, #00000012), rgb(var(--sekai-device-chassis));
+  color: rgb(var(--sekai-device-fg)); box-shadow: inset 1px 1px 0 #ffffff0b, 1px 4px 8px #15121d40;
+}
+.order-terminal-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 2px 12px; font: 11px/1.5 var(--type); color: var(--order-muted); }
+.order-terminal-state { display: inline-flex; align-items: center; gap: 6px; }
+.order-terminal-state::before { content: ''; width: 5px; height: 5px; border: 1px solid #09090c; border-radius: 50%; background: rgb(var(--sekai-device-screen)); box-shadow: inset 0 1px 1px #0008, 0 1px 0 #ffffff14; }
+.order-terminal-state[data-state="ready"]::before { background: #a5bbad; box-shadow: inset 0 1px 0 #ffffff55, 0 0 3px #a5bbad40; }
+.order-terminal-state[data-state="waiting"]::before { background: #c4a777; }
+/* Screen geometry belongs to the device. Modes and expanded fields only change
+   its scrollable contents; the confirmation keys remain in a fixed bottom row. */
+.order-terminal-screen { box-sizing: border-box; height: clamp(340px, 60svh, 460px); display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); grid-template-rows: minmax(0, 1fr) auto; border: 1px solid #08080b; border-bottom-color: #505057; border-radius: 5px; background: rgb(var(--sekai-device-screen)); box-shadow: inset 0 2px 5px #0005; overflow: hidden; }
+.order-display, .order-entry { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; scrollbar-gutter: stable; }
+.order-display { min-width: 0; padding: 16px; border-right: 1px solid #3c3b42; background: linear-gradient(145deg, #ffffff04, transparent), #15151b; }
+.order-display-head { display: flex; justify-content: space-between; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid #3c3b42; color: var(--order-muted); font: 11px/1.5 var(--type); }
+.order-preview-title { margin: 16px 0 12px; font-size: 16px; font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }
+.order-preview-meta { display: flex; flex-direction: column; gap: 6px; color: var(--order-muted); font-size: 11px; }
+.order-preview-items { margin: 16px 0 0; padding-left: 22px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.order-preview-items:empty, .order-preview-meta:empty { display: none; }
+.order-preview-items li { padding: 4px 0; border-bottom: 1px solid #ffffff0b; }
+.order-preview-items li::marker { color: var(--order-muted); font: 10px var(--type); }
+.order-entry { min-width: 0; padding: 16px; }
+.order-pad h2 { margin: 0; font-size: 14px; font-weight: 500; }
+.task-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-block: 16px; }
+.order-pad .tool-field, .order-pad summary, .order-pad .tool-button { color: var(--order-muted); }
+.order-pad input, .order-pad textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: 10px; color: rgb(var(--sekai-device-fg)); color-scheme: dark; background: #1b1b22; border: 1px solid #393840; border-top-color: #131318; border-radius: 3px; box-shadow: inset 0 1px 3px #0003; font: inherit; font-size: 14px; }
+.order-pad input::placeholder { color: var(--order-muted); }
+.order-pad textarea { resize: vertical; }
+.task-options summary { min-height: 32px; font-size: 12px; }
+.task-options summary, .file-drawer > summary { cursor: pointer; }
+.order-keyboard { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 12px 16px; border-top: 1px solid #3c3b42; background: #19191f; }
+.task-printer-deck { display: flex; justify-content: flex-end; gap: 8px; margin-left: auto; }
+.task-printer-deck .tool-button { min-height: 44px; }
+.paper-selector { display: flex; gap: 8px; flex-wrap: wrap; margin: 0; padding: 0; border: 0; }
+.paper-selector legend { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
+.paper-selector label { position: relative; }
+.paper-selector input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; cursor: pointer; }
+.paper-selector span { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 10px 12px; border: 1px solid #42414a; border-radius: 3px; background: #27262e; color: rgb(var(--sekai-device-fg)); font-size: 12px; }
+.paper-selector span::before { content: ''; width: 5px; height: 5px; flex: none; border: 1px solid currentColor; border-radius: 50%; }
+.paper-selector input[value="red"] + span { color: #e2aaa3; }
+.paper-selector input:hover + span { background-color: #34323d; }
+.paper-selector input:checked + span { background: #3b3646; border-color: #8b819f; }
+.paper-selector input:checked + span::before { background: currentColor; }
+.paper-selector input:focus-visible + span { outline: 2px solid currentColor; outline-offset: -3px; }
+.order-pad[data-ink="red"] .order-display-head > :last-child { color: #e2aaa3; }
+.order-pad .task-issue { min-height: 44px; padding-inline: 20px; border-color: #696171; background: #49414f; box-shadow: none; }
+.order-pad .task-issue:hover:not(:disabled) { background: #5b5064; }
+.order-pad .task-issue:active:not(:disabled) { background: #38313f; box-shadow: none; transform: none; }
+
+/* A narrow runner carries individual spring clips. The paper's free top edge
+   sits below the runner; each clip overlaps that edge and travels with it. */
+.task-toolbar { justify-content: space-between; margin-top: 6px; }
+.rail-hint { color: rgb(var(--nc-text-muted)); font-size: 11px; }
+.task-toolbar .tools-filter-buttons { border: 0; gap: 20px; }
+.task-toolbar .tools-filter-buttons .tool-button { min-height: 40px; font-size: 12px; }
+.rail-drive {
+  position: relative; z-index: 2; display: flex; align-items: stretch; height: 44px; margin-top: 8px;
+  color: #d0cfd3;
+}
+.rail-drive::before {
+  content: ''; position: absolute; z-index: -1; top: 15px; right: 20px; left: 20px; height: 13px;
+  border: 1px solid #222128; border-radius: 3px;
+  background: linear-gradient(180deg, #929096, #5c5a64 18%, #494750 45%, #33313a 78%, #222128 80%, #44414b);
+  box-shadow: inset 0 1px 0 #ffffff55, 1px 3px 3px #1c172d55;
+}
+.rail-grip { flex: 1; min-width: 0; cursor: grab; touch-action: none; user-select: none; }
+.rail-grip:active { cursor: grabbing; }
+.rail-wheel { position: relative; isolation: isolate; width: 44px; flex-shrink: 0; padding: 0; border: 0; background: transparent; color: #d0cfd3; font: 20px/1 sans-serif; cursor: pointer; }
+.rail-wheel::before {
+  content: ''; position: absolute; z-index: -1; inset: 6px 9px; border: 1px solid #24212b; border-radius: 5px;
+  background: repeating-linear-gradient(0deg, #13111855 0 1px, #ffffff10 1px 2px, transparent 2px 4px), linear-gradient(90deg, #57545e, #3a3741 45%, #28252f);
+  box-shadow: inset 1px 1px 0 #ffffff30, 1px 2px 2px #18131f60;
+}
+.rail-wheel:hover { color: #fff; }
+.rail-wheel:active::before { box-shadow: inset 0 2px 3px #0006; }
+[data-tool="tasks"] .tools-results { position: relative; z-index: 1; display: grid; grid-auto-flow: column; grid-auto-columns: min(276px, calc(100% - 24px)); align-items: start; justify-items: stretch; gap: 18px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: rgb(var(--nc-line) / .24) transparent; margin: -28px 0 12px; padding: 42px 10px 12px; }
+[data-tool="tasks"] .tools-results .tools-empty { justify-self: start; margin: 0; padding: 20px 0; text-align: left; }
+.sidebar-tools[data-tool="tasks"] .tools-results:focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: -2px; }
+
+/* One paper edge encloses the task and its preprinted time grid. */
+.tool-task { position: relative; min-width: 0; width: 100%; }
+.task-sheet { box-sizing: border-box; background: linear-gradient(145deg, #fffdf6, var(--paper)); color: var(--ink); border: 1px solid #dedcd3; box-shadow: 1px 2px 1px #201d2929, 2px 4px 6px #201d2921; }
+.ticket-hanger { position: absolute; z-index: 1; top: -40px; left: calc(50% - 36px); width: 72px; height: 56px; cursor: grab; }
+.ticket-hanger:active { cursor: grabbing; }
+.ticket-hanger::before {
+  content: ''; position: absolute; top: 0; left: 26px; width: 16px; height: 35px;
+  border: 2px solid #a6a5aa; border-top-color: #dcdbdd; border-right-color: #777580; border-bottom: 0; border-radius: 8px 8px 0 0;
+  box-shadow: 1px 1px 1px #17131f80, inset 1px 0 0 #f5f1f255;
+}
+.ticket-hanger::after {
+  content: ''; position: absolute; top: 31px; left: 10px; width: 50px; height: 22px;
+  border: 1px solid #232129; border-top-color: #75727d; border-radius: 5px 5px 3px 3px;
+  background: linear-gradient(180deg, #6d6a74, #47444e 17%, #39363f 52%, #26232c 54%, #47434e 64%, #302c36 90%, #211e27);
+  box-shadow: inset 1px 0 0 #ffffff18, 1px 2px 1px #201b2955, 2px 4px 3px #201b2920;
+}
+.kitchen-ticket { padding: 18px 18px 16px; font: 14px/1.5 var(--sekai-font-sans); overflow-wrap: anywhere; }
+.ticket-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid #d8d7cd; }
+.ticket-head[draggable="true"] { cursor: grab; }
+.ticket-station { min-width: 0; color: var(--ink-muted); font-size: 11px; }
+.ticket-number { flex-shrink: 0; font: 500 18px/1 var(--type); letter-spacing: -.04em; }
+.tool-task-title { margin: 12px 0; font-size: 18px; line-height: 1.5; font-weight: 600; }
+.ticket-meta { color: var(--ink-muted); font-size: 12px; }
+.ticket-identity { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ticket-issued { margin-top: 4px; font: 10px/1.5 var(--type); }
+.ticket-state { flex-shrink: 0; font-size: 11px; }
+.ticket-state::before { content: ''; display: inline-block; width: 4px; height: 4px; margin: 0 5px 2px 0; border: 1px solid currentColor; border-radius: 50%; }
+.ticket-state[data-state="active"] { color: var(--ink); }
+.ticket-state[data-state="active"]::before { background: currentColor; }
+.ticket-state[data-state="done"] { color: #546d61; }
+.ticket-item { display: flex; align-items: center; gap: 8px; min-height: 32px; font-size: 13px; }
+.ticket-meta + .ticket-item { margin-top: 10px; }
+.ticket-item input { flex-shrink: 0; width: 14px; height: 14px; margin: 0; accent-color: #626e63; color-scheme: light; }
+.ticket-item input:checked + span { color: var(--ink-muted); text-decoration: line-through; }
+.tool-task-date { margin-top: 10px; color: var(--ink-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tool-task-date.is-overdue, .ticket-amendment { color: var(--red); }
+.ticket-amendment { position: relative; margin: 14px -8px 0 3px; }
+.ticket-drop-target { outline: 2px dashed currentColor; outline-offset: -3px; }
+.time-card { box-sizing: border-box; margin: 0; width: 100%; padding: 14px 18px 18px; color: var(--blueprint); border-top: 1px dashed var(--rule); font: 12px/1.4 var(--type); overflow-wrap: anywhere; }
+.time-card-name { margin: 0 0 8px; font: 500 11px/1.4 var(--sekai-font-sans); letter-spacing: .08em; }
+.time-card table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.time-card th, .time-card td { border: 1px solid var(--rule); padding: 3px 1px; text-align: center; font-size: 11px; }
+.time-card th { height: 18px; padding-block: 2px; background: #5b707808; font-family: var(--sekai-font-sans); font-weight: 400; }
+.time-card th:first-child { width: 20%; }
+.time-card th:last-child { width: 30%; }
+.time-card td { height: 18px; padding-block: 2px; color: var(--ink); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.card-total { text-align: right; padding-top: 8px; font-size: 11px; }
+.ticket-controls { padding: 10px 0 0; }
+.tool-task-actions, .ticket-filing { display: flex; align-items: center; gap: 4px; }
+.tool-task-actions .tool-button { display: grid; place-items: center; flex-shrink: 0; min-width: 36px; min-height: 36px; padding: 8px; }
+.ticket-transfer { flex: 1; min-width: 0; min-height: 36px; padding: 8px; font-size: 12px; }
+.ticket-filing { justify-content: space-between; margin-top: 4px; }
+.ticket-filing:empty { display: none; }
+.ticket-filing button { min-height: 32px; padding: 6px 2px; font-size: 11px; }
+.ticket-filing button:last-child:not(:first-child) { margin-left: auto; }
+
+/* Carbon-red additions stay separate sheets and can be lifted off again. */
+.loose-slips { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 20px; }
+.loose-slips:empty { display: none; }
+.slip-tray-hint { width: 100%; margin: 0; color: rgb(var(--nc-text-muted)); font-size: 12px; }
+.loose-slip { width: 220px; max-width: 100%; }
+.loose-slip.is-selected { outline: 1px dashed #d5aa9c; outline-offset: 4px; }
+.red-slip { position: relative; padding: 10px 12px 6px; background: var(--red-paper); border: 1px solid #b88c7d66; color: var(--red); box-shadow: 1px 2px 2px #44261f20; font: 13px/1.6 var(--sekai-font-sans); overflow-wrap: anywhere; }
+.red-slip[draggable="true"] { cursor: grab; }
+.red-slip-label { display: block; padding-bottom: 5px; border-bottom: 1px dashed #b88c7da0; font-size: 11px; font-weight: 500; letter-spacing: .08em; }
+.red-slip p { margin: 8px 0 4px; }
+.red-slip-footer { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.red-slip time { font: 10px/1.5 var(--type); }
+.slip-detach { flex-shrink: 0; min-width: 32px; min-height: 32px; margin-right: -6px; border: 0; border-radius: 2px; padding: 4px 6px; background: transparent; color: var(--red); font: inherit; font-size: 11px; cursor: pointer; }
+.slip-detach:hover { background: #963e3610; }
+.slip-attach { display: block; width: 100%; min-height: 40px; margin-bottom: 12px; border: 1px dashed var(--red); background: var(--red-paper); color: var(--red); font: inherit; cursor: pointer; }
+
+.file-drawer { margin-top: 16px; border: 1px solid #232229; border-radius: var(--sekai-radius-control); background: rgb(var(--sekai-device-chassis)); color: rgb(var(--sekai-device-fg)); }
+.file-drawer > summary { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; border-radius: inherit; list-style: none; background: linear-gradient(145deg, #ffffff08, #00000008), rgb(var(--sekai-device-key)); box-shadow: inset 1px 1px 0 #ffffff14; }
+.file-drawer > summary::-webkit-details-marker { display: none; }
+.file-drawer > summary::before { content: ''; width: 28px; height: 6px; border: 2px solid #19191f; border-bottom-color: #59585e; background: #24232a; border-radius: 2px; box-shadow: inset 0 1px 2px #0004; }
+.drawer-label { padding: 3px 8px; color: #57594f; background: #deddd2; border: 1px solid #1e1e24; box-shadow: inset 0 1px 1px #0002; font-size: 11px; }
+.drawer-total { margin-left: auto; color: rgb(var(--sekai-device-fg) / .75); font: 11px var(--type); }
+.drawer-bin { max-height: 65vh; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill,minmax(min(256px,100%),1fr)); align-items: start; gap: 16px; padding: 16px; }
+
+.sidebar-tools :is(.kitchen-ticket,.time-card) :focus-visible { outline: 2px solid #376c60; outline-offset: -2px; }
+.sidebar-tools .order-pad :is(input,textarea,summary,button):focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: -2px; }
+.sidebar-tools :is(.task-pad-toggle,.task-issue,.ticket-transfer,.pocket-action):focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: -3px; }
+@container (max-width: 620px) {
+  .task-station-head { grid-template-columns: minmax(0, 1fr); gap: 16px; margin-bottom: 24px; }
+  .task-desk-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
+  .task-desk-copy { width: auto; margin: 0; }
+  .task-desk-copy h2 { font-size: 18px; }
+  .task-desk-copy p { margin-top: 4px; font-size: 12px; }
+  .task-local { grid-column: 1 / -1; }
+  .task-bench { grid-template-columns: repeat(2, minmax(0, 120px)); justify-content: center; gap: 24px; }
+  .task-bench:has(.printer-mouth .pocket-sheet) { grid-template-columns: repeat(2, minmax(0, 144px)); }
+}
+@container (max-width: 440px) {
+  .task-fields { grid-template-columns: minmax(0, 1fr); }
+  .task-bench { gap: 16px; }
+  .tool-task-date { line-height: 1.55; }
+  .ticket-transfer, .pocket-action, .task-pad-toggle, .task-issue, .tool-task-actions .tool-button, .ticket-item, .ticket-filing button, .loose-slip > button, .slip-attach { min-height: 44px; }
+  .tool-task-actions .tool-button, .slip-detach { min-width: 44px; }
+  .slip-detach { min-height: 44px; }
+  .order-pad { padding: 12px; }
+  .order-terminal-screen { height: clamp(440px, 70svh, 560px); grid-template-columns: minmax(0, 1fr); grid-template-rows: 140px minmax(0, 1fr) auto; }
+  .order-display { border-right: 0; border-bottom: 1px solid #3c3b42; padding: 12px; }
+  .order-preview-title { margin: 10px 0 8px; font-size: 14px; }
+  .order-preview-meta { flex-direction: row; flex-wrap: wrap; }
+  .order-preview-items { margin-top: 8px; }
+  .order-entry { padding: 12px; }
+  .order-keyboard { align-items: stretch; gap: 12px; padding: 12px; }
+  .order-pad input, .order-pad textarea { font-size: 16px; }
+  .order-keyboard .paper-selector { width: 100%; }
+  .paper-selector label { flex: 1; }
+  .paper-selector span { justify-content: center; }
+  .task-printer-deck { width: 100%; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .printer-mouth .pocket-sheet { animation: ticket-issued .24s ease-out; }
+  .task-pad-toggle, .task-issue, .ticket-transfer, .pocket-action { transition: transform var(--sekai-dur-instant), box-shadow var(--sekai-dur-instant); }
+  @keyframes ticket-issued { from { clip-path: inset(88% 0 0); } to { clip-path: inset(0); } }
+}
+@media (forced-colors: active) { .file-drawer > summary, .ticket-transfer, .task-sheet, .time-card, .rail-drive { border: 1px solid CanvasText; } }

@@ -30,7 +30,7 @@ body:has(.main.tool-view) .mention-notice { top: auto; bottom: calc(20px + env(s
 .tools-search-bar .tool-field { position: relative; }
 .tools-search-bar input { min-height: 40px; padding-left: 40px; }
 .tools-search-bar svg { position: absolute; left: 13px; top: 12px; width: 17px; height: 17px; color: rgb(var(--nc-icon)); pointer-events: none; }
-.tools-search-bar .tool-field-label, .tools-task-form .tool-field-label, [data-tool="help"] .tool-field-label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tools-search-bar .tool-field-label, [data-tool="help"] .tool-field-label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .tools-search-options { position: relative; margin-top: -40px; padding-top: 40px; margin-bottom: 12px; pointer-events: none; }
 .tools-search-options > * { pointer-events: auto; }
 .tools-search-options > summary { position: absolute; top: 0; right: 0; display: flex; align-items: center; justify-content: center; width: 56px; height: 40px; border-radius: 3px; font-size: 13px; color: rgb(var(--nc-text-muted)); cursor: pointer; list-style: none; }
@@ -63,22 +63,6 @@ body:has(.main.tool-view) .mention-notice { top: auto; bottom: calc(20px + env(s
 .tools-filter-buttons [aria-pressed="true"]::after { content: ''; position: absolute; inset: auto 0 -1px; height: 2px; background: rgb(var(--nc-accent)); }
 .tools-inbox-toolbar .tools-filter-buttons { border: 0; }
 .tools-warning { margin: 16px 28px 0; padding: 10px 12px; border-left: 2px solid rgb(var(--nc-accent)); background: rgb(var(--nc-accent) / .08); color: rgb(var(--nc-text)); font-size: 13px; }
-.tools-task-form { display: grid; grid-template-columns: minmax(0, 1fr) 160px auto; align-items: center; gap: 10px; margin: 0 0 24px; padding: 10px; border-radius: 4px; background: rgb(var(--nc-composer)); }
-.tools-task-form input { background: transparent; }
-.tools-task-form input[type="date"] { font-size: 12px; }
-.tools-task-form > .tool-button { min-height: 36px; }
-.tool-task { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 12px; border-bottom: 1px solid rgb(var(--nc-line) / .07); }
-.tool-task:hover { background: rgb(var(--nc-line) / .025); }
-.tool-task-check { display: flex; align-items: center; gap: 12px; min-height: 32px; flex: 1 1 180px; min-width: 0; cursor: pointer; }
-.tool-task-check input { appearance: none; width: 16px; height: 16px; margin: 0; border: 1px solid rgb(var(--nc-icon) / .55); border-radius: 3px; flex-shrink: 0; cursor: pointer; }
-.tool-task-check input:checked { border-color: rgb(var(--nc-accent)); background: rgb(var(--nc-accent)); }
-.tool-task-check input:checked::after { content: ''; display: block; width: 4px; height: 8px; margin: 1px 0 0 5px; border-right: 2px solid rgb(var(--nc-sidebar)); border-bottom: 2px solid rgb(var(--nc-sidebar)); transform: rotate(45deg); }
-.tool-task-title { overflow-wrap: anywhere; font-size: 14px; }
-.tool-task.is-complete .tool-task-title { text-decoration: line-through; color: rgb(var(--nc-text-muted)); }
-.tool-task-date { color: rgb(var(--nc-text-muted)); font-size: 11px; }
-.tool-task-date.is-overdue { color: rgb(var(--nc-accent)); }
-.tool-task-actions { display: flex; gap: 4px; }
-.tool-task-actions .tool-button { font-size: 11px; }
 .tools-help { margin-top: 24px; }
 .tools-help details { border-bottom: 1px solid rgb(var(--nc-line) / .12); }
 .tools-help summary { position: relative; padding: 18px 28px 18px 0; font-size: 14px; cursor: pointer; list-style: none; }
@@ -95,8 +79,6 @@ body:has(.main.tool-view) .mention-notice { top: auto; bottom: calc(20px + env(s
 .navigation-badge { position: absolute; top: 0; right: -2px; min-width: 16px; padding: 0 3px; border-radius: 8px; background: rgb(var(--nc-accent)); color: rgb(var(--nc-panel)); font: 600 11px/16px "Segoe UI", sans-serif; pointer-events: none; }
 @media (max-width: 1100px) {
   .tools-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tools-task-form { grid-template-columns: minmax(0, 1fr) auto; }
-  .tools-task-form > .tool-field:first-child { grid-column: 1 / -1; }
 }
 @media (max-width: 768px) {
   .tools-header { gap: 8px; padding: 0 12px; }
@@ -106,11 +88,6 @@ body:has(.main.tool-view) .mention-notice { top: auto; bottom: calc(20px + env(s
   .tools-content { padding: 20px 20px calc(24px + env(safe-area-inset-bottom)); }
   .tools-back { min-height: 44px; }
   .tool-field input { font-size: 16px; min-height: 40px; }
-  .tool-button, .tool-task-check { min-height: 40px; }
-  .tools-task-form { gap: 4px 10px; }
-  .tool-task { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; }
-  .tool-task-check { min-width: 0; }
-  .tool-task-date { grid-column: 1 / -1; grid-row: 2; padding: 0 0 4px 28px; }
-  .tool-task-actions { grid-column: 2; grid-row: 1; }
+  .tool-button { min-height: 40px; }
   .tools-warning { margin-inline: 20px; }
 }

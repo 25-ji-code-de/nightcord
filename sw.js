@@ -54,7 +54,11 @@ const PRECACHE = [
   '/css/appearance.css',
   '/css/settings.css',
   '/css/sidebar-tools.css',
+  '/css/task-station.css',
   '/css/ios-layout.css',
+  '/icons/task-tools.svg',
+  '/icons/task-printer.svg',
+  '/icons/task-recorder.svg',
   // index.html 中的脚本
   '/appearance.js',
   '/purify.js',

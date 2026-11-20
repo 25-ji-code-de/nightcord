@@ -163,51 +163,219 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     assert.equal(await rows(page).count(), 0);
   });
 
-  await t.test('tasks edit, complete, undo, reload and isolate by room and identity', async t => {
-    const { page, load } = await fixture(t);
+  const taskButton = (page, name) => page.getByRole('button', {name, exact:true});
+  async function order(page, title, due) {
+    await taskButton(page, '添加任务').click();
+    await page.getByLabel('任务标题', {exact:true}).fill(title);
+    if (due) await page.getByLabel('截止日期（可选）', {exact:true}).fill(due);
+    await taskButton(page, '交印').click();
+  }
+
+  await t.test('entry terminal previews pending text and sends it to the separate printer', async t => {
+    const {page} = await fixture(t);
     await page.locator('#navigation-tasks').click();
-    await page.getByLabel('任务标题', { exact: true }).fill('Review <img onerror=alert(1)>');
-    await page.getByLabel('截止日期（可选）', { exact: true }).fill('2026-01-01');
-    await page.getByRole('button', { name: '添加任务', exact: true }).click();
-    assert.match(await page.locator('.tool-task-date').textContent(), /已逾期/);
-    assert.equal(await page.locator('.tool-task img').count(), 0);
-    await page.getByRole('button', { name: '编辑', exact: true }).click();
-    await page.getByLabel('任务标题', { exact: true }).fill('Ship sidebar');
-    await page.getByRole('button', { name: '保存修改', exact: true }).click();
-    await page.locator('.tool-task input[type=checkbox]').check();
-    await page.getByRole('button', { name: '未完成', exact: true }).click();
-    assert.equal(await page.locator('.tool-task').count(), 0);
-    await page.getByRole('button', { name: '已完成', exact: true }).click();
-    assert.equal(await page.locator('.tool-task').count(), 1);
-    await page.getByRole('button', { name: '删除任务：Ship sidebar' }).click();
-    assert.equal(await page.locator('.tool-task').count(), 0);
-    await page.getByRole('button', { name: '撤销删除', exact: true }).click();
-    await load(page);
-    await page.locator('#navigation-tasks').click();
-    assert.equal(await page.locator('.tool-task-title').textContent(), 'Ship sidebar');
-    assert.equal(await page.locator('.tool-task input').isChecked(), true);
-    await page.locator('.tool-task input').uncheck();
-    const tab = await load();
-    await tab.locator('#navigation-tasks').click();
-    assert.equal(await tab.locator('.tool-task input').isChecked(), false);
-    await page.evaluate(() => ui.setCurrentRoom('another-room'));
-    await page.waitForFunction(() => document.querySelectorAll('.tool-task').length === 0);
-    await page.evaluate(() => ui.setCurrentRoom('sidebar-test'));
-    await page.waitForFunction(() => document.querySelectorAll('.tool-task').length === 1);
-    await page.evaluate(() => ui.eventBus.emit('session:updated', { user: peer }));
-    await page.waitForFunction(() => document.querySelectorAll('.tool-task').length === 0);
-    await page.evaluate(() => ui.setSessionUnavailable());
-    await page.waitForFunction(() => document.querySelector('#tools-task-title').disabled);
+    assert.equal(await page.locator('.task-printer button').count(), 0);
+    await taskButton(page, '添加任务').click();
+    const preview = page.getByRole('region', {name:'待印内容'});
+    await page.getByLabel('任务标题', {exact:true}).fill('写副歌 <img src=x>');
+    await page.getByLabel('截止日期（可选）', {exact:true}).fill('2026-12-01');
+    await page.locator('.task-options summary').click();
+    await page.getByLabel('操作人', {exact:true}).fill('K');
+    await page.getByLabel('清单（每行一项）').fill('和声\n导出');
+    assert.match(await preview.innerText(), /写副歌 <img src=x>/);
+    assert.match(await preview.innerText(), /K/);
+    assert.match(await preview.innerText(), /截止 2026-12-01/);
+    assert.deepEqual(await preview.locator('li').allTextContents(), ['和声', '导出']);
+    assert.equal(await preview.locator('img').count(), 0);
+    await page.getByLabel('红单 · 贴条').check();
+    assert.equal(await preview.locator('li').count(), 0);
+    assert.doesNotMatch(await preview.innerText(), /截止/);
+    await page.getByLabel('黑单 · 任务').check();
+    assert.equal(await preview.locator('li').count(), 2);
+    await taskButton(page, '交印').click();
+    assert.match(await page.locator('.printer-mouth').innerText(), /写副歌 <img src=x>/);
+    assert.equal(await page.locator('.order-pad').isVisible(), false);
+    await taskButton(page, '添加任务').click();
+    assert.match(await page.locator('.order-terminal-state').innerText(), /待取单/);
+    await taskButton(page, '取单上轨').click();
+    assert.match(await page.locator('.order-terminal-state').innerText(), /就绪/);
   });
 
-  await t.test('blocked storage keeps edits in memory and warns instead of losing them', async t => {
-    const { page } = await fixture(t, { blockStorage: true });
+  await t.test('terminal geometry stays fixed across paper modes, expanded fields and long content', async t => {
+    const {page} = await fixture(t);
     await page.locator('#navigation-tasks').click();
-    await page.getByLabel('任务标题', { exact: true }).fill('Unsaved task');
-    await page.getByRole('button', { name: '添加任务', exact: true }).click();
+    const geometry = () => page.locator('.order-pad').evaluate(form => {
+      const origin = form.getBoundingClientRect();
+      return [form, ...form.querySelectorAll('.order-terminal-screen, .order-display, .order-entry, .order-keyboard')].map(node => {
+        const rect = node.getBoundingClientRect();
+        return [rect.x - origin.x, rect.y - origin.y, rect.width, rect.height];
+      });
+    });
+    for (const [width,height] of [[1280,900],[390,844],[320,640],[667,375]]) {
+      await page.setViewportSize({width,height});
+      await taskButton(page, '添加任务').click();
+      const initial = await geometry();
+      await page.locator('.task-options summary').click();
+      await page.getByLabel('任务标题', {exact:true}).fill('很长的任务标题'.repeat(20));
+      await page.getByLabel('清单（每行一项）').fill(Array.from({length:30}, (_,i) => `清单项目 ${i}`).join('\n'));
+      assert.deepEqual(await geometry(), initial, `expanded black sheet at ${width}`);
+      await page.getByLabel('红单 · 贴条').check();
+      assert.deepEqual(await geometry(), initial, `red sheet at ${width}`);
+      await page.getByLabel('黑单 · 任务').check();
+      assert.deepEqual(await geometry(), initial, `restored black sheet at ${width}`);
+      assert.equal(await page.getByLabel('任务标题', {exact:true}).inputValue(), '很长的任务标题'.repeat(20));
+      assert.ok(await page.locator('.order-entry').evaluate(node => node.scrollHeight > node.clientHeight));
+      assert.ok(await page.locator('.order-display').evaluate(node => node.scrollHeight > node.clientHeight));
+      assert.ok(await page.locator('.order-terminal-screen').evaluate(screen => {
+        const bounds=screen.getBoundingClientRect(), keys=screen.querySelector('.order-keyboard').getBoundingClientRect();
+        return keys.bottom <= bounds.bottom && keys.top > bounds.top;
+      }));
+      assert.ok(await page.locator('.tools-body').evaluate(node => node.scrollWidth <= node.clientWidth));
+      await taskButton(page, '收起').click();
+    }
+  });
+
+  await t.test('paper remains in its device across reloads, and only time on the rail counts', async t => {
+    const {page, load} = await fixture(t);
+    const at = minute => page.clock.setFixedTime(new Date(Date.UTC(2026,10,18,8,minute)));
+    const action = name => taskButton(page, name).click();
+    await page.locator('#navigation-tasks').click();
+    await at(0); await order(page,'做小样 <img>','2026-01-01');
+    assert.equal(await page.locator('.tool-task').count(), 0);
+    assert.match(await page.locator('.printer-mouth').innerText(), /#001/);
+    await load(page); await page.locator('#navigation-tasks').click();
+    await at(5); await action('取单上轨');
+    assert.match(await page.locator('.tool-task-date').textContent(), /已逾期/);
+    assert.equal(await page.locator('.tool-task img').count(), 0);
+    await action('编辑');
+    await page.getByLabel('任务标题', {exact:true}).fill('做小样');
+    await page.getByLabel('操作人', {exact:true}).fill('K');
+    await page.getByLabel('清单（每行一项）').fill('和声\n导出');
+    await action('保存修改');
+    await page.getByLabel('和声', {exact:true}).check();
+    await at(20); await page.locator('.ticket-head').dragTo(page.locator('.task-clock'));
+    assert.match(await page.locator('.clock-throat').innerText(), /15 分/);
+    assert.equal(await page.locator('.tool-task').count(), 0);
+    await load(page); await page.locator('#navigation-tasks').click();
+    await action('取回挂单');
+    await action('未完成'); assert.equal(await page.locator('.tool-task').count(), 0);
+    await action('已完成'); assert.equal(await page.locator('.tool-task').count(), 1);
+    await at(40); await action('再次开工');
+    await at(50); await action('送入打卡钟');
+    assert.match(await page.locator('.clock-throat .card-total').textContent(), /25 分/);
+    await action('收入抽屉'); await page.locator('.file-drawer summary').first().click();
+    assert.equal(await page.getByLabel('和声', {exact:true}).isChecked(), true);
+    await action('取出并重新计时');
+    await action('删除任务：做小样'); await action('撤销删除');
+    assert.equal(await page.locator('.tools-results .tool-task-title').innerText(), '做小样');
+    const tab = await load(); await tab.locator('#navigation-tasks').click();
+    assert.equal(await tab.locator('.tool-task-title').innerText(), '做小样');
+    await page.evaluate(() => ui.setCurrentRoom('another-room'));
+    await page.waitForFunction(() => !document.querySelector('.tool-task'));
+    await page.evaluate(() => ui.setCurrentRoom('sidebar-test'));
+    await page.waitForFunction(() => !!document.querySelector('.tool-task'));
+    await page.evaluate(() => ui.eventBus.emit('session:updated',{user:peer}));
+    await page.waitForFunction(() => !document.querySelector('.tool-task'));
+    await page.evaluate(() => ui.setSessionUnavailable());
+    await page.waitForFunction(() => document.querySelector('.task-pad-toggle').disabled);
+  });
+
+  await t.test('legacy work orders keep unknown times, single-device capacity and small widths', async t => {
+    const {page} = await fixture(t);
+    await page.evaluate(() => features.save(s => { s.tasks = [{id:'old',title:'旧任务',done:true}]; }));
+    await page.locator('#navigation-tasks').click();
+    assert.equal(await page.locator('.tool-task time').count(), 0);
+    await order(page,'A'.repeat(200)); await order(page,'B');
+    assert.match(await page.locator('.task-station-notice').innerText(), /待取/);
+    await taskButton(page,'取单上轨').click();
+    await taskButton(page,'交印').click();
+    assert.match(await page.locator('.printer-mouth').innerText(), /#002/);
+    await taskButton(page,'取单上轨').click();
+    const tickets = page.locator('.tools-results .tool-task');
+    await tickets.nth(1).getByRole('button',{name:'前移一位'}).click();
+    assert.equal(await tickets.first().locator('.tool-task-title').innerText(), 'A'.repeat(200));
+    await tickets.first().getByRole('button',{name:'送入打卡钟'}).press('Enter');
+    await tickets.first().getByRole('button',{name:'送入打卡钟'}).click();
+    assert.match(await page.locator('.task-station-notice').innerText(), /先取回/);
+    for (const [width,height] of [[320,640],[375,667],[667,375],[1024,768]]) {
+      await page.setViewportSize({width,height});
+      assert.ok(await page.locator('.tools-body').evaluate(node => node.scrollWidth <= node.clientWidth));
+    }
+  });
+
+  await t.test('blocked storage retains both output and hanging tickets in memory', async t => {
+    const {page} = await fixture(t,{blockStorage:true});
+    await page.locator('#navigation-tasks').click(); await order(page,'Unsaved task');
     assert.match(await page.locator('.tools-warning').textContent(), /当前页面保留/);
-    await close(page); await page.locator('#navigation-tasks').click();
-    assert.equal(await page.locator('.tool-task-title').textContent(), 'Unsaved task');
+    await close(page); await page.locator('#navigation-tasks').click(); await taskButton(page,'取单上轨').click();
+    assert.equal(await page.locator('.tool-task-title').textContent(),'Unsaved task');
+  });
+
+  await t.test('red slips print independently, persist, attach by drag or click and can be moved', async t => {
+    const {page, load} = await fixture(t);
+    await page.locator('#navigation-tasks').click();
+    await order(page, '写副歌'); await taskButton(page, '取单上轨').click();
+    await order(page, '画封面'); await taskButton(page, '取单上轨').click();
+    await taskButton(page, '添加任务').click();
+    await page.getByLabel('红单 · 贴条').check();
+    await page.getByLabel('红单内容', {exact:true}).fill('改用第二版 <img src=x>');
+    await taskButton(page, '交印').click();
+    assert.equal(await page.locator('.printer-mouth .red-slip').count(), 1);
+    assert.equal(await page.locator('.tool-task').count(), 2);
+    await load(page); await page.locator('#navigation-tasks').click();
+    await page.locator('.printer-mouth .red-slip').dragTo(page.locator('.tool-task').first().locator('.kitchen-ticket'));
+    assert.match(await page.locator('.tool-task').first().locator('.ticket-amendment').innerText(), /改用第二版/);
+    assert.equal(await page.locator('.ticket-amendment img').count(), 0);
+    assert.equal(await page.locator('.printer-mouth .red-slip').count(), 0);
+    await page.getByRole('button', {name:'取下红单：改用第二版 <img src=x>',exact:true}).click();
+    await page.getByRole('button', {name:'选择这张红单',exact:true}).click();
+    await page.locator('.tool-task').nth(1).getByRole('button', {name:'贴在这里'}).click();
+    await load(page); await page.locator('#navigation-tasks').click();
+    assert.equal(await page.locator('.tool-task').nth(1).locator('.ticket-amendment').count(),1);
+    assert.equal(await page.locator('.tool-task').first().locator('.ticket-amendment').count(),0);
+    assert.equal(await page.locator('.tool-task details').count(),0);
+    assert.equal(await page.locator('.tool-task .time-card').count(),2);
+    await page.evaluate(() => ui.setCurrentRoom('other-room'));
+    await page.waitForFunction(() => !document.querySelector('.tool-task'));
+    assert.equal(await page.locator('.red-slip').count(),0);
+  });
+
+  await t.test('continuous rail pans, supports keyboard and keeps its position on chat refresh', async t => {
+    const {page} = await fixture(t);
+    await page.evaluate(() => features.save(state => {
+      state.tasks = Array.from({length:8}, (_,i) => ({id:'rail-'+i,number:i+1,title:'任务 '+i,done:false}));
+    }));
+    await page.locator('#navigation-tasks').click();
+    const rail = page.locator('.tools-results');
+    assert.equal(await rail.locator('.tool-task').count(),8);
+    const grip = page.locator('.rail-grip');
+    const box = await grip.boundingBox();
+    await page.mouse.move(box.x + box.width * .75, box.y + box.height/2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * .25, box.y + box.height/2,{steps:8});
+    await page.mouse.up();
+    const scrolled = await rail.evaluate(node => node.scrollLeft);
+    assert.ok(scrolled > 100);
+    await page.evaluate(() => ui.eventBus.emit('message:received', {name:peer.displayName,user:peer,message:'刷新',timestamp:Date.now()}));
+    assert.equal(await rail.evaluate(node => node.scrollLeft),scrolled);
+    await rail.focus(); await page.keyboard.press('End');
+    assert.ok(await rail.evaluate(node => Math.abs(node.scrollWidth - node.clientWidth - node.scrollLeft) < 2));
+    await page.keyboard.press('Home');
+    assert.equal(await rail.evaluate(node => node.scrollLeft),0);
+    await taskButton(page,'向右转动轨道').click();
+    assert.ok(await rail.evaluate(node => node.scrollLeft > 0));
+    for (const [width,height] of [[320,640],[375,667],[667,375]]) {
+      await page.setViewportSize({width,height});
+      assert.ok(await page.locator('.tools-body').evaluate(node => node.scrollWidth <= node.clientWidth));
+      assert.equal(await rail.locator('.tool-task').count(),8);
+    }
+    await page.setViewportSize({width:1280,height:900});
+    await rail.focus(); await page.keyboard.press('Home');
+    await rail.locator('.ticket-hanger').first().dragTo(page.locator('.task-clock'));
+    assert.equal(await page.locator('.clock-throat .tool-task-title').innerText(), '任务 0');
+    assert.equal(await page.locator('.clock-throat .ticket-hanger').count(), 0);
+    await taskButton(page, '取回挂单').click();
+    assert.equal(await rail.locator('[data-task="rail-0"] .ticket-hanger').count(), 1);
   });
 
   await t.test('inbox retention keeps the newest read flags when more mentions arrive', async t => {
@@ -301,19 +469,35 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
       const lines = ['新曲的 demo 放在这里了，副歌的和声还想再调整一下。', '@K 我听完了，第二段进来的时候可以再留一点空白。', '封面试了两个版本，等下发过来。', '@K 今晚一起听一遍吧，我把参考也整理好了。', '好，那就 25 点见。'];
       lines.forEach((text, index) => ui.addChatMessage(people[index % 4].displayName, text, Date.now() - (5 - index) * 180000, undefined, undefined, people[index % 4]));
       features.save(state => { state.tasks = [
-        { id: 'demo', title: '调整副歌的和声', due: '2026-11-18', done: false },
-        { id: 'cover', title: '确认封面的最终版本', due: '', done: false },
-        { id: 'listen', title: '整理今晚一起听的参考曲', due: '', done: true },
+        { id: crypto.randomUUID(), number: 3, title: '调整副歌的和声', operator: 'K', due: '2026-11-18', done: false, createdAt: Date.now() - 1800000, startedAt: Date.now() - 1800000, items: [{text:'导出试听版', checked:false}] },
+        { id: crypto.randomUUID(), number: 2, title: '确认封面的最终版本', operator: 'えななん', due: '', done: false, createdAt: Date.now() - 3600000, startedAt: Date.now() - 3600000, notes: [{text:'沿用第二版配色', at:Date.now()}] },
+        { id: crypto.randomUUID(), number: 1, title: '整理今晚一起听的参考曲', operator: '雪', due: '', done: true, createdAt: Date.now() - 7200000, completedAt: Date.now() - 600000, sessions:[{start:Date.now() - 2400000, end:Date.now() - 600000}] },
       ]; });
     });
     for (const kind of ['search', 'inbox', 'tasks', 'help']) {
       await page.locator(`#navigation-${kind}`).click();
       await page.screenshot({ path: `${process.env.NIGHTCORD_SCREENSHOT_DIR}/nightcord-${kind}-desktop.png` });
+      if (kind === 'tasks') {
+        const completed = page.locator('.tool-task').last();
+        await completed.locator('.time-card').screenshot({ path: `${process.env.NIGHTCORD_SCREENSHOT_DIR}/time-card.png` });
+        await completed.locator('.task-sheet').screenshot({ path: `${process.env.NIGHTCORD_SCREENSHOT_DIR}/task-card.png` });
+        await page.locator('.kitchen-ticket').first().screenshot({ path: `${process.env.NIGHTCORD_SCREENSHOT_DIR}/kitchen-ticket.png` });
+        await page.locator('.tools-results').evaluate(node => {node.scrollLeft = 0;});
+      }
     }
     await page.setViewportSize({ width: 390, height: 844 });
     for (const kind of ['search', 'inbox', 'tasks', 'help']) {
       await page.evaluate(kind => features.open(kind), kind);
       await page.screenshot({ path: `${process.env.NIGHTCORD_SCREENSHOT_DIR}/nightcord-${kind}-mobile.png` });
     }
+    await page.setViewportSize({width:1280,height:900});
+    await page.evaluate(() => features.open('tasks'));
+    await taskButton(page, '添加任务').click();
+    await page.getByLabel('红单 · 贴条').check();
+    await page.getByLabel('红单内容',{exact:true}).fill('第二段留一点空白，晚些一起听。');
+    await page.screenshot({path:`${process.env.NIGHTCORD_SCREENSHOT_DIR}/red-slip-form.png`});
+    await taskButton(page, '交印').click();
+    await taskButton(page, '取下红单').click();
+    await page.screenshot({path:`${process.env.NIGHTCORD_SCREENSHOT_DIR}/red-slip-ready.png`});
   }
 });

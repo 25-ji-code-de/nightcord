@@ -41,7 +41,7 @@ body, .chat-root, .main { background: rgb(var(--nc-canvas)); color: rgb(var(--nc
 .input-box { background: rgb(var(--nc-composer)); }
 .input-area { background: rgb(var(--nc-canvas)); }
 .input { color: rgb(var(--nc-text)); scrollbar-color: rgb(var(--nc-accent) / .3) transparent; }
-.input::placeholder { color: rgb(var(--nc-text-subtle)); }
+.input::placeholder { color: rgb(var(--nc-text-muted)); }
 .input::-webkit-scrollbar-thumb { background: rgb(var(--nc-accent) / .3); }
 .input::-webkit-scrollbar-thumb:hover { background: rgb(var(--nc-accent) / .5); }
 .input-btn:hover { background: rgb(var(--nc-hover)); color: rgb(var(--nc-text)); }

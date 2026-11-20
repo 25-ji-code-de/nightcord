@@ -39,6 +39,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
   <link rel="stylesheet" href="/css/appearance.css">
   <link rel="stylesheet" href="/css/settings.css">
   <link rel="stylesheet" href="/css/sidebar-tools.css">
+  <link rel="stylesheet" href="/css/ios-layout.css">
 </head>
 
 <body>
@@ -610,6 +611,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </label>
         </div>
       </fieldset>
+      <div class="settings-preferences">
       <label class="settings-toggle" for="rounded-corners-toggle">
         <span class="settings-toggle-copy">
           <span class="settings-toggle-title" id="rounded-corners-title">圆角</span>
@@ -618,6 +620,15 @@ document.addEventListener('DOMContentLoaded', () => {
         <input type="checkbox" role="switch" id="rounded-corners-toggle" aria-labelledby="rounded-corners-title" aria-describedby="rounded-corners-description" checked>
         <span class="settings-toggle-track" aria-hidden="true"></span>
       </label>
+      <label class="settings-toggle" for="ios-layout-toggle">
+        <span class="settings-toggle-copy">
+          <span class="settings-toggle-title" id="ios-layout-title">iPhone / iOS 适配</span>
+          <span class="settings-description" id="ios-layout-description">iPhone、iPad 默认开启，使用适合 iOS 的圆角与布局。你可以随时关闭；关闭“圆角”时仍使用直角。</span>
+        </span>
+        <input type="checkbox" role="switch" id="ios-layout-toggle" aria-labelledby="ios-layout-title" aria-describedby="ios-layout-description">
+        <span class="settings-toggle-track" aria-hidden="true"></span>
+      </label>
+      </div>
     </div>
     <footer class="settings-footer"><p id="palette-status" role="status">选择后立即生效，自动保存在此浏览器。</p></footer>
   </dialog>

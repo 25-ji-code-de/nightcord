@@ -1,0 +1,157 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* HIG-inspired layout and typography; iOS defaults on, explicit preferences win.
+ * https://developer.apple.com/design/human-interface-guidelines/typography */
+:root[data-ios-layout="on"] {
+  --nc-ios-font: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 17px;
+  /* Safari uses the user's preferred Dynamic Type body size. */
+  font: -apple-system-body;
+  font-family: var(--nc-ios-font);
+}
+:root[data-ios-layout="on"] :is(body, .settings-dialog) { font-family: var(--nc-ios-font); }
+:root[data-ios-layout="on"] .settings-dialog { font-size: 1rem; line-height: 1.5; }
+:root[data-ios-layout="on"] .settings-header { align-items: center; padding: 16px 20px; }
+:root[data-ios-layout="on"] .settings-header h1 { font-size: 1.294rem; font-weight: 600; letter-spacing: -.02em; }
+:root[data-ios-layout="on"] .settings-eyebrow { display: none; }
+:root[data-ios-layout="on"] .settings-close {
+  margin: 0 -4px 0 0;
+  border-radius: 50%;
+  background: rgb(var(--nc-line) / .07);
+}
+:root[data-ios-layout="on"] .settings-close svg { width: 18px; height: 18px; }
+:root[data-ios-layout="on"] .settings-content { padding: 20px; }
+:root[data-ios-layout="on"] .palette-fieldset legend { color: rgb(var(--nc-text-muted)); font-size: .882rem; font-weight: 500; }
+:root[data-ios-layout="on"] .palette-options { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+:root[data-ios-layout="on"] .palette-option-heading { font-size: .882rem; }
+:root[data-ios-layout="on"] .settings-description { font-size: .882rem; line-height: 1.5; }
+:root[data-ios-layout="on"] .settings-preferences { margin-top: 24px; border-radius: 16px; background: rgb(var(--nc-line) / .045); }
+:root[data-ios-layout="on"] .settings-toggle { gap: 12px; min-height: 44px; margin: 0; padding: 14px 16px; }
+:root[data-ios-layout="on"] .settings-toggle + .settings-toggle { border-top: 1px solid rgb(var(--nc-line) / .1); }
+:root[data-ios-layout="on"] .settings-toggle-title { font-size: 1rem; font-weight: 500; }
+:root[data-ios-layout="on"] .settings-footer { padding: 12px 20px; }
+:root[data-ios-layout="on"] .settings-footer p { font-size: .765rem; }
+
+/* Compact layouts include iPhone landscape widths. The header stays outside
+ * the message scroller, including when the keyboard reduces available height. */
+@media (max-width: 768px), (max-width: 1024px) and (pointer: coarse) {
+  :root[data-ios-layout="on"] {
+    --nc-ios-safe-top: env(safe-area-inset-top, 0px);
+    --nc-ios-safe-right: env(safe-area-inset-right, 0px);
+    --nc-ios-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --nc-ios-safe-left: env(safe-area-inset-left, 0px);
+    --nc-ios-height: var(--nc-ios-viewport-height, 100dvh);
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  :root[data-ios-layout="on"] body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+
+  :root[data-ios-layout="on"] .chat-root {
+    box-sizing: border-box;
+    width: 100%;
+    height: var(--nc-ios-height);
+    padding: var(--nc-ios-safe-top) var(--nc-ios-safe-right) 0 var(--nc-ios-safe-left);
+    overflow: hidden;
+  }
+  :root[data-ios-layout="on"] .main { width: 100%; min-height: 0; overflow: hidden; }
+  :root[data-ios-layout="on"] :is(.chat-header, .tools-header) {
+    box-sizing: border-box;
+    height: 48px;
+    min-height: 48px;
+    flex: 0 0 48px;
+    padding-inline: 16px;
+    font-size: 1rem;
+  }
+  :root[data-ios-layout="on"] :is(.sidebar-toggle, .tools-menu) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    margin: 0 4px 0 -8px;
+    padding: 0;
+  }
+  :root[data-ios-layout="on"] .window-buttons { display: none; }
+  :root[data-ios-layout="on"] .message-text { font-size: 1rem; line-height: 1.5; }
+  :root[data-ios-layout="on"] .message-user { font-size: .882rem; }
+  :root[data-ios-layout="on"] .input-area {
+    flex-shrink: 0;
+    /* Only the pill's bottom padding enters the safe area; buttons stay above it. */
+    padding: 6px 20px max(0px, calc(var(--nc-ios-safe-bottom) - 4px));
+  }
+  :root[data-ios-layout="on"][data-ios-keyboard="open"] .input-area { padding-bottom: 2px; }
+  :root[data-ios-layout="on"] .input-box {
+    padding: 4px 10px;
+    gap: 8px;
+    border-radius: 24px;
+    box-shadow: inset 0 0 0 1px rgb(var(--nc-line) / .1);
+  }
+  :root[data-ios-layout="on"] .input { min-width: 0; font-size: max(16px, 1rem); max-height: min(140px, 25dvh); }
+
+  :root[data-ios-layout="on"] .sidebar {
+    position: fixed;
+    z-index: 999;
+    top: var(--nc-ios-safe-top);
+    left: var(--nc-ios-safe-left);
+    box-sizing: border-box;
+    width: min(336px, calc(100vw - 24px - var(--nc-ios-safe-left) - var(--nc-ios-safe-right)));
+    height: calc(var(--nc-ios-height) - var(--nc-ios-safe-top));
+    grid-template-columns: var(--navigation-width) minmax(0, 1fr);
+    grid-template-rows: 48px minmax(0, 1fr) calc(56px + var(--nc-ios-safe-bottom));
+    border-radius: 0 24px 24px 0;
+    overflow: hidden;
+    transform: translateX(calc(-100% - var(--nc-ios-safe-left)));
+    visibility: hidden;
+    transition: transform 220ms ease;
+  }
+  :root[data-ios-layout="on"] .sidebar.show { transform: translateX(0); visibility: visible; }
+  :root[data-ios-layout="on"] .sidebar > .server-header { height: 48px; box-sizing: border-box; }
+  :root[data-ios-layout="on"] .navigation-rail { padding: 8px 0 max(8px, var(--nc-ios-safe-bottom)); overflow-y: auto; scrollbar-width: none; }
+  :root[data-ios-layout="on"] .navigation-links { gap: 8px; padding-bottom: 8px; }
+  :root[data-ios-layout="on"] .navigation-tooltip { display: none; }
+  :root[data-ios-layout="on"] .sidebar-account-action { width: 44px; }
+  :root[data-ios-layout="on"] .sidebar-account { padding-bottom: var(--nc-ios-safe-bottom); }
+  :root[data-ios-layout="on"] .navigation-scrim:not([hidden]) {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 998;
+    padding: 0;
+    border: 0;
+    background: rgb(15 12 23 / .55);
+    touch-action: manipulation;
+  }
+
+  :root[data-ios-layout="on"] :is(.settings-dialog, .user-profile-dialog) {
+    position: fixed;
+    inset: max(16px, var(--nc-ios-safe-top)) max(16px, var(--nc-ios-safe-right)) auto max(16px, var(--nc-ios-safe-left));
+    width: min(640px, calc(100% - max(16px, var(--nc-ios-safe-left)) - max(16px, var(--nc-ios-safe-right))));
+    max-height: calc(var(--nc-ios-height) - max(16px, var(--nc-ios-safe-top)) - max(16px, var(--nc-ios-safe-bottom)));
+    margin: 0 auto;
+    border-radius: 28px;
+    overscroll-behavior: contain;
+  }
+  :root[data-ios-layout="on"] .user-profile-dialog { max-width: 420px; }
+  :root[data-ios-layout="on"] .settings-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+  :root[data-ios-layout="on"] :is(.settings-header, .settings-footer) { flex-shrink: 0; }
+  :root[data-ios-layout="on"] .settings-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  :root[data-ios-layout="on"] :is(.sidebar-toggle, .tools-menu, .navigation-item, .palette-option-body, .channel) { border-radius: 12px; }
+  :root[data-ios-layout="on"] :is(.format-panel, .mention-list, .file-upload-menu) { border-radius: 20px; }
+  :root[data-ios-layout="on"] .file-upload-menu { bottom: calc(100% + 8px); right: 8px; }
+  :root[data-ios-layout="on"] .file-upload-progress {
+    box-sizing: border-box;
+    left: 8px;
+    right: 8px;
+    bottom: calc(100% + 8px);
+    width: auto;
+    transform: none;
+  }
+  :root[data-ios-layout="on"] .file-upload-progress.hidden { transform: translateY(8px); visibility: hidden; }
+  :root[data-ios-layout="on"] :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]), textarea, select) { font-size: max(16px, 1rem); }
+  :root[data-ios-layout="on"] .tools-body { padding-bottom: var(--nc-ios-safe-bottom); }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root[data-ios-layout="on"] :is(.sidebar, .file-upload-menu, .file-upload-progress) { transition: none; }
+  }
+}

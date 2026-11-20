@@ -170,12 +170,11 @@ test('appearance settings independently apply palettes and member styles, preser
         await page.keyboard.press('Tab');
         assert.equal(await dialog.evaluate(node => node.contains(document.activeElement)), true);
       }
-      // Closing settings returns to the mobile drawer, then Escape closes it.
+      // Settings replaces the mobile drawer on every platform.
       await page.keyboard.press('Escape');
       await dialog.waitFor({ state: 'detached' });
-      assert.equal(await page.locator('#navigation-settings').evaluate(node => document.activeElement === node), true);
-      assert.equal(await page.locator('.main').evaluate(node => node.inert), true);
-      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('.sidebar-toggle').evaluate(node => document.activeElement === node), true);
+      assert.equal(await page.locator('.navigation-scrim').isVisible(), false);
       assert.equal(await page.locator('.main').evaluate(node => node.inert), false);
     }
     await page.emulateMedia({ reducedMotion: 'reduce' });

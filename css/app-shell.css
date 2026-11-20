@@ -513,6 +513,7 @@ body {
 }
 .input {
   flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
@@ -1653,4 +1654,19 @@ body {
   .nako-thinking-icon {
     display: none;
   }
+}
+
+/* Platform-independent interaction safeguards, including Android and Windows. */
+.messages { min-height: 0; overscroll-behavior-y: contain; }
+:is(.input-btn, .sidebar-toggle, .tools-menu, .settings-close) { touch-action: manipulation; transition: background 150ms, opacity 150ms; }
+:is(.input-btn, .sidebar-toggle, .tools-menu, .settings-close):active { opacity: .65; transform: none; }
+.input-btn:focus-visible, .input-box:has(.input:focus-visible) { outline: 2px solid rgb(var(--nc-accent)); outline-offset: 2px; }
+@media (max-width: 768px), (pointer: coarse) {
+  .input-btn { width: 44px; height: 44px; min-height: 44px; padding: 0; flex-shrink: 0; }
+  .input-btn::after { content: none; }
+  .input-box > .sekai-composer__actions { flex-shrink: 0; align-self: center; gap: 0; margin-top: 0; }
+  .input { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .input-btn, .sidebar-toggle, .tools-menu, .settings-close { transition: none; }
 }

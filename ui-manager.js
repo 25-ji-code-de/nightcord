@@ -2821,7 +2821,11 @@ class UIManager {
     const scrim = document.querySelector('.navigation-scrim');
     const members = document.querySelector('#navigation-members');
     const profile = this.elements.navigationProfile;
-    const mobile = window.matchMedia('(max-width: 768px)');
+    const mobileWidth = window.matchMedia('(max-width: 768px)');
+    const iosLandscape = window.matchMedia('(max-width: 1024px) and (pointer: coarse)');
+    const mobile = { get matches() {
+      return mobileWidth.matches || (document.documentElement.dataset.iosLayout === 'on' && iosLandscape.matches);
+    } };
     const toggleSelector = 'button[aria-controls="member-sidebar"]';
     const drawerToggles = () => main.querySelectorAll(toggleSelector);
     const focusToggle = () => [...drawerToggles()].find(node => node.getClientRects().length)?.focus({ preventScroll: true });
@@ -2847,12 +2851,20 @@ class UIManager {
       sync();
       if (sidebar.classList.contains('show')) document.querySelector('#navigation-chat')?.focus({ preventScroll: true });
     });
-    mobile.addEventListener('change', () => {
+    const updateMobileLayout = () => {
       const focusInside = sidebar.contains(document.activeElement);
       const focusOnToggle = document.activeElement?.matches(toggleSelector);
       close();
       if (mobile.matches && focusInside) focusToggle();
       else if (!mobile.matches && focusOnToggle) document.querySelector('#navigation-chat')?.focus({ preventScroll: true });
+    };
+    mobileWidth.addEventListener('change', updateMobileLayout);
+    iosLandscape.addEventListener('change', updateMobileLayout);
+    // A settings modal replaces the phone drawer; its scrim must not remain
+    // behind the dialog and keep the chat dimmed/inert after dismissal.
+    window.addEventListener('nightcord:ios-layout-change', close);
+    window.addEventListener('nightcord:settings-open', () => {
+      if (mobile.matches) close();
     });
     scrim?.addEventListener('click', () => { close(); focusToggle(); });
     members?.addEventListener('click', () => {

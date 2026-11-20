@@ -5,11 +5,16 @@
   const key = 'nightcord-palette';
   const memberListKey = 'nightcord-member-list';
   const roundedCornersKey = 'nightcord-rounded-corners';
+  const iosLayoutKey = 'nightcord-ios-layout';
   const palettes = { 'gray-purple': { name: '灰紫', canvas: '#50476a' }, indigo: { name: '靛蓝', canvas: '#3d4070' } };
   const memberLists = { current: '新版', classic: '旧版' };
   const normalize = value => Object.hasOwn(palettes, value) ? value : 'gray-purple';
   const normalizeMemberList = value => Object.hasOwn(memberLists, value) ? value : 'classic';
   const normalizeRoundedCorners = value => value === 'off' ? 'off' : 'on';
+  // iPadOS can identify as desktop Safari; touch-capable MacIntel is an iPad.
+  const isIOSDevice = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const normalizeIOSLayout = value => value === 'on' || value === 'off' ? value : isIOSDevice ? 'on' : 'off';
   const read = (storageKey = key, validate = normalize) => {
     try { return validate(localStorage.getItem(storageKey)); }
     catch { return validate(null); }
@@ -36,6 +41,54 @@
   };
   applyRoundedCorners(read(roundedCornersKey, normalizeRoundedCorners));
 
+  const iosViewport = window.matchMedia('(max-width: 768px), (max-width: 1024px) and (pointer: coarse)');
+  const viewportMeta = document.querySelector('meta[name="viewport"]');
+  const defaultViewport = viewportMeta?.content || 'width=device-width, initial-scale=1.0';
+  const syncIOSViewport = () => {
+    const root = document.documentElement;
+    const viewport = window.visualViewport;
+    if (root.dataset.iosLayout !== 'on' || !iosViewport.matches || !viewport) {
+      root.style.removeProperty('--nc-ios-viewport-height');
+      delete root.dataset.iosKeyboard;
+      return;
+    }
+    // Let dvh handle browser chrome. Only resize for an actual editing keyboard;
+    // Safari's scroll/elastic offset must never translate the whole application.
+    if (Math.abs(viewport.scale - 1) > .01) return;
+    const editing = document.activeElement?.matches('textarea, input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="file"]), [contenteditable="true"]');
+    const keyboardOpen = editing && window.innerHeight - viewport.height > 100;
+    if (keyboardOpen) {
+      const height = `${viewport.height}px`;
+      if (root.style.getPropertyValue('--nc-ios-viewport-height') !== height) root.style.setProperty('--nc-ios-viewport-height', height);
+      root.dataset.iosKeyboard = 'open';
+    } else {
+      root.style.removeProperty('--nc-ios-viewport-height');
+      delete root.dataset.iosKeyboard;
+    }
+  };
+  let viewportFrame = 0;
+  const scheduleIOSViewport = () => {
+    if (viewportFrame) return;
+    viewportFrame = requestAnimationFrame(() => {
+      viewportFrame = 0;
+      syncIOSViewport();
+    });
+  };
+  const applyIOSLayout = value => {
+    const iosLayout = normalizeIOSLayout(value);
+    document.documentElement.dataset.iosLayout = iosLayout;
+    viewportMeta?.setAttribute('content', iosLayout === 'on' ? `${defaultViewport}, viewport-fit=cover` : defaultViewport);
+    syncIOSViewport();
+    window.dispatchEvent(new CustomEvent('nightcord:ios-layout-change'));
+    return iosLayout;
+  };
+  applyIOSLayout(read(iosLayoutKey, normalizeIOSLayout));
+  window.visualViewport?.addEventListener('resize', scheduleIOSViewport);
+  window.addEventListener('resize', scheduleIOSViewport);
+  iosViewport.addEventListener('change', scheduleIOSViewport);
+  document.addEventListener('focusin', scheduleIOSViewport);
+  document.addEventListener('focusout', scheduleIOSViewport);
+
   document.addEventListener('DOMContentLoaded', () => {
     const trigger = document.querySelector('#navigation-settings');
     const dialog = document.querySelector('#appearance-settings-template')?.content.querySelector('dialog').cloneNode(true);
@@ -43,14 +96,17 @@
     const options = [...dialog.querySelectorAll('input[name="nightcord-palette"]')];
     const memberListOptions = [...dialog.querySelectorAll('input[name="nightcord-member-list"]')];
     const roundedCornersToggle = dialog.querySelector('#rounded-corners-toggle');
+    const iosLayoutToggle = dialog.querySelector('#ios-layout-toggle');
     const status = dialog.querySelector('#palette-status');
     const sync = palette => options.forEach(option => { option.checked = option.value === palette; });
     const syncMemberList = value => memberListOptions.forEach(option => { option.checked = option.value === value; });
     const syncRoundedCorners = value => { roundedCornersToggle.checked = value === 'on'; };
+    const syncIOSLayout = value => { iosLayoutToggle.checked = value === 'on'; };
     let previousFocus;
     sync(document.documentElement.dataset.palette);
     syncMemberList(document.documentElement.dataset.memberList);
     syncRoundedCorners(document.documentElement.dataset.roundedCorners);
+    syncIOSLayout(document.documentElement.dataset.iosLayout);
 
     trigger.addEventListener('click', () => {
       if (dialog.open) return;
@@ -58,6 +114,7 @@
       document.body.appendChild(dialog);
       trigger.setAttribute('aria-controls', dialog.id);
       dialog.showModal();
+      window.dispatchEvent(new CustomEvent('nightcord:settings-open'));
       options.find(option => option.checked)?.focus({ preventScroll: true });
     });
     dialog.querySelector('.settings-close').addEventListener('click', () => dialog.close());
@@ -71,7 +128,7 @@
       if (event.key !== 'Tab') return;
       // A native radio group contributes only the selected option to Tab order.
       const first = dialog.querySelector('.settings-close');
-      const last = roundedCornersToggle;
+      const last = iosLayoutToggle;
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last?.focus();
@@ -128,6 +185,16 @@
         status.textContent = `${message}；此浏览器无法保存，刷新后会恢复默认。`;
       }
     });
+    iosLayoutToggle.addEventListener('change', () => {
+      const iosLayout = applyIOSLayout(iosLayoutToggle.checked ? 'on' : 'off');
+      const message = iosLayout === 'on' ? '已开启 iPhone / iOS 适配' : '已关闭 iPhone / iOS 适配';
+      try {
+        localStorage.setItem(iosLayoutKey, iosLayout);
+        status.textContent = `${message}，已自动保存。`;
+      } catch {
+        status.textContent = `${message}；此浏览器无法保存，刷新后会恢复默认。`;
+      }
+    });
     window.addEventListener('storage', event => {
       if (event.key === key || event.key === null) {
         const palette = apply(read());
@@ -143,6 +210,11 @@
         const roundedCorners = applyRoundedCorners(read(roundedCornersKey, normalizeRoundedCorners));
         syncRoundedCorners(roundedCorners);
         status.textContent = roundedCorners === 'on' ? '圆角已开启。' : '圆角已关闭。';
+      }
+      if (event.key === iosLayoutKey || event.key === null) {
+        const iosLayout = applyIOSLayout(read(iosLayoutKey, normalizeIOSLayout));
+        syncIOSLayout(iosLayout);
+        status.textContent = iosLayout === 'on' ? 'iPhone / iOS 适配已开启。' : 'iPhone / iOS 适配已关闭。';
       }
     });
   }, { once: true });

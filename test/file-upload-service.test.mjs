@@ -1,3 +1,4 @@
+import { readBrowserScript } from '../scripts/browser-source.mjs';
 /*
  * SPDX-License-Identifier: AGPL-3.0-only
  * Copyright (C) 2025-2026 The 25-ji-code-de Team
@@ -261,7 +262,7 @@ describe('FileUploadService upload endpoint selection', () => {
   });
 
   test('UI no longer hard-caps uploads at 95 MiB', () => {
-    const src = readFileSync(join(root, 'ui-manager.js'), 'utf8');
+    const src = readBrowserScript('ui-manager.js');
     assert.doesNotMatch(src, /95\s*\*\s*1024\s*\*\s*1024/);
     assert.match(src, /fileUploadService\.multipartMaxUploadBytes/);
   });

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { readBrowserScript } from '../../scripts/browser-source.mjs';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
@@ -8,13 +9,13 @@ test('composer uploads preserve text, Unicode metadata and recover from failure'
  const browser=await chromium.launch({executablePath:process.env.NIGHTCORD_TEST_CHROMIUM||undefined});t.after(()=>browser.close());
  const root=new URL('../../',import.meta.url);
  const html=(await readFile(new URL('index.html',root),'utf8')).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'');
- const scripts=await Promise.all(['purify.js','sekai-escape.js','performance-optimizer.js','event-bus.js','ai-config.js','storage-manager.js','file-upload-service.js','sekai-renderer.js','ui-autocomplete.js','user-profile.js','ui-manager.js'].map(file=>readFile(new URL(file,root),'utf8')));
+ const scripts=await Promise.all(['purify.js','sekai-escape.js','performance-optimizer.js','event-bus.js','ai-config.js','storage-manager.js','file-upload-service.js','sekai-renderer.js','ui-autocomplete.js','user-profile.js','ui-manager.js','js/services/message-commands.js'].map(file=>readBrowserScript(file)));
  async function fixture(t){
   const context=await browser.newContext({serviceWorkers:'block'});t.after(()=>context.close());
   await context.route('**/*',async route=>{const url=new URL(route.request().url());if(url.origin!=='http://composer.nightcord.test')return route.abort();if(url.pathname==='/')return route.fulfill({contentType:'text/html',body:html});return route.fulfill({contentType:url.pathname.endsWith('.css')?'text/css':'image/svg+xml',body:await readFile(new URL('.'+url.pathname,root))})});
   const page=await context.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));t.after(()=>assert.deepEqual(errors,[]));
   await page.goto('http://composer.nightcord.test/?test');for(const content of scripts)await page.addScriptTag({content});
-  await page.evaluate(()=>{window.ui=new UIManager(new EventBus());ui.currentRoom='nightcord-test';window.sent=[];ui.setupChatRoom(message=>{sent.push(message);return true});window.input=ui.elements.chatInput;});return page;
+  await page.evaluate(()=>{window.ui=new UIManager(new EventBus());ui.currentRoom='nightcord-test';window.sent=[];const commands=new MessageCommands({eventBus:ui.eventBus,send:message=>{sent.push(message);return true},aiConfig:window.AIConfig,mentions:ui.mentions,typeSource:SekaiRenderer.V2_TYPE_SOURCE});ui.setupChatRoom(message=>commands.submit(message));window.input=ui.elements.chatInput;});return page;
  }
  await t.test('upload insertion respects the beginning, middle and selection of a draft',async t=>{
   const p=await fixture(t);const result=await p.evaluate(()=>{const out=[];for(const [start,end] of [[0,0],[2,2],[1,4]]){input.value='abcdef';input.setSelectionRange(start,end);ui._insertPlaceholder(input,'[upload]');out.push(input.value)}return out});assert.deepEqual(result,['[upload]abcdef','ab[upload]cdef','a[upload]ef']);

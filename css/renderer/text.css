@@ -1,0 +1,296 @@
+/* ============================================
+   SEKAI Rich Text & Media (Minimalist Geometric Redesign)
+   ============================================ */
+
+/* --- Typography & Inline Elements --- */
+
+.sekai-text-node {
+  line-height: 1.6;
+}
+
+.nightcord-emoji {
+  position: relative;
+  display: inline-flex;
+  width: 1.375em;
+  height: 1.375em;
+  align-items: center;
+  justify-content: center;
+  vertical-align: -0.3em;
+  margin: 0 0.04em;
+}
+
+.nightcord-emoji__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.nightcord-emoji__shortcode {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Bold text styling */
+.sekai-text-node strong {
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Italic text styling */
+.sekai-text-node em {
+  font-style: italic;
+  color: #e0d4f7;
+}
+
+/* Strikethrough text styling */
+.sekai-text-node del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+/* Inline code styling */
+.sekai-code-inline {
+  font-family: var(--sekai-font-mono);
+  background: #2b2633;
+  color: #f8c555;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.9em;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+/* --- Code Block (IDE Style Integration) --- */
+.sekai-code-block {
+  font-family: var(--sekai-font-mono);
+  display: block;
+  /* Upgrade to gradient glass background to match file-card */
+  background: linear-gradient(145deg, rgba(43, 38, 51, 0.9), rgba(30, 25, 40, 0.95));
+  color: #e0d4f7; /* Keep the soft purple text */
+  padding: 12px 16px;
+  border-radius: 8px; /* Slightly smoother radius */
+  margin: 10px 0;
+  white-space: pre; /* Use pre to strictly respect formatting */
+  overflow-x: auto; /* Scroll for long lines */
+
+  /* Geometric Accent: Left border strip */
+  border-left: 3px solid rgb(var(--sekai-accent) / 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08); /* Unified border style */
+  border-left-width: 3px; /* Ensure left border takes precedence */
+
+  line-height: 1.6;
+  font-size: 0.9em; /* Slightly smaller for density */
+  tab-size: 2;
+
+  /* UX: Subtle shadow to lift it from chat background */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: border-color 0.2s;
+}
+
+.sekai-code-block:hover {
+  border-color: rgba(167, 139, 250, 0.3); /* Integrated hover state */
+  border-left-color: #a78bfa; /* Highlight accent on hover */
+}
+
+/* Scrollbar styling for code block */
+.sekai-code-block::-webkit-scrollbar {
+  height: 6px;
+}
+.sekai-code-block::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+.sekai-code-block::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Spoiler / 黑幕 - Optical Blur Redesign */
+/* Spoiler / 黑幕 - Digital Interference Tape */
+.sekai-spoiler {
+  /* "Stuck on" feel: Solid noise texture masking the text */
+  background: #2a2635;
+  color: transparent;
+  text-shadow: none; /* Removed text hint to ensure total spoiler safety */
+  padding: 0 4px; /* Tighter padding like a tape */
+  margin: 0 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  font-weight: 500;
+  border: 1px solid rgb(var(--sekai-accent) / 0.2);
+
+  /* Texture: Digital Noise Stripe */
+  background-image: repeating-linear-gradient(
+    135deg,
+    #2a2635,
+    #2a2635 6px,
+    #332e42 6px,
+    #332e42 12px
+  );
+  /* Soft shadow to lift it up (Layering) */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.sekai-spoiler:hover {
+  /* Interactive feedback: Brighter, slightly unstable feel */
+  border-color: rgba(167, 139, 250, 0.6); /* Purple accent highlight */
+  background-image: repeating-linear-gradient(
+    135deg,
+    #322d40,
+    #322d40 6px,
+    #3e3750 6px,
+    #3e3750 12px
+  );
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+.sekai-spoiler.revealed {
+  /* "Dug out" / Contextual feel: Texture vanishes, text remains */
+  background: rgb(var(--sekai-accent) / 0.15);
+  background-image: none;
+  color: inherit;
+  text-shadow: none; /* Clear blur */
+  cursor: text;
+  user-select: text;
+  border-color: transparent;
+  box-shadow: none;
+  padding: 0 2px; /* Slight shrink to fit text naturally */
+  animation: sekai-spoiler-reveal 0.3s ease-out;
+}
+
+@keyframes sekai-spoiler-reveal {
+  0% { filter: blur(4px); opacity: 0.5; }
+  100% { filter: blur(0); opacity: 1; }
+}
+
+/* Auto-linked URLs */
+.sekai-link-inline {
+  color: #88b3f5;
+  text-decoration: none; /* No underline by default to keep clean */
+  border-bottom: 1px solid rgba(136, 179, 245, 0.3); /* Subtle hint instead */
+  transition: all 0.2s;
+  padding-bottom: 0px;
+}
+
+.sekai-link-inline:hover {
+  color: #a8c9ff;
+  border-bottom-color: #a8c9ff; /* Fully underline on hover */
+  border-bottom-width: 1.5px;
+}
+
+/* --- Stickers --- */
+
+.sekai-sticker {
+  vertical-align: middle;
+  transition: transform 0.2s;
+}
+
+.sekai-sticker-inline {
+  height: 60px; /* Restored to original size */
+  width: auto;
+  margin: 0 4px;
+}
+
+@media screen and (max-width: 600px) {
+  .sekai-sticker-inline {
+    height: 48px;
+  }
+}
+
+
+.sekai-sticker-single {
+  max-width: var(--sticker-size);
+  max-height: var(--sticker-size);
+  display: block;
+  margin: 4px 0;
+  border-radius: var(--sekai-radius-control);
+}
+
+.sekai-sticker-single:hover {
+  transform: scale(1.02);
+}
+
+/* --- Images --- */
+
+.sekai-image-container {
+  display: inline-block;
+  margin: 6px 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--sekai-radius-control);
+  background: rgba(0,0,0,0.1);
+  max-width: 100%;
+}
+
+/* Loading 状态默认使用 large 尺寸 */
+.sekai-image-container.loading {
+  width: min(400px, 100%);
+  height: 225px;
+}
+
+.sekai-image-container.loading::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(90deg, #2b2633 25%, #352d42 50%, #2b2633 75%);
+  background-size: 200% 100%;
+  animation: sekai-shimmer 1.5s infinite;
+}
+
+.sekai-image-content {
+  display: block;
+  max-width: 100%;
+  max-height: 400px;
+  transition: opacity 0.3s;
+}
+
+.sekai-image-caption {
+  padding: 4px 8px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-size: 0.85em;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  transform: translateY(100%);
+  transition: transform 0.2s;
+}
+
+.sekai-image-container:hover .sekai-image-caption {
+  transform: translateY(0);
+}
+
+/* Image size classes - based on naturalWidth */
+.sekai-image-container.sekai-image-large {
+  max-width: 400px;
+}
+
+.sekai-image-container.sekai-image-small {
+  max-width: 200px;
+}
+
+.sekai-error-placeholder {
+  padding: 20px;
+  text-align: center;
+  color: #ff6b6b;
+}
+
+.sekai-error-icon {
+  font-size: 24px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.sekai-error-text {
+  font-size: 13px;
+  font-style: italic;
+}

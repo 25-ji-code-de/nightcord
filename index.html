@@ -28,9 +28,18 @@ Copyright (C) 2025 The 25-ji-code-de Team
   <link rel="stylesheet" href="/vendor/sekai-design/chat.css">
   <link rel="stylesheet" href="/vendor/sekai-design/modal.css">
   <link rel="stylesheet" href="/css/palettes.css">
-  <link rel="stylesheet" href="/css/app-shell.css">
+  <link rel="stylesheet" href="/css/app-shell/profile.css">
+  <link rel="stylesheet" href="/css/app-shell/layout.css">
+  <link rel="stylesheet" href="/css/app-shell/messages.css">
+  <link rel="stylesheet" href="/css/app-shell/autocomplete.css">
+  <link rel="stylesheet" href="/css/app-shell/dialogs.css">
+  <link rel="stylesheet" href="/css/app-shell/responsive.css">
   <link rel="stylesheet" href="/css/navigation.css">
-  <link rel="stylesheet" href="/css/renderer.css">
+  <link rel="stylesheet" href="/css/renderer/text.css">
+  <link rel="stylesheet" href="/css/renderer/music.css">
+  <link rel="stylesheet" href="/css/renderer/audio.css">
+  <link rel="stylesheet" href="/css/renderer/cards.css">
+  <link rel="stylesheet" href="/css/renderer/responsive.css">
   <link rel="stylesheet" href="/css/notifications.css">
   <link rel="stylesheet" href="/css/image-viewer.css">
   <link rel="stylesheet" href="/css/attachments.css">
@@ -645,6 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <script src="/event-bus.js"></script>
   <script src="/ai-config.js"></script>
   <script src="/websocket-mgr.js"></script>
+  <script src="/js/network/chat-session.js"></script>
   <script src="/nightcord-mgr.js"></script>
   <script src="/storage-manager.js"></script>
   <script src="/file-upload-service.js"></script>
@@ -653,16 +663,51 @@ document.addEventListener('DOMContentLoaded', () => {
   <script src="/emoji-data.js"></script>
   <script src="/emoji-unicode-data.js"></script>
   <script src="/emoji-service.js"></script>
+  <script src="/js/renderer/resources.js"></script>
+  <script src="/js/renderer/parser.js"></script>
+  <script src="/js/renderer/text.js"></script>
+  <script src="/js/renderer/images.js"></script>
+  <script src="/js/renderer/cards.js"></script>
+  <script src="/js/renderer/audio-controls.js"></script>
+  <script src="/js/renderer/music.js"></script>
+  <script src="/js/renderer/audio.js"></script>
   <script src="/sekai-renderer.js"></script>
   <script src="/mention-service.js"></script>
   <script src="/sekai-image-viewer.js"></script>
+  <script src="/js/ui/autocomplete-mentions.js"></script>
+  <script src="/js/ui/autocomplete-picker.js"></script>
   <script src="/ui-autocomplete.js"></script>
   <script src="/composer-format.js"></script>
   <script src="/user-profile.js"></script>
+  <script src="/js/ui/events.js"></script>
+  <script src="/js/ui/name-chooser.js"></script>
+  <script src="/js/ui/room-view.js"></script>
+  <script src="/js/ui/roster.js"></script>
+  <script src="/js/ui/message-list.js"></script>
+  <script src="/js/ui/streaming.js"></script>
+  <script src="/js/ui/composer.js"></script>
+  <script src="/js/ui/uploads.js"></script>
+  <script src="/js/services/attachment-message.js"></script>
+  <script src="/js/ui/message-view.js"></script>
+  <script src="/js/ui/replies.js"></script>
+  <script src="/js/ui/notifications.js"></script>
+  <script src="/js/ui/mentions.js"></script>
+  <script src="/js/ui/navigation.js"></script>
   <script src="/ui-manager.js"></script>
   <script src="/voice-manager.js"></script>
   <script src="/voice-ui.js"></script>
+  <script src="/js/sidebar/helpers.js"></script>
+  <script src="/js/sidebar/storage.js"></script>
+  <script src="/js/sidebar/messages.js"></script>
+  <script src="/js/sidebar/task-form.js"></script>
+  <script src="/js/sidebar/task-tickets.js"></script>
+  <script src="/js/sidebar/task-slips.js"></script>
+  <script src="/js/sidebar/help.js"></script>
   <script src="/sidebar-features.js"></script>
+  <script src="/js/services/message-commands.js"></script>
+  <script src="/js/app/identity.js"></script>
+  <script src="/js/services/ai-conversation.js"></script>
+  <script src="/js/ui/voice-sounds.js"></script>
   <script src="/nightcord.js"></script>
   <script src="/boot.js"></script>
   <script src="/pangu.js"></script>

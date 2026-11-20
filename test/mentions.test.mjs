@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { readBrowserScript } from '../scripts/browser-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -7,7 +8,7 @@ import vm from 'node:vm';
 function fixture() {
   const context = vm.createContext({ window: {}, console, TextEncoder, TextDecoder, atob, btoa });
   for (const file of ['sekai-renderer.js', 'mention-service.js', 'ai-config.js', 'ui-manager.js']) {
-    vm.runInContext(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), context);
+    vm.runInContext(readBrowserScript(file), context);
   }
   const renderer = vm.runInContext('new SekaiRenderer()', context);
   const mentions = new context.window.NightcordMentions(renderer);
@@ -108,7 +109,7 @@ test('autocomplete candidates preserve same-name identities and prefer current n
 test('room synchronization signals readiness after every reconnect without repeating welcomes', () => {
   const { context } = fixture();
   context.WebSocketManager = class {};
-  vm.runInContext(readFileSync(new URL('../nightcord-mgr.js', import.meta.url), 'utf8'), context);
+  vm.runInContext(readBrowserScript('nightcord-mgr.js'), context);
   const Manager = vm.runInContext('NightcordManager', context);
   const events = [];
   const manager = new Manager({ eventBus: { emit: name => events.push(name) } });

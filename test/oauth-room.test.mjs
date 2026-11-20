@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { readBrowserScript } from '../scripts/browser-source.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -17,7 +18,7 @@ function fixture({ savedRoom = 'nightcord-test', failed = false, search = '?code
     },
     SekaiAnalytics: class {},
   };
-  const Nightcord = vm.runInNewContext(readFileSync(new URL('../nightcord.js', import.meta.url), 'utf8') + '\nNightcord', sandbox);
+  const Nightcord = vm.runInNewContext(readBrowserScript('nightcord.js') + '\nNightcord', sandbox);
   const app = Object.create(Nightcord.prototype);
   Object.assign(app, {
     sekaiPassAuth: {

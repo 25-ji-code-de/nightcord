@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { readBrowserScript } from '../scripts/browser-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -14,7 +15,7 @@ function websocketHarness(getAccessToken, navigator) {
     close(code) { this.readyState = 3; this.events.close?.({ code }); }
     message(value) { this.events.message({ data: JSON.stringify(value) }); }
   }
-  const Manager = vm.runInNewContext(readFileSync(new URL('../websocket-mgr.js', import.meta.url), 'utf8') + '\nWebSocketManager', {
+  const Manager = vm.runInNewContext(readBrowserScript('js/network/chat-session.js') + readBrowserScript('websocket-mgr.js') + '\n(class extends WebSocketManager { constructor(config) { super({ ...config, protocol: new ChatSessionProtocol(config) }); } })', {
     WebSocket: Socket, console: { log() {}, warn() {} }, setTimeout, clearTimeout, AbortSignal, navigator,
   });
   const errors = [];
@@ -65,7 +66,7 @@ test('an obsolete token request cannot pause a newer connection', async () => {
   let rejectOld;
   const { manager } = websocketHarness(() => new Promise((_, reject) => { rejectOld = reject; }));
   const pending = manager.connect('identity-test', 'Guest nickname');
-  manager.getAccessToken = async () => null;
+  manager.protocol.getAccessToken = async () => null;
   await manager.connect('another-room', 'visitor');
   const current = manager.ws;
   await current.events.open({});
@@ -135,9 +136,13 @@ test('blocked guest cookie stops after one recovery instead of looping', async (
 test('presence uses identity IDs and AI forwarding preserves the actual sender', () => {
   const events = [];
   const Manager = vm.runInNewContext(readFileSync(new URL('../nightcord-mgr.js', import.meta.url), 'utf8') + '\nNightcordManager', {
-    WebSocketManager: class {}, localStorage: { setItem() {} }, window: { AIConfig: { getAllDisplayNames: () => ['Nako'] } },
+    WebSocketManager: class {},
   });
-  const manager = new Manager({ eventBus: { emit: (type, data) => events.push({ type, data }) } });
+  const manager = new Manager({
+    createTransport: () => ({}),
+    eventBus: { emit: (type, data) => events.push({ type, data }) },
+    aiConfig: { getAllDisplayNames: () => ['Nako'] },
+  });
   const user = { id: 'sekai:one', displayName: 'Same name', authenticated: true };
   const guest = { id: 'guest:two', displayName: 'Same name', authenticated: false };
   manager.handleMessage({ joined: 'Same name', user });

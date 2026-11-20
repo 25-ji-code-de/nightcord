@@ -831,6 +831,7 @@ export class EventBus {
 // websocket-mgr.d.ts
 interface WebSocketConfig {
   hostname?: string;
+  protocol?: ChatSessionProtocol; // 聊天认证适配；省略时为通用 JSON WebSocket
   reconnectDelay?: number;
   onOpen?: (event: Event) => void;
   onMessage?: (data: any) => void;
@@ -841,7 +842,7 @@ interface WebSocketConfig {
 
 export class WebSocketManager {
   constructor(config?: WebSocketConfig);
-  connect(roomname: string, username: string): void;
+  connect(target: string, username?: string): Promise<void>; // 无协议时 target 为完整 wss:// URL
   send(message: object): boolean;
   disconnect(): void;
   isConnected(): boolean;
@@ -859,6 +860,10 @@ export class WebSocketManager {
 interface NightcordManagerConfig {
   hostname?: string;
   eventBus?: EventBus;
+  aiConfig?: { getAllDisplayNames(): string[] };
+  getAccessToken?: () => Promise<string | null>;
+  fetch?: typeof fetch;
+  createTransport?: (options: object) => WebSocketManager;
 }
 
 export class NightcordManager {

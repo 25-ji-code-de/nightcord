@@ -27,19 +27,11 @@
  *   onClose: () => console.log('Disconnected')
  * });
  *
- * wsManager.connect('nightcord-default', 'K');
+ * wsManager.connect('wss://example.com/events');
  * wsManager.send({ message: 'As always, at 25:00.' });
  * wsManager.disconnect();
  */
 class WebSocketManager {
-  static guestRequests = new Map();
-
-  static isMobileDevice() {
-    const device = globalThis.navigator;
-    return device?.userAgentData?.mobile === true
-      || /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini|BlackBerry|webOS|Kindle|Silk|Dalvik|HarmonyOS/i.test(device?.userAgent || '')
-      || (/Macintosh/i.test(device?.userAgent || '') && device?.maxTouchPoints > 1);
-  }
   /**
    * 创建 WebSocket 管理器实例
    * @param {Object} config - 配置对象
@@ -52,7 +44,7 @@ class WebSocketManager {
    * @param {Function} [config.onReconnect] - 重连时的回调
    */
   constructor(config = {}) {
-    this.hostname = config.hostname || 'chat.nightcord.de5.net';
+    this.hostname = config.hostname;
     this.reconnectDelay = config.reconnectDelay || 10000;
     this.ws = null;
     this.rejoined = false;
@@ -66,16 +58,8 @@ class WebSocketManager {
     this._reconnectTimer = null;
     /** Generation token so stale sockets/timers cannot rejoin after a new connect */
     this._gen = 0;
-    this.getAccessToken = config.getAccessToken || (async () => null);
-    this.onAuthError = config.onAuthError || (() => {});
-    this._authTimer = null;
-    this._authRefreshing = false;
-    this.authExpiresAt = 0;
-    this.guestExpiresAt = 0;
-    this._guestTimer = null;
-    this._guestRecoveries = 0;
-    this.fetch = config.fetch || ((...args) => globalThis.fetch(...args));
-    this.onGuestError = config.onGuestError || (() => {});
+    this.protocol = config.protocol || null;
+    this.protocol?.attach(this);
     this.ready = false;
 
     // Callbacks
@@ -88,8 +72,8 @@ class WebSocketManager {
 
   /**
    * 连接到 WebSocket 服务器
-   * @param {string} roomname - 房间名称
-   * @param {string} username - 用户名
+   * @param {string} roomname - WebSocket URL；注入协议时由协议解释此目标
+   * @param {string} [username] - 可选的协议连接参数
    */
   connect(roomname, username) {
     this.roomname = roomname;
@@ -99,12 +83,8 @@ class WebSocketManager {
     this.startTime = Date.now();
     this._gen += 1;
     const gen = this._gen;
-    clearTimeout(this._authTimer);
-    clearTimeout(this._guestTimer);
-    this._authRefreshing = false;
+    this.protocol?.reset();
     this.ready = false;
-    this.authExpiresAt = 0;
-    this.guestExpiresAt = 0;
 
     // Drop previous socket without triggering a parallel reconnect loop
     if (this._reconnectTimer) {
@@ -128,50 +108,18 @@ class WebSocketManager {
     return this.connectionPromise;
   }
 
-  async prepareGuestSession() {
-    const url = 'https://' + this.hostname + '/api/guest/session';
-    if (!WebSocketManager.guestRequests.has(url)) {
-      const initialize = async () => {
-        const response = await this.fetch(url, {
-          method: 'POST', credentials: 'include', cache: 'no-store', signal: AbortSignal.timeout(12000),
-        });
-        const data = await response.json();
-        if (!response.ok) throw Object.assign(new Error(data.error || 'Guest identity unavailable'), { code: data.code });
-        if (!/^guest:[0-9a-f-]{36}$/.test(data.id) || !Number.isSafeInteger(data.expiresAt)) throw new Error('Invalid guest session response');
-      };
-      const request = globalThis.navigator?.locks
-        ? navigator.locks.request('nightcord:guest:' + this.hostname, initialize) : initialize();
-      WebSocketManager.guestRequests.set(url, request);
-      request.then(() => WebSocketManager.guestRequests.delete(url), () => WebSocketManager.guestRequests.delete(url));
-    }
-    return WebSocketManager.guestRequests.get(url);
-  }
-
   async openConnection(gen, roomname, username) {
-    let token;
-    try { token = await this.getAccessToken(); }
-    catch (error) {
-      if (gen === this._gen) { this.pauseAutoReconnect(); this.onAuthError(error); }
-      return;
-    }
-    if (gen !== this._gen) return;
-    try { if (!token) await this.prepareGuestSession(); }
-    catch (error) {
-      if (gen === this._gen) {
-        this.onError(error);
-        if (this.shouldReconnect) void this.rejoin();
-      }
-      return;
-    }
-    if (gen !== this._gen) return;
+    const prepared = this.protocol ? await this.protocol.prepare(gen) : {};
+    if (!prepared || gen !== this._gen) return;
     let ws;
-    try { ws = new WebSocket('wss://' + this.hostname + '/api/room/' + encodeURIComponent(roomname) + '/websocket'); }
+    try { ws = new WebSocket(this.protocol ? this.protocol.url(roomname) : roomname); }
     catch (error) { this.onError(error); if (this.shouldReconnect) void this.rejoin(); return; }
     this.ws = ws;
 
     ws.addEventListener('open', async (event) => {
       if (gen !== this._gen || this.ws !== ws) return;
-      ws.send(JSON.stringify({ ...(token ? { accessToken: token } : { name: username }), isMobile: WebSocketManager.isMobileDevice() }));
+      if (this.protocol) this.protocol.open(ws, prepared, username);
+      else this.ready = true;
       this.onOpen(event);
     });
 
@@ -184,46 +132,14 @@ class WebSocketManager {
         console.warn('WebSocketManager: invalid JSON message', e);
         return;
       }
-      if (data.type === 'session') {
-        this._authRefreshing = false;
-        this.authExpiresAt = data.authExpiresAt || 0;
-        this.guestExpiresAt = data.guestExpiresAt || 0;
-        this.username = data.user.displayName;
-        this.scheduleGuestRenewal();
-        clearTimeout(this._authTimer);
-        if (this.authExpiresAt) {
-          this._authTimer = setTimeout(() => this.refreshAuthentication(), Math.max(1000, this.authExpiresAt - Date.now() - 60000));
-        }
-      }
-      if (data.ready) { this.ready = true; this._guestRecoveries = 0; }
-      if (data.code === 'guest_session_required') {
-        this.ready = false;
-        if (this._guestRecoveries++ < 1) {
-          this.onReconnect();
-          this.connect(this.roomname, this.username);
-        } else {
-          this.pauseAutoReconnect();
-          this.onGuestError(new Error('浏览器未允许保存访客身份。请允许此站点使用 Cookie，或使用 SEKAI Pass 登录。'));
-        }
-        return;
-      }
-      if (data.code === 'auth_invalid') {
-        this.ready = false;
-        this.pauseAutoReconnect();
-        this.onAuthError(new Error(data.error));
-      }
-      if (data.code === 'auth_required') void this.refreshAuthentication();
-      if (data.code === 'auth_unavailable') ws.close(1013, 'Authentication service unavailable');
+      if (this.protocol?.message(data, ws) === false) return;
       this.onMessage(data);
     });
 
     ws.addEventListener('close', (event) => {
       if (gen !== this._gen) return;
       this.ready = false;
-      this._authRefreshing = false;
-      clearTimeout(this._authTimer);
-      clearTimeout(this._guestTimer);
-      if (event.code === 4001) this.pauseAutoReconnect();
+      this.protocol?.close(event);
       console.log('WebSocket closed, reconnecting:', event.code, event.reason);
       this.onClose(event);
       if (this.shouldReconnect) this.rejoin();
@@ -246,7 +162,7 @@ class WebSocketManager {
    */
   async rejoin() {
     if (this.rejoined || !this.shouldReconnect) return;
-    if (!this.roomname || !this.username) return;
+    if (!this.roomname) return;
 
     this.rejoined = true;
     this.ws = null;
@@ -274,17 +190,7 @@ class WebSocketManager {
    * @returns {boolean} 是否成功发送
    */
   send(message) {
-    if (this._authRefreshing) return false;
-    if (this.guestExpiresAt && Date.now() >= this.guestExpiresAt) {
-      this.ready = false;
-      this.onReconnect();
-      this.connect(this.roomname, this.username);
-      return false;
-    }
-    if (this.authExpiresAt && Date.now() >= this.authExpiresAt) {
-      void this.refreshAuthentication();
-      return false;
-    }
+    if (this.protocol?.canSend() === false) return false;
     if (this.ready && this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify(message));
@@ -301,8 +207,7 @@ class WebSocketManager {
    * 断开连接
    */
   disconnect() {
-    clearTimeout(this._authTimer);
-    clearTimeout(this._guestTimer);
+    this.protocol?.reset();
     this.ready = false;
     if (this._reconnectTimer) {
       clearTimeout(this._reconnectTimer);
@@ -338,44 +243,7 @@ class WebSocketManager {
     this.shouldReconnect = true;
   }
 
-  scheduleGuestRenewal() {
-    clearTimeout(this._guestTimer);
-    if (!this.guestExpiresAt) return;
-    const remaining = this.guestExpiresAt - Date.now() - 30 * 86400000;
-    this._guestTimer = setTimeout(() => {
-      if (remaining > 2147483647) this.scheduleGuestRenewal();
-      else {
-        this.ready = false;
-        this.onReconnect();
-        this.connect(this.roomname, this.username);
-      }
-    }, Math.min(2147483647, Math.max(1000, remaining)));
-  }
-
-  async refreshAuthentication() {
-    if (this._authRefreshing || !this.isConnected()) return;
-    this._authRefreshing = true;
-    const ws = this.ws;
-    try {
-      const token = await this.getAccessToken();
-      if (!token) throw new Error('SEKAI Pass session expired');
-      if (this.ws === ws && ws.readyState === WebSocket.OPEN) {
-        clearTimeout(this._authTimer);
-        this._authTimer = setTimeout(() => {
-          if (this.ws === ws && this._authRefreshing) ws.close(1013, 'Authentication timed out');
-        }, 12000);
-        ws.send(JSON.stringify({ type: 'auth', accessToken: token }));
-      } else this._authRefreshing = false;
-    } catch (error) {
-      if (this.ws === ws) {
-        this.pauseAutoReconnect();
-        this.ready = false;
-        this._authRefreshing = false;
-        this.onAuthError(error);
-        ws.close(4001, 'Authentication required');
-      }
-    }
-  }
+  refreshAuthentication() { return this.protocol?.refreshAuthentication(); }
 
   /**
    * 检查是否已连接

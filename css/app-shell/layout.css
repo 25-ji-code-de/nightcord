@@ -1,0 +1,230 @@
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Noto Sans JP", sans-serif;
+  background: #50476a;
+  color: #fff;
+}
+.chat-root {
+  display: flex;
+  height: 100vh;
+  background: #50476a;
+  overflow-x: hidden; /* 防止水平滚动 */
+}
+.sidebar {
+  width: 280px;
+  background: #3f355b;
+  display: flex;
+  flex-direction: column;
+}
+.server-header {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid #2b2633;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+.server-header:hover {
+  background: rgba(61, 55, 80, 0.5);
+}
+.server-logotype {
+  display: block;
+  width: auto;
+  height: 24px;
+  flex-shrink: 0;
+  /* Align the visible left edge and ascender-to-baseline center, allowing for g's tail. */
+  transform: translate(-2px, 2px);
+}
+.server-chevron {
+  display: block;
+  flex-shrink: 0;
+}
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 8px 0;
+}
+.channel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: #50476a;
+  margin-bottom: 8px;
+  cursor: pointer;
+  font-size: 15px;
+}
+.channel-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  padding: 0 10px;
+}
+.section-label {
+  display: flex;
+  align-items: baseline;
+  gap: .275em;
+  font-size: 12px;
+  line-height: normal;
+  color: #bdbdbd;
+  margin: 16px 0 4px 8px;
+}
+.section-label-chevron {
+  display: block;
+  width: .667em;
+  height: 1em;
+  flex: 0 0 .667em;
+  /* The one-em glyph box shares the Chinese title's text baseline. */
+  transform: scale(1.08);
+  transform-origin: 50% 70%;
+  color: currentColor;
+}
+.voice-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--member-text);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.voice-user:hover {
+  background: #50476a;
+}
+.voice-user-info {
+  display: flex;
+  flex: 1;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+.voice-user-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; line-height: 20px; }
+.member-list {
+  --member-online: #b2f7ef;
+  --member-text: #eeebf4;
+  --member-muted: #89829f;
+  --member-microphone: #bdb5d0;
+  --member-surface: #3f355b;
+  --member-hover: #50476a;
+  --member-device-screen: #28283f;
+}
+.member-avatar { position: relative; display: inline-flex; flex-shrink: 0; }
+.member-presence {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--member-surface);
+  border-radius: 50%;
+  background: var(--member-online);
+}
+.member-presence[data-presence="mobile"] {
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 16px;
+  border: 0;
+  border-radius: 1px;
+  color: var(--member-online);
+  background: var(--member-device-screen);
+  box-shadow: 0 0 0 1.5px var(--member-surface);
+}
+.member-presence svg, .member-microphone svg { display: block; width: 100%; height: 100%; }
+.member-presence[hidden], .member-microphone[hidden] { display: none; }
+.member-microphone { width: 14px; height: 16px; flex-shrink: 0; color: var(--member-microphone); }
+.member-microphone[data-microphone="false"] { opacity: .45; }
+.voice-user.is-offline { color: var(--member-muted); }
+.voice-user.is-offline .avatar { opacity: .45; filter: grayscale(.5); }
+.voice-user.is-offline .identity-badge { opacity: .5; }
+.voice-user:hover, .voice-user:focus-visible { --member-surface: var(--member-hover); }
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  color: #fff;
+}
+.bg-pink-500 {
+  background: rgb(var(--sekai-identity-1));
+}
+.bg-purple-400 {
+  background: rgb(var(--sekai-identity-2));
+}
+.bg-teal-400 {
+  background: rgb(var(--sekai-identity-3));
+}
+.bg-pink-400 {
+  background: rgb(var(--sekai-identity-4));
+}
+.bg-purple-600 {
+  background: rgb(var(--sekai-identity-5));
+}
+.bg-green-600 {
+  background: rgb(var(--sekai-identity-6));
+}
+.bg-red-600 {
+  background: rgb(var(--sekai-identity-7));
+}
+.bg-default {
+  background: rgb(var(--sekai-identity-8));
+}
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #50476a;
+  overflow-x: hidden; /* 防止水平滚动 */
+}
+.chat-header {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border-bottom: 1px solid #2b2633;
+  background: rgba(78, 72, 104, 0.8);
+}
+.chat-header .channel-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 13px;
+}
+.sidebar-toggle { display: none; }
+.connection-status {
+  margin-left: auto;
+  padding-left: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgb(var(--sekai-fg));
+  font-size: 12px;
+}
+.connection-status[hidden] { display: none; }
+.messages {
+  scrollbar-width: thin;
+  border-radius: 10px;
+  scrollbar-color: rgb(53, 36, 78) rgb(70, 52, 92);
+}
+.message {
+  display: flex;
+  gap: 12px;
+  padding: 8px 16px;
+  transition: background 0.1s;
+  position: relative;
+}
+.message:hover {
+  background: rgba(4, 4, 5, 0.07);
+}

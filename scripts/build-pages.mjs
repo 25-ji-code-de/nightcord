@@ -14,7 +14,7 @@ for (const entry of readdirSync(root, { withFileTypes: true })) {
     cpSync(join(root, entry.name), join(output, entry.name));
   }
 }
-for (const directory of ['css', 'icons', 'vendor']) {
+for (const directory of ['css', 'icons', 'vendor', 'js']) {
   cpSync(join(root, directory), join(output, directory), { recursive: true });
 }
 writeFileSync(join(output, 'version.json'), JSON.stringify({ v: String(Date.now()) }) + '\n');

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { readBrowserScript } from '../scripts/browser-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -15,7 +16,7 @@ function harness() {
   };
   const context = vm.createContext({ window: {}, localStorage, console, Date: { now: () => ++now } });
   vm.runInContext(readFileSync(new URL('../storage-manager.js', import.meta.url), 'utf8'), context);
-  vm.runInContext(readFileSync(new URL('../ui-manager.js', import.meta.url), 'utf8'), context);
+  vm.runInContext(readBrowserScript('ui-manager.js'), context);
   return {
     values,
     blockStorage() { unavailable = true; },

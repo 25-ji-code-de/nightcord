@@ -1,3 +1,4 @@
+import { readBrowserScript } from '../scripts/browser-source.mjs';
 /*
  * Copyright (C) 2025-2026 The 25-ji-code-de Team
  * SPDX-License-Identifier: AGPL-3.0-only
@@ -41,7 +42,7 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 let SekaiRenderer;
 
 before(() => {
-  const src = read('sekai-renderer.js');
+  const src = readBrowserScript('sekai-renderer.js');
   const shim = {
     window: {},
     document: { createElement: () => ({ style: {}, appendChild() {}, setAttribute() {} }) },
@@ -113,7 +114,7 @@ describe('Type 的形状只有一个来源', () => {
      * 直接扫源码：改回硬编码的 `<\$SEKAI:[^>\n]*>` 会让这条转红。
      * 只测行为的话，改回去也可能因为别的原因照样通过。
      */
-    const src = read('ui-manager.js');
+    const src = readBrowserScript('ui-manager.js');
     const hardcoded = [...src.matchAll(/\/<\\\$SEKAI:\[\^[>\\n]+\]\*>/g)];
     assert.deepEqual(
       hardcoded.map((m) => m[0]),

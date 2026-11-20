@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { readBrowserScript } from '../../scripts/browser-source.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
@@ -12,7 +13,7 @@ test('name chooser composition, keyboard navigation and responsive layout', { ti
   const scripts = await Promise.all([
     'purify.js', 'sekai-escape.js', 'event-bus.js', 'ai-config.js', 'storage-manager.js',
     'file-upload-service.js', 'sekai-renderer.js', 'ui-autocomplete.js', 'user-profile.js', 'ui-manager.js',
-  ].map(file => readFile(new URL(file, root), 'utf8')));
+  ].map(file => readBrowserScript(file)));
 
   async function fixture(t, viewport = { width: 1280, height: 900 }) {
     const context = await browser.newContext({ viewport, serviceWorkers: 'block', reducedMotion: 'reduce' });

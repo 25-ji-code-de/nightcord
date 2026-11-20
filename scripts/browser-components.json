@@ -1,0 +1,50 @@
+{
+  "ui-manager.js": [
+    "js/ui/events.js",
+    "js/ui/name-chooser.js",
+    "js/ui/room-view.js",
+    "js/ui/roster.js",
+    "js/ui/message-list.js",
+    "js/ui/streaming.js",
+    "js/ui/composer.js",
+    "js/ui/uploads.js",
+    "js/services/attachment-message.js",
+    "js/ui/message-view.js",
+    "js/ui/replies.js",
+    "js/ui/notifications.js",
+    "js/ui/mentions.js",
+    "js/ui/navigation.js"
+  ],
+  "sekai-renderer.js": [
+    "js/renderer/resources.js",
+    "js/renderer/parser.js",
+    "js/renderer/text.js",
+    "js/renderer/images.js",
+    "js/renderer/cards.js",
+    "js/renderer/audio-controls.js",
+    "js/renderer/music.js",
+    "js/renderer/audio.js"
+  ],
+  "sidebar-features.js": [
+    "js/sidebar/helpers.js",
+    "js/sidebar/storage.js",
+    "js/sidebar/messages.js",
+    "js/sidebar/task-form.js",
+    "js/sidebar/task-tickets.js",
+    "js/sidebar/task-slips.js",
+    "js/sidebar/help.js"
+  ],
+  "ui-autocomplete.js": [
+    "js/ui/autocomplete-mentions.js",
+    "js/ui/autocomplete-picker.js"
+  ],
+  "nightcord.js": [
+    "js/services/message-commands.js",
+    "js/app/identity.js",
+    "js/services/ai-conversation.js",
+    "js/ui/voice-sounds.js"
+  ],
+  "nightcord-mgr.js": [
+    "js/network/chat-session.js"
+  ]
+}

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { readBrowserScript } from '../../scripts/browser-source.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
@@ -14,7 +15,7 @@ test('message rendering batches updates without losing or duplicating messages',
   const browser = await chromium.launch({ executablePath: process.env.NIGHTCORD_TEST_CHROMIUM || undefined });
   t.after(() => browser.close());
   const sources = await Promise.all(scripts.map(async file => ({
-    file, content: await readFile(new URL(`../../${file}`, import.meta.url), 'utf8'),
+    file, content: readBrowserScript(file),
   })));
 
   async function fixture(t, { optimizer = true, taskScheduler = true } = {}) {

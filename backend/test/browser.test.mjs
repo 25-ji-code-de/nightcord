@@ -134,7 +134,7 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     await guest.locator('#navigation-profile').click();
     assert.equal(await guest.locator('dialog .profile-id').textContent(), guestId);
     await guest.keyboard.press('Escape');
-    await guest.locator('dialog').waitFor({ state: 'detached' });
+    await guest.locator('dialog.user-profile-dialog').waitFor({ state: 'detached' });
     assert.equal(await guest.locator('#navigation-profile').evaluate(el => el === document.activeElement), true);
     async function openOwnProfile(page) {
       if (page.viewportSize().width <= 768 && !await page.locator('.sidebar').evaluate(el => el.classList.contains('show'))) {
@@ -144,7 +144,7 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
       await page.locator(`.sidebar .voice-user[data-user-id="${id}"]`).click();
     }
     await openOwnProfile(member);
-    const dialog = member.locator('dialog');
+    const dialog = member.locator('dialog.user-profile-dialog');
     await dialog.waitFor({ state: 'visible' });
     assert.equal(await dialog.locator('.profile-bio').textContent(), '<img onerror=alert(1)> signature');
     assert.equal(await dialog.locator('.profile-bio img').count(), 0);
@@ -179,13 +179,13 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     assert.equal(await guest.locator('dialog .profile-bio').textContent(), '<img onerror=alert(1)> signature');
     assert.equal(await guest.locator('dialog .profile-actions').count(), 0);
     await guest.keyboard.press('Escape');
-    await guest.locator('dialog').waitFor({ state: 'detached' });
+    await guest.locator('dialog.user-profile-dialog').waitFor({ state: 'detached' });
     // Avatar and keyboard activation must resolve the same current identity.
     await oldMessage.locator('.avatar').focus();
     await guest.keyboard.press('Enter');
     assert.equal(await guest.locator('dialog h2').textContent(), 'Updated profile');
     await guest.keyboard.press('Escape');
-    await guest.locator('dialog').waitFor({ state: 'detached' });
+    await guest.locator('dialog.user-profile-dialog').waitFor({ state: 'detached' });
     assert.equal(await guest.evaluate(text => nightcord.ui.messages.find(m => m.text === text).profile.displayName, text), 'Shared name');
     await guest.reload({ waitUntil: 'domcontentloaded' });
     await guest.waitForFunction(() => nightcord.chatRoom.wsManager.ready && nightcord.ui.roster.length === 2);
@@ -209,20 +209,20 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     await openOwnProfile(member);
     await member.screenshot({ path: 'dist/member-mobile.png', fullPage: true, animations: 'disabled' });
     await member.getByRole('button', { name: '关闭资料', exact: true }).click();
-    await member.locator('dialog').waitFor({ state: 'detached' });
+    await member.locator('dialog.user-profile-dialog').waitFor({ state: 'detached' });
     await member.setViewportSize({ width: 1280, height: 900 });
     await openOwnProfile(member);
     await member.screenshot({ path: 'dist/member-desktop.png', fullPage: true, animations: 'disabled' });
     // Empty card space should not dismiss; the backdrop should.
     await member.locator('.profile-header').click({ position: { x: 80, y: 12 } });
-    assert.equal(await member.locator('dialog').count(), 1);
+    assert.equal(await member.locator('dialog.user-profile-dialog').count(), 1);
     await member.mouse.click(4, 4);
-    await member.locator('dialog').waitFor({ state: 'detached' });
+    await member.locator('dialog.user-profile-dialog').waitFor({ state: 'detached' });
     await openOwnProfile(guest);
     await guest.screenshot({ path: 'dist/guest-profile-desktop.png', fullPage: true, animations: 'disabled' });
     assert.equal(await guest.locator('dialog .identity-badge').count(), 0);
     await guest.keyboard.press('Escape');
-    await guest.locator('dialog').waitFor({ state: 'detached' });
+    await guest.locator('dialog.user-profile-dialog').waitFor({ state: 'detached' });
     // New layout must keep large names, signatures and IDs readable at small
     // widths, including when the user disables motion or rotates the device.
     const longProfile = {
@@ -234,7 +234,7 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     for (const viewport of [{ width: 320, height: 568 }, { width: 375, height: 667 }, { width: 667, height: 375 }]) {
       await member.setViewportSize(viewport);
       await member.evaluate(profile => nightcord.ui.profileUI.open(profile), longProfile);
-      const card = member.locator('dialog');
+      const card = member.locator('dialog.user-profile-dialog');
       assert.equal(await card.evaluate(el => getComputedStyle(el).animationName), 'none');
       await card.locator('summary').click();
       assert.equal(await card.locator('.profile-id').textContent(), longProfile.id);
@@ -268,7 +268,7 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     assert.equal(await guest.locator('dialog .profile-id').textContent(), 'sekai:stable-subject');
     assert.equal(await oldMessage.locator('.message-user').textContent(), 'Shared name');
     await guest.keyboard.press('Escape');
-    await guest.locator('dialog').waitFor({ state: 'detached' });
+    await guest.locator('dialog.user-profile-dialog').waitFor({ state: 'detached' });
 
     // Reload replays the old message snapshot, but must retain the newer offline profile.
     await guest.reload({ waitUntil: 'domcontentloaded' });
@@ -280,7 +280,7 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     assert.equal(await guest.locator('dialog .profile-cache-note').textContent(), '最后已知资料');
     assert.equal(await oldMessage.locator('.message-user').textContent(), 'Shared name');
     await guest.keyboard.press('Escape');
-    await guest.locator('dialog').waitFor({ state: 'detached' });
+    await guest.locator('dialog.user-profile-dialog').waitFor({ state: 'detached' });
 
     // Without an observation for this ID, the original message remains a usable fallback.
     await guest.evaluate(() => {
@@ -292,7 +292,7 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     assert.equal(await guest.locator('dialog .profile-cache-note').count(), 0);
     assert.equal(await guest.locator('dialog .profile-snapshot-note').textContent(), '发送时昵称');
     await guest.keyboard.press('Escape');
-    await guest.locator('dialog').waitFor({ state: 'detached' });
+    await guest.locator('dialog.user-profile-dialog').waitFor({ state: 'detached' });
 
     // Two first visits with an empty cookie jar must serialize initialization.
     await delay(5500);
@@ -339,7 +339,7 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     await blocked.goto(origin);
     await blocked.waitForFunction(() => nightcord.chatRoom.wsManager.shouldReconnect === false);
     assert.equal(await blocked.evaluate(() => nightcord.chatRoom.wsManager.ready), false);
-    assert.equal(await blocked.evaluate(() => nightcord.chatRoom.wsManager._guestRecoveries), 2);
+    assert.equal(await blocked.evaluate(() => nightcord.chatRoom.wsManager.protocol._guestRecoveries), 2);
     assert.ok(!(await blocked.context().cookies(apiBase)).some(c => c.name === '__Host-nightcord_guest'));
     assert.deepEqual(errors, []);
   } finally {

@@ -1,3 +1,4 @@
+import { readBrowserScript } from '../scripts/browser-source.mjs';
 /*
  * Nightcord - A modern, modular real-time chat application
  * Copyright (C) 2025 The 25-ji-code-de Team
@@ -116,7 +117,7 @@ describe('sekai-escape.js', () => {
 });
 
 describe('语音成员列表（ui-manager.js）', () => {
-  const src = read('ui-manager.js');
+  const src = readBrowserScript('ui-manager.js');
 
   test('恶意昵称不会注入标记', () => {
     const html = evalTemplate(src, 'class="voice-user-info"', {
@@ -139,7 +140,7 @@ describe('语音成员列表（ui-manager.js）', () => {
 });
 
 describe('@ 补全列表（ui-autocomplete.js）', () => {
-  const src = read('ui-autocomplete.js');
+  const src = readBrowserScript('ui-autocomplete.js');
 
   test('恶意昵称不会逃出 data-name 属性', () => {
     const html = evalTemplate(src, 'class="mention-item" data-name=', {
@@ -203,7 +204,7 @@ describe('没有新的裸用户名插值', () => {
 
   for (const file of FILES) {
     test(file, () => {
-      const src = read(file);
+      const src = readBrowserScript(file);
       const bad = [];
 
       for (let i = 0; i < src.length; i++) {
@@ -248,7 +249,7 @@ describe('没有新的裸用户名插值', () => {
 
   test('扫描器确实在工作（不是空跑）', () => {
     // ui-autocomplete.js 里现在应当有若干处**已转义**的 u.name
-    const src = read('ui-autocomplete.js');
+    const src = readBrowserScript('ui-autocomplete.js');
     const escaped = [...src.matchAll(/escapeHtml\(u\.name\)/g)].length;
     assert.ok(escaped >= 2, `只找到 ${escaped} 处 escapeHtml(u.name)，扫描目标可能已改名`);
   });

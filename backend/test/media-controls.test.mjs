@@ -1,3 +1,5 @@
+import { readBrowserStyle } from '../../scripts/browser-source.mjs';
+import { readBrowserScript } from '../../scripts/browser-source.mjs';
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -13,8 +15,8 @@ for(let i=0;i<32000;i++)wav.writeInt16LE(Math.round(1000*Math.sin(i*2*Math.PI*22
 
 test('media playback, seeking, keyboard access and rich content controls', {timeout:60_000},async t=>{
  const browser=await chromium.launch({executablePath:process.env.NIGHTCORD_TEST_CHROMIUM||undefined,args:['--mute-audio']});t.after(()=>browser.close());
- const sources=await Promise.all(['purify.js','sekai-renderer.js'].map(async file=>await readFile(new URL('../../'+file,import.meta.url),'utf8')));
- const css=await readFile(new URL('../../css/renderer.css',import.meta.url),'utf8');
+ const sources=await Promise.all(['purify.js','sekai-renderer.js'].map(async file=>readBrowserScript(file)));
+ const css=readBrowserStyle('css/renderer.css');
  async function fixture(t,{touch=false}={}){
   const context=await browser.newContext({viewport:{width:640,height:800},hasTouch:touch});t.after(()=>context.close());
   const page=await context.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));t.after(()=>assert.deepEqual(errors,[]));

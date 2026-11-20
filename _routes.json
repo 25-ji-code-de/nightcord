@@ -5,6 +5,7 @@
     "/cdn-cgi/*",
     "/api/*",
     "/css/*",
+    "/js/*",
     "/icons/*",
     "/vendor/*",
     "/*.js",

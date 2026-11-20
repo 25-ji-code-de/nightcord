@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { readBrowserScript } from '../../scripts/browser-source.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
@@ -8,7 +9,7 @@ const root = new URL('../../', import.meta.url);
 const origin = 'http://composer.nightcord.test';
 const scripts = ['purify.js', 'sekai-escape.js', 'event-bus.js', 'ai-config.js', 'storage-manager.js',
   'file-upload-service.js', 'sekai-renderer.js', 'sekai-image-viewer.js', 'mention-service.js', 'ui-autocomplete.js', 'composer-format.js',
-  'user-profile.js', 'ui-manager.js', 'pangu.js'];
+  'user-profile.js', 'ui-manager.js', 'js/services/message-commands.js', 'pangu.js'];
 
 test('text tools insert into the draft and round-trip through the message renderer', async t => {
   const browser = await chromium.launch({ executablePath: process.env.NIGHTCORD_TEST_CHROMIUM || undefined });
@@ -22,13 +23,16 @@ test('text tools insert into the draft and round-trip through the message render
     return route.fulfill({ contentType: url.pathname.endsWith('.css') ? 'text/css' : 'image/svg+xml', body: await readFile(new URL('.' + url.pathname, root)) });
   });
   await page.goto(origin);
-  for (const file of scripts) await page.addScriptTag({ content: await readFile(new URL(file, root), 'utf8') });
+  for (const file of scripts) await page.addScriptTag({ content: readBrowserScript(file) });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.evaluate(() => {
     window.ui = new UIManager(new EventBus());
     window.sent = [];
-    ui.setupChatRoom(message => sent.push(message));
+    const commands = new MessageCommands({ eventBus: ui.eventBus, send: message => sent.push(message),
+      aiConfig: window.AIConfig, mentions: ui.mentions, spacing: text => pangu.spacingText(text),
+      typeSource: SekaiRenderer.V2_TYPE_SOURCE });
+    ui.setupChatRoom(message => commands.submit(message));
   });
   const input = page.locator('#messageInput');
   const trigger = page.locator('#formatBtn');

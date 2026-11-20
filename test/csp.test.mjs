@@ -189,7 +189,11 @@ describe('application CSP prerequisites', () => {
   });
 
   test('browser scripts do not rely on eval or inline event attributes', () => {
-    const files = readdirSync(root).filter(name => name.endsWith('.js') && !['purify.js', 'pangu.js'].includes(name));
+    const files = [
+      ...readdirSync(root).filter(name => name.endsWith('.js') && !['purify.js', 'pangu.js'].includes(name)),
+      ...readdirSync(new URL('js/', root), { recursive: true }).filter(name => name.endsWith('.js'))
+        .map(name => `js/${name.replaceAll('\\', '/')}`),
+    ];
     for (const file of files) {
       const source = read(file);
       assert.doesNotMatch(source, /\beval\s*\(|\bnew\s+Function\s*\(|\bset(?:Timeout|Interval)\s*\(\s*['"`]/, file);
@@ -203,6 +207,6 @@ describe('application CSP prerequisites', () => {
     const matches = (pattern, path) => new RegExp(`^${pattern.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`).test(path);
     const invokes = path => routes.include.some(rule => matches(rule, path)) && !routes.exclude.some(rule => matches(rule, path));
     for (const path of ['/', '/auth/callback', '/index.html', '/unknown-route', '/csp-report']) assert.ok(invokes(path), path);
-    for (const path of ['/boot.js', '/sw.js', '/css/renderer.css', '/vendor/sekai-auth.global.js', '/icons/icon-192.png', '/cdn-cgi/rum', '/version.json']) assert.ok(!invokes(path), path);
+    for (const path of ['/boot.js', '/js/ui/composer.js', '/sw.js', '/css/renderer.css', '/vendor/sekai-auth.global.js', '/icons/icon-192.png', '/cdn-cgi/rum', '/version.json']) assert.ok(!invokes(path), path);
   });
 });

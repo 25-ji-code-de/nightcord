@@ -1,0 +1,261 @@
+/* --- Simple Audio Player (for [audio:URL|Duration]) - Nightcord Modern --- */
+
+.sekai-audio-player-simple {
+  /* Concept: A specialized DAW track embedded in a modern chat interface.
+     Refined to blend seamlessly with Nightcord's flat-but-deep aesthetic. */
+
+  --player-bg: #2f273f; /* Slightly lighter than chat bg */
+  --player-border: rgba(255, 255, 255, 0.08);
+  --control-hover: rgba(255, 255, 255, 0.05);
+  --primary-accent: #a78bfa;
+  --track-bg: rgba(0, 0, 0, 0.2);
+  --accent-on: #ff5500; /* Added for indicator */
+
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background-color: var(--player-bg);
+  border-radius: 8px;
+  margin: 8px 0;
+  width: fit-content;
+  min-width: 320px;
+  max-width: 440px;
+  height: 52px;
+
+  border: 1px solid var(--player-border);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s;
+  user-select: none;
+}
+
+.sekai-audio-player-simple:hover {
+  border-color: rgba(167, 139, 250, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.sekai-audio-player-simple.playing {
+  border-color: rgba(167, 139, 250, 0.5);
+  background-color: #352e46;
+}
+
+/* Control Button */
+
+.sekai-audio-control {
+  width: 52px;
+  height: 100%;
+  border-radius: 8px 0 0 8px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%);
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+
+  color: #bbb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.1s ease-out; /* Faster matching tactile feel */
+  flex-shrink: 0;
+
+  /* Tactile Button Feel */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.sekai-audio-control:hover {
+  background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 3px 6px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
+}
+
+.sekai-audio-control:active {
+  background: rgba(0, 0, 0, 0.15);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.2),
+    0 0 0 rgba(0, 0, 0, 0);
+  transform: translateY(1px);
+  border-right-color: transparent;
+}
+
+.sekai-audio-player-simple.playing .sekai-audio-control {
+  color: var(--primary-accent);
+  /* Playing state "pressed" or active feel if desired, but user asked for button feel generally */
+}
+
+/* Specific wrappers for layout */
+.sekai-audio-icon-span {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px; /* Space between icon and indicator */
+}
+
+.sekai-audio-control svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 0;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3)); /* Depth for icon */
+}
+
+/* Status Indicator */
+.sekai-audio-indicator {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.2); /* Inactive state */
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.3); /* Recessed look when off */
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.sekai-audio-indicator.active {
+  background-color: var(--accent-on); /* Active Color */
+  box-shadow: 0 0 6px var(--accent-on); /* Glow */
+}
+
+/* Content Area */
+
+.sekai-audio-content-simple {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 14px;
+  position: relative;
+  box-shadow: inset 4px 0 8px -4px rgba(0,0,0,0.1);
+  height: 100%;
+  gap: 0;
+}
+
+.sekai-audio-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 14px;
+  margin-bottom: 6px;
+}
+
+/* Visualizer */
+
+.sekai-audio-visualizer {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 100%;
+  flex: 1;
+  margin-right: 10px;
+  opacity: 0.3;
+  transition: opacity 0.3s;
+}
+
+.sekai-audio-player-simple.playing .sekai-audio-visualizer {
+  opacity: 0.8;
+}
+
+.sekai-audio-visualizer-bar {
+  flex: 1;
+  background: var(--primary-accent);
+  min-width: 2px;
+  border-radius: 1px 1px 0 0;
+  margin-top: auto;
+  box-shadow: none;
+  max-width: 3px;
+}
+
+/* Time Display */
+
+.sekai-audio-time {
+  font-family: var(--sekai-font-mono, monospace);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: right;
+  text-shadow: none;
+  background: transparent;
+}
+
+/* Progress Container */
+
+.sekai-audio-progress-container {
+  height: 12px;
+  width: 100%;
+  position: relative;
+  cursor: pointer;
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.sekai-audio-track {
+  width: 100%;
+  height: 4px;
+  background: var(--track-bg);
+  position: relative;
+  border-radius: 2px;
+  overflow: hidden;
+  transition: height 0.2s ease;
+}
+
+.sekai-audio-progress-container:hover .sekai-audio-track {
+  height: 6px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.sekai-audio-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--track-bg);
+  position: relative;
+  border-radius: 2px;
+  overflow: hidden;
+  transition: height 0.2s ease;
+}
+
+.sekai-audio-progress-container:hover .sekai-audio-progress-bar {
+  height: 6px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.sekai-audio-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: var(--primary-accent);
+  box-shadow: none;
+  border-radius: 0 2px 2px 0;
+  width: 0%;
+}
+
+.sekai-audio-progress-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translate(50%, -50%);
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.sekai-audio-progress-bar:hover .sekai-audio-progress-fill::after {
+  opacity: 1;
+}

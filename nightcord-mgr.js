@@ -53,10 +53,17 @@ class NightcordManager {
     this.wroteWelcomeMessages = false;
     this.roster = new Map();
     this.currentUser = null;
+    this.aiConfig = config.aiConfig || { getAllDisplayNames: () => [] };
+    this.fetch = config.fetch || ((...args) => globalThis.fetch(...args));
     
-    this.wsManager = new WebSocketManager({
+    const createTransport = config.createTransport || (options => new WebSocketManager({
+      ...options,
+      protocol: new ChatSessionProtocol(options)
+    }));
+    this.wsManager = createTransport({
       hostname: this.hostname,
       getAccessToken: config.getAccessToken,
+      fetch: this.fetch,
       onAuthError: (error) => this.eventBus.emit('auth:required', { error }),
       onGuestError: (error) => this.eventBus.emit('guest:required', { error }),
       onOpen: () => this.handleConnectionOpen(),
@@ -75,9 +82,6 @@ class NightcordManager {
   setUser(username) {
     const oldUsername = this.username;
     this.username = username;
-
-    // Persist chosen username locally so UI can read it
-    try { localStorage.setItem('nightcord-username', username); } catch (e) {}
 
     // Some servers only honor the name when it's the first message after opening
     // the websocket. If that's the case, we must reconnect so the server receives
@@ -109,7 +113,7 @@ class NightcordManager {
    */
   async createPrivateRoom() {
     try {
-      const response = await fetch("https://" + this.hostname + "/api/room", {method: "POST"});
+      const response = await this.fetch("https://" + this.hostname + "/api/room", {method: "POST"});
       if (!response.ok) {
         throw new Error("Failed to create private room");
       }
@@ -145,6 +149,10 @@ class NightcordManager {
     return true;
   }
 
+  refreshAuthentication() {
+    return this.wsManager.refreshAuthentication();
+  }
+
   /**
    * 发送消息
    * @param {string} message - 消息内容
@@ -152,6 +160,10 @@ class NightcordManager {
    * @fires message:sent
    */
   sendMessage(message) {
+    if (typeof message !== 'string' || !message.trim() || message.length > 256) {
+      this.eventBus.emit('message:error', { error: '消息不能为空或超过 256 字符。' });
+      return false;
+    }
     if (this.wsManager.send({ message })) {
       this.eventBus.emit('message:sent', { message });
       return true;
@@ -220,10 +232,6 @@ class NightcordManager {
       this.currentUser = data.user;
       this.username = data.user.displayName;
       this.wsManager.username = this.username;
-      try {
-        localStorage.setItem('nightcord-username', this.username);
-        if (!data.user.authenticated) localStorage.setItem('nightcord-guest-name', this.username);
-      } catch (e) {}
       this.eventBus.emit('session:updated', { user: data.user });
     } else if (data.type === 'profile') {
       if (this.roster.has(data.user.id)) this.roster.set(data.user.id, data.user);
@@ -255,7 +263,7 @@ class NightcordManager {
 
       // 检测 AI 人设标记（如 [Nako], [Asagi] 等）
       // 使用统一配置获取 AI 人设列表
-      const aiPersonas = window.AIConfig.getAllDisplayNames();
+      const aiPersonas = this.aiConfig.getAllDisplayNames();
       let aiPersona = null;
 
       for (const persona of aiPersonas) {

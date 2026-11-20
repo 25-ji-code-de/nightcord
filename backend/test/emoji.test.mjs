@@ -1,3 +1,5 @@
+import { readBrowserScript } from '../../scripts/browser-source.mjs';
+import { readBrowserStyle } from '../../scripts/browser-source.mjs';
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -21,9 +23,9 @@ test('Unicode emoji rendering and native copying', { timeout: 30_000 }, async t 
       <textarea id="messageInput" maxlength="256"></textarea><div id="voice-users"></div>` }));
   await page.goto('http://localhost/');
   for (const file of ['purify.js', 'emoji-data.js', 'emoji-unicode-data.js', 'emoji-service.js', 'sekai-renderer.js']) {
-    await page.addScriptTag({ content: await readFile(new URL(`../../${file}`, import.meta.url), 'utf8') });
+    await page.addScriptTag({ content: readBrowserScript(file) });
   }
-  await page.addStyleTag({ content: await readFile(new URL('../../css/renderer.css', import.meta.url), 'utf8') });
+  await page.addStyleTag({ content: readBrowserStyle('css/renderer.css') });
   await page.evaluate(() => {
     window.emojiService = new EmojiService();
     window.renderer = new SekaiRenderer({ emojiService });
@@ -89,7 +91,7 @@ test('Unicode emoji rendering and native copying', { timeout: 30_000 }, async t 
   await t.test('sending and replaying messages preserve the original emoji and character budget', async () => {
     for (const file of ['sekai-escape.js', 'event-bus.js', 'ai-config.js', 'storage-manager.js',
       'file-upload-service.js', 'user-profile.js', 'ui-manager.js', 'pangu.js']) {
-      await page.addScriptTag({ content: await readFile(new URL(`../../${file}`, import.meta.url), 'utf8') });
+      await page.addScriptTag({ content: readBrowserScript(file) });
     }
     await page.evaluate(() => {
       window.ui = new UIManager(new EventBus());

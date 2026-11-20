@@ -1,0 +1,268 @@
+/* Reply button */
+.message-reply-btn {
+  position: absolute;
+  top: -12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  background: #3f355b; /* 调整为侧边栏深紫色 */
+  border: 1px solid #2b2633; /* 调整为深色边框 */
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out, background-color 0.1s;
+  color: #b9bbbe;
+  opacity: 0;
+  transform: translateY(4px) scale(0.95);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.message:hover .message-reply-btn {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.message-reply-btn:hover {
+  background: #50476a; /* 悬停时变亮，呼应主体背景色 */
+  color: #fff;
+  border-color: #6d638a; /* 悬停时边框也稍微提亮 */
+  box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+  transform: translateY(0) scale(1.05);
+}
+
+.message-reply-btn:active {
+  transform: translateY(0) scale(0.95);
+  background: #3f355b;
+}
+
+.message-reply-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* Reply jump highlight animation */
+.message-highlighted {
+  /* Keep the final tint until the highlight class is removed. */
+  animation: message-highlight-pulse 2s ease-out both;
+}
+
+@keyframes message-highlight-pulse {
+  0% {
+    background: rgb(var(--sekai-accent) / 0.4);
+  }
+  100% {
+    background: rgb(var(--sekai-accent) / 0.2);
+  }
+}
+
+.message .avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+}
+.message-content {
+  flex: 1;
+  min-width: 0;
+}
+.message-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.message-user {
+  font-weight: 600;
+  font-size: 15px;
+}
+.message-time {
+  font-size: 12px;
+  color: #bdbdbd;
+}
+/* Nako 流式消息动画 */
+.message.streaming .message-text::after {
+  content: '▋';
+  animation: blink 1s infinite;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.message-file {
+  margin-top: 6px;
+  background: #2b2633;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 320px;
+}
+.file-icon {
+  width: 48px;
+  height: 48px;
+  background: #3d3750;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #bdbdbd;
+}
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+.file-name {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-size {
+  font-size: 12px;
+  color: #bdbdbd;
+}
+.file-download {
+  background: none;
+  border: none;
+  color: #bdbdbd;
+  cursor: pointer;
+  font-size: 20px;
+  padding: 4px;
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+.file-download:hover {
+  background: #3d3750;
+}
+.input-area {
+  padding: 16px;
+  background: none;
+  position: relative;
+  overflow: visible; /* 允许绝对定位的元素显示在外部 */
+}
+.input-box {
+  position: relative;
+  background: #3f355b;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  overflow: visible; /* 允许菜单和进度条显示在外部 */
+  align-items: center;
+  gap: 12px;
+}
+.input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 15px;
+  font-family: inherit;
+
+  /* textarea 专属属性 */
+  resize: none;
+  overflow-y: hidden;
+  line-height: 1.5;
+  min-height: 22px;
+  max-height: 140px;
+  padding: 0;
+  vertical-align: top;
+
+  /* 滚动条样式 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(167, 139, 250, 0.3) transparent;
+}
+
+.input::-webkit-scrollbar {
+  width: 6px;
+}
+
+.input::-webkit-scrollbar-thumb {
+  background: rgba(167, 139, 250, 0.3);
+  border-radius: 3px;
+}
+
+.input::-webkit-scrollbar-thumb:hover {
+  background: rgba(167, 139, 250, 0.5);
+}
+.input::placeholder {
+  color: #888;
+}
+.input-btn {
+  background: none;
+  border: none;
+  color: #bdbdbd;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.input-btn:hover {
+  background: #3d3750;
+  color: #fff;
+}
+
+.sticker {
+  vertical-align: middle;
+  display: inline-block;
+  max-width: 100%; /* 防止超出容器 */
+  transition: transform 0.2s;
+}
+.sticker-fixed {
+  height: var(--sticker-size);
+  width: auto;
+}
+
+.sticker-fixed:hover {
+  transform: scale(1.02);
+}
+
+.sticker-narrow {
+  width: var(--sticker-size);
+  height: auto;
+}
+
+.sticker-inline {
+  height: 60px;
+  width: auto;
+}
+
+/* 加载占位：在图片加载前显示正方形占位，尺寸与将要显示的贴纸大小匹配 */
+.sticker-loading {
+  background: #3d3750; /* 占位背景色 */
+  display: inline-block;
+  vertical-align: middle;
+  width: var(--sticker-size);
+  height: var(--sticker-size);
+}
+
+/* 对于 inline 情况，使用更小的正方形占位 */
+.sticker-inline.sticker-loading {
+  width: 60px;
+  height: 60px;
+}
+
+/* 加载失败时显示的替代文本样式 */
+.sticker-broken {
+  color: #bdbdbd;
+  font-style: italic;
+  display: inline-block;
+  padding: 0 6px;
+}

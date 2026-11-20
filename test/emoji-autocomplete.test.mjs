@@ -1,3 +1,4 @@
+import { readBrowserScript } from '../scripts/browser-source.mjs';
 /*
  * Copyright (C) 2025-2026 The 25-ji-code-de Team
  * SPDX-License-Identifier: AGPL-3.0-only
@@ -22,7 +23,7 @@ const escapeHtml = (value) => String(value)
 before(() => {
   const window = {};
   const document = { addEventListener() {} };
-  const source = readFileSync(join(root, 'ui-autocomplete.js'), 'utf8');
+  const source = readBrowserScript('ui-autocomplete.js');
   new Function('window', 'document', 'escapeHtml', source)(window, document, escapeHtml);
   AutocompleteManager = window.AutocompleteManager;
 });

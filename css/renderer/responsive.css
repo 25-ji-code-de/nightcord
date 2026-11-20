@@ -1,0 +1,58 @@
+/* Mobile Adjustments */
+@media screen and (max-width: 600px) {
+  .sekai-link-card, .sekai-file-card, .sekai-audio-player {
+    min-width: 100%;
+    max-width: 100%;
+  }
+  .sekai-audio-player {
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+  }
+  .sekai-audio-player .sekai-console-module {
+    flex: 0 0 36px;
+    box-sizing: border-box;
+  }
+  .sekai-audio-player .sekai-audio-content {
+    min-width: 0;
+    height: 96px;
+  }
+  .sekai-audio-player .sekai-walkman-transport {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .sekai-audio-player .sekai-transport-btn { min-height: 44px; }
+}
+
+/* Additional SEKAI Fixes */
+
+/* Show full URL in link card */
+.sekai-link-url {
+  font-size: 0.75em;
+  color: #666; /* Even dimmer */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+  font-family: var(--sekai-font-mono);
+}
+
+/* Blockquote */
+.sekai-text-node blockquote {
+  border-left: 4px solid rgb(var(--sekai-accent));
+  margin: 10px 0;
+  padding: 8px 16px;
+  background: rgb(var(--sekai-accent) / 0.08);
+  color: #eeeff1;
+  border-radius: 0 8px 8px 0;
+  font-style: normal; /* Modern UI prefers normal style */
+}
+
+/* Mobile spoiler adjustment - click to reveal instead of hover */
+@media screen and (max-width: 768px) {
+  .sekai-spoiler:hover {
+    background: #000;
+  }
+}

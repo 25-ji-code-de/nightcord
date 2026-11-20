@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { readBrowserScript, readBrowserStyle } from '../../scripts/browser-source.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
@@ -10,10 +11,10 @@ test('mention composition, delivery and actions', { timeout: 60_000 }, async t =
   const scripts = await Promise.all([
     'purify.js', 'sekai-escape.js', 'event-bus.js', 'ai-config.js', 'storage-manager.js',
     'file-upload-service.js', 'sekai-renderer.js', 'mention-service.js', 'ui-autocomplete.js',
-    'user-profile.js', 'ui-manager.js', 'pangu.js',
-  ].map(file => readFile(new URL(`../../${file}`, import.meta.url), 'utf8')));
+    'user-profile.js', 'ui-manager.js', 'js/services/message-commands.js', 'pangu.js',
+  ].map(file => readBrowserScript(file)));
   const styles = await Promise.all(['app-shell', 'renderer', 'notifications'].map(file =>
-    readFile(new URL(`../../css/${file}.css`, import.meta.url), 'utf8')));
+    readBrowserStyle(`css/${file}.css`)));
 
   async function fixture(t, viewport = { width: 1280, height: 900 }) {
     const context = await browser.newContext({ viewport, serviceWorkers: 'block', reducedMotion: 'reduce' });
@@ -45,12 +46,15 @@ test('mention composition, delivery and actions', { timeout: 60_000 }, async t =
       ui.eventBus.emit('session:updated', { user: me });
       ui.eventBus.emit('user:joined', { username: peer.displayName, user: peer });
       ui.eventBus.emit('room:ready', { roomname: 'mention-test' });
-      ui.setupChatRoom(message => {
+      const send = message => {
         if (!sendOK) return false;
         sent.push(message);
         ui.eventBus.emit('message:sent', { message });
         return true;
-      });
+      };
+      const commands = new MessageCommands({ eventBus: ui.eventBus, send, aiConfig: window.AIConfig,
+        mentions: ui.mentions, spacing: text => pangu.spacingText(text), typeSource: SekaiRenderer.V2_TYPE_SOURCE });
+      ui.setupChatRoom(message => commands.submit(message));
     });
     return page;
   }

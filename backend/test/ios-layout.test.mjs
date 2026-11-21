@@ -113,7 +113,14 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
       await page.evaluate(safe => {
         for (const [edge, value] of Object.entries(safe)) document.documentElement.style.setProperty(`--nc-ios-safe-${edge}`, `${value}px`);
       }, safe);
-      await page.waitForFunction(height => Math.abs(document.querySelector('.chat-root').getBoundingClientRect().height - height) < 2, viewport.height);
+      // The iOS block applies its padding from a media query, while the plain
+      // .chat-root height rule satisfies the same height before that block lands.
+      // Wait for the safe-area padding itself, or measurements read stale layout.
+      await page.waitForFunction(([height, top]) => {
+        const root = document.querySelector('.chat-root');
+        return Math.abs(root.getBoundingClientRect().height - height) < 2
+          && Math.abs(parseFloat(getComputedStyle(root).paddingTop) - top) < 1;
+      }, [viewport.height, safe.top]);
       assert.equal((await bounds('.chat-root')).overflow, false);
       assert.ok((await bounds('.chat-header')).top >= safe.top);
       const composer = await bounds('.input-box');

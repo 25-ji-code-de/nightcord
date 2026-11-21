@@ -8,10 +8,15 @@ Optional room voice uses a separate SQLite `VoiceRoom` with Cloudflare Realtime
 SFU/TURN. It currently enables `nightcord-test` and `nightcord-default`, supports up to eight
 members, and keeps media credentials on the server. `VOICE_REQUIRE_PASS=true`
 requires SEKAI Pass; setting it to `false` explicitly allows verified cookie
-guests for development tests. Start new
-installations with `VOICE_MODE=off` until credentials are configured. See
-[voice setup and validation](../docs/VOICE_SETUP.md) for secrets, deployment,
-local browser media tests, rollback and current limitations.
+guests for development tests. Start new installations with `VOICE_MODE=off`
+until the four Realtime secrets exist: set `REALTIME_SFU_APP_ID`,
+`REALTIME_SFU_APP_SECRET`, `REALTIME_TURN_KEY_ID` and `REALTIME_TURN_API_TOKEN`
+with `wrangler secret put`. `/voice/config` stays disabled while any of them is
+missing. `VOICE_ALLOWED_ROOMS` is an exact, comma-separated room allowlist.
+`VOICE_MODE=drain` hides the panel from clients while calls already in progress
+continue until members leave; `VOICE_MODE=off` ends them at the next
+validation. `npm run test:voice:browser` runs the local media check in Chromium,
+and `NIGHTCORD_VOICE_FAIL_EARLY=1` exercises the early-failure path.
 
 Voice also uses a SQLite `VoiceQuota` to enforce 230,000 participant minutes per
 UTC calendar month across this deployment and 240 minutes per verified identity

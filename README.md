@@ -26,7 +26,7 @@
 - 🤖 **AI 集成** - 内置 Nako AI 助手，支持流式对话
 - 🔐 **SSO 认证** - 集成 SEKAI Pass 单点登录
 - 📊 **数据上报** - 自动上报用户活动到 SEKAI Platform
-- 🎙️ **房间语音（测试）** - 原生 WebRTC + Cloudflare SFU/TURN，最多 8 人；当前仅在 `/?test` 房间开放，需 SEKAI Pass 登录
+- 🎙️ **房间语音** - 原生 WebRTC + Cloudflare SFU/TURN，最多 8 人；测试房和默认的「作业」房均已开放，需 SEKAI Pass 登录，并受每日 / 每月通话时长限制
 
 ### 导航栏
 
@@ -60,6 +60,15 @@
 Unicode 映射由 `scripts/generate-emoji-unicode.mjs` 生成。更新表情库后，下载
 [Unicode Emoji 17.0 数据](https://unicode.org/Public/17.0.0/emoji/emoji-test.txt)，
 运行 `node scripts/generate-emoji-unicode.mjs <emoji-test.txt 路径>` 即可更新映射。
+
+### 房间语音
+
+语音按房间逐个开放：测试房和默认的「作业」房已启用，其他房间不会显示语音入口。
+需要 SEKAI Pass 登录，单个房间最多 8 人，媒体凭证只留在服务端。面板可开关麦克风、调整输出音量或静音输出，成员栏会显示谁正在说话。
+
+每人每天上限 240 分钟，本部署每月合计 230,000 人分钟；只听或静音同样计时，累计 120 分钟后面板会提示当日剩余时长，用尽则以时长限制结束通话，不会中断其他人的通话。
+后端通过 `VOICE_MONTHLY_MINUTES` / `VOICE_DAILY_MINUTES` 调整上限，这些限额不构成计费封顶。
+前端是否显示语音入口由 `GET /api/room/<房间>/voice/config` 返回的 `enabled` 决定，因此新房间需要在后端配置后才会出现。
 
 ## 📁 项目结构
 

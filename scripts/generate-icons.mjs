@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  * Copyright (C) 2025 The 25-ji-code-de Team
  *
- * 生成 PWA / favicon 图标。几何与 icons/nightcord-mark.svg 保持一致。
+ * 生成 PWA / favicon 图标。月牙几何取自 icons/nightcord-mark.svg。
  *
  * 画法分两类：
  *   - any（favicon、icon-192/512）：圆形底 + 透明四角 —— 浏览器标签、快捷方式按圆形呈现
@@ -27,6 +27,11 @@ export const CANVAS = 48;
 
 const PURPLE = [153, 80, 154]; // #99509A
 const WHITE = [255, 255, 255];
+
+// 对齐 uk.nightcord.mobile 的月牙显示比例，只调整 maskable 前景。
+// 实测 WebAPK 将 512px 图标补到 672px，Android 显示中央 448px：
+// (32 / 48) * 512 * 0.875 / 448 = 2/3，与原生图标相同。
+const MASKABLE_MARK_SCALE = 0.875;
 
 /** 月牙 mark：外圆减内圆，再加两只眼睛（even-odd）。 */
 export const MARK = {
@@ -92,9 +97,10 @@ function encodePng(size, raw) {
 }
 
 /**
- * 渲染一张图标。SS×SS 超采样后按覆盖率取色，边缘自然抗锯齿。
+ * 渲染一张图标。markScale 仅绕画布中心缩放月牙，背景保持满幅。
+ * SS×SS 超采样后按覆盖率取色，边缘自然抗锯齿。
  */
-export function renderIcon(size, shape) {
+export function renderIcon(size, shape, markScale = 1) {
   const SS = 4;
   const total = SS * SS;
   const scale = CANVAS / size;
@@ -112,7 +118,9 @@ export function renderIcon(size, shape) {
           const y = (py + (sy + 0.5) / SS) * scale;
           if (!inBackground(x, y, shape)) continue;
           bgHits++;
-          if (inMark(x, y)) markHits++;
+          const markX = CANVAS / 2 + (x - CANVAS / 2) / markScale;
+          const markY = CANVAS / 2 + (y - CANVAS / 2) / markScale;
+          if (inMark(markX, markY)) markHits++;
         }
       }
       const o = row + 1 + px * 4;
@@ -149,19 +157,19 @@ export function renderSvg() {
 `;
 }
 
-/** 全部产物：文件名 → { size, shape }。
+/** 全部产物：文件名 → { size, shape, markScale? }。
  *  apple-touch-icon.png（180×180 液态玻璃稿）由设计提供，不走生成器，勿在此处覆盖。 */
 export const OUTPUTS = {
   'favicon-32.png': { size: 32, shape: 'circle' },
   'icon-192.png': { size: 192, shape: 'circle' },
   'icon-512.png': { size: 512, shape: 'circle' },
-  'icon-maskable-512.png': { size: 512, shape: 'square' },
+  'icon-maskable-512.png': { size: 512, shape: 'square', markScale: MASKABLE_MARK_SCALE },
 };
 
 export function generateAll() {
   const files = new Map();
-  for (const [name, { size, shape }] of Object.entries(OUTPUTS)) {
-    files.set(name, renderIcon(size, shape));
+  for (const [name, { size, shape, markScale }] of Object.entries(OUTPUTS)) {
+    files.set(name, renderIcon(size, shape, markScale));
   }
   files.set('favicon.svg', Buffer.from(renderSvg(), 'utf8'));
   return files;

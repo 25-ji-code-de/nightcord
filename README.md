@@ -180,8 +180,14 @@ Pages 构建命令为 `node scripts/build-pages.mjs`、输出目录为 `dist`，
 - 不要预缓存 `/version.json`、`/sw.js`、`/api/*` 或音频；`/version.json` 永远走网络。
 - 在线时代码一律 network-first，缓存只作离线兜底；不要把它改成 cache-first。
 - 站点对未知路径返回 `200 + index.html`，因此写入缓存前必须校验 Content-Type。
-- 图标由 `node scripts/generate-icons.mjs` 生成（几何同 `icons/nightcord-mark.svg`），勿手改：
+- 图标由 `node scripts/generate-icons.mjs` 生成（月牙几何取自 `icons/nightcord-mark.svg`），勿手改：
   favicon / icon-192 / icon-512 是圆形底 + 透明四角；maskable 是满幅方形，圆角交给系统遮罩。
+  maskable 月牙以画布中心缩到设计原尺寸的 87.5%，高度占画布约 58.3%，背景保持满幅。
+  根据实测 WebAPK 的补边与 Android 裁切，最终月牙占显示高度约 66.7%，
+  与 `uk.nightcord.mobile` 原生 App 对齐；这是视觉比例选择，不是 Web 规范要求。
+  部分 Chrome / Android 桌面快捷方式会直接裁切 maskable，导致图案偏大；遇到这种情况，
+  应选择浏览器菜单里的“安装”，而不是“创建快捷方式”。生成后需重新构建并发布；
+  已安装 WebAPK 的图标更新是异步的，网页刷新不代表桌面图标已经更新。
   `apple-touch-icon.png` 例外 —— 用设计提供的 180×180 液态玻璃稿，生成器不会覆盖它。
   底色统一用 `#99509A`，不要用 `apple-touch-icon-purple.png`
   （底色是 `#945397`，与主色不一致）。

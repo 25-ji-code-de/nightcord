@@ -94,6 +94,7 @@ class ChatNavigation {
       sync();
     };
     this.ui.closeNavigationDrawer = close;
+    this.ui.isNavigationDrawerOpen = () => mobile.matches && sidebar.classList.contains('show');
     this.ui.syncNavigation = sync;
     this.ui.setupMentionPicker();
     sync();

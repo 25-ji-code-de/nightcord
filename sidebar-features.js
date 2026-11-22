@@ -131,6 +131,9 @@
       this.panel.append(header, this.body);
       this.panel.addEventListener('keydown', event => {
         if (event.key === 'Escape' && !event.isComposing) {
+          // The phone drawer stacks above the tool panel: Escape belongs to the
+          // topmost layer, so the drawer (not the panel) is what closes.
+          if (this.ui.isNavigationDrawerOpen?.()) return;
           event.preventDefault(); event.stopPropagation(); this.close();
         }
       });

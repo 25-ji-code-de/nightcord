@@ -106,12 +106,18 @@ class ChatMessageView {
     if (msg.localNakoMessageId) msgDiv.dataset.localNakoMessageId = msg.localNakoMessageId;
 
     // 存储 timestamp 用于回复跳转 + v2 Reply 预览元数据
+    // profileId 供「有人回复了你」归属判断使用；legacy 数据可能没有 id。
     if (msg.timestamp) {
+      const meta = {
+        user: msg.user,
+        text: msg.text || '',
+        profileId: msg.profile?.id || msg.sender?.id || null
+      };
       msgDiv.dataset.timestamp = msg.timestamp;
       this.ui.messageIndex.set(msg.timestamp, msgDiv);
       this.ui.messageIndex.set(Number(msg.timestamp), msgDiv);
-      this.ui.messageMeta.set(msg.timestamp, { user: msg.user, text: msg.text || '' });
-      this.ui.messageMeta.set(Number(msg.timestamp), { user: msg.user, text: msg.text || '' });
+      this.ui.messageMeta.set(msg.timestamp, meta);
+      this.ui.messageMeta.set(Number(msg.timestamp), meta);
     }
 
     // 检查是否被提及

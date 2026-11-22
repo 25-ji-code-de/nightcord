@@ -35,34 +35,6 @@ class MentionPickerView {
     }
   }
 
-  showMentionNotice(data) {
-    this.ui.mentionNotice?.remove();
-    const notice = document.createElement('div');
-    notice.className = 'mention-notice';
-    notice.setAttribute('role', 'status');
-    const open = document.createElement('button');
-    open.type = 'button';
-    open.textContent = `${data.name} 提到了你 · 查看消息`;
-    open.addEventListener('click', () => {
-      const message = this.ui.messageIndex.get(Number(data.timestamp));
-      if (message) {
-        this.ui.sidebarFeatures?.close(false);
-        message.scrollIntoView({ block: 'center' });
-        message.tabIndex = -1;
-        message.focus({ preventScroll: true });
-        notice.remove();
-      }
-    });
-    const dismiss = document.createElement('button');
-    dismiss.type = 'button';
-    dismiss.textContent = '×';
-    dismiss.setAttribute('aria-label', '关闭提及提醒');
-    dismiss.addEventListener('click', () => notice.remove());
-    notice.append(open, dismiss);
-    document.body.appendChild(notice);
-    this.ui.mentionNotice = notice;
-  }
-
   /**
    * 侧栏提及选择器：点击导航栏的 @ 时展开，选择成员后把 SEKAI Mention
    * 插入输入框当前光标处，而不是先输入一个 “@”。

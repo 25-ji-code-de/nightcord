@@ -1,41 +1,286 @@
-/* --- Update Toast (Version Checker) --- */
+/* --- 站内提醒：被 @ 的卡片 + 被回复的胶囊 ---
+   两种提醒共用一套结构与令牌，只是重量不同：
+   @ 有条目、有预览、要你回话 → 右上常驻卡片；
+   回复只是「有人接了你一句」→ 输入框上沿的胶囊，8 秒后自行退场。 */
 
-.mention-notice {
+.sekai-notice {
   position: fixed;
-  top: max(72px, env(safe-area-inset-top));
-  right: max(16px, env(safe-area-inset-right));
-  z-index: 1000;
+  /* 压在手边的抽屉（移动端 .sidebar 999）、scrim（998）和补全浮层（1000）之下：
+     提醒是「顺带看一眼」的东西，不能挡住正在点的导航。 */
+  z-index: 990;
   display: flex;
-  max-width: min(420px, calc(100vw - 32px));
-  background: rgb(var(--sekai-surface-raised, 48 40 61));
+  align-items: center;
+  gap: 11px;
+  box-sizing: border-box;
   color: rgb(var(--sekai-fg, 255 255 255));
-  border: 1px solid rgb(var(--sekai-accent) / 0.6);
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgb(0 0 0 / 0.3);
+  background: rgb(var(--sekai-surface-raised, 43 38 51));
+  border: 1px solid rgb(var(--sekai-line, 255 255 255) / var(--sekai-line-a, 0.08));
+  border-radius: var(--sekai-radius-md, 8px);
+  /* 抬离画布的是阴影与发丝线，不是填充亮度 */
+  box-shadow: var(--sekai-elev-3, 0 8px 24px rgb(0 0 0 / 0.3));
+  transition: opacity 0.18s ease, transform 0.18s ease, bottom var(--sekai-dur, 0.2s) var(--sekai-ease-out, ease);
 }
 
-.mention-notice button {
-  min-height: 44px;
-  min-width: 44px;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
+/* 头像沿用 .avatar 的基础尺寸，这里只把它缩到提醒条的大小 */
+.sekai-notice__avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+  box-shadow: 0 0 0 1px rgb(var(--sekai-line, 255 255 255) / 0.12);
+}
+
+.sekai-notice__body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 丝印留给元信息：系统里只有 mono 才穿宽字距 */
+.sekai-notice__meta {
+  margin: 0 0 2px;
+  font: 500 var(--sekai-text-micro, 10px)/1.2 var(--sekai-font-mono, monospace);
+  letter-spacing: var(--sekai-tracking-wider, 1px);
+  text-transform: uppercase;
+  color: rgb(var(--sekai-accent, 167 139 250));
+}
+
+.sekai-notice__title {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.mention-notice button:hover,
-.mention-notice button:active {
-  background: rgb(var(--sekai-accent) / 0.25);
+.sekai-notice__title b {
+  font-weight: 600;
 }
 
-.mention-notice button:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: -3px;
+.sekai-notice__preview {
+  margin: 3px 0 0;
+  font-size: var(--sekai-text-label, 12px);
+  line-height: 1.4;
+  color: rgb(var(--sekai-fg-muted, 189 189 189));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+/* 主按钮：强调色描边 + 10% 填充。关闭键只有字形，不与主按钮争重量。 */
+.sekai-notice__open {
+  flex: none;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid rgb(var(--sekai-accent) / 0.35);
+  border-radius: var(--sekai-radius-sm, 6px);
+  background: rgb(var(--sekai-accent) / 0.1);
+  color: rgb(var(--sekai-accent-hover, 196 181 253));
+  font: 600 var(--sekai-text-label, 12px) var(--sekai-font-sans, inherit);
+  cursor: pointer;
+  transition: background var(--sekai-dur, 0.2s) var(--sekai-ease-out, ease),
+    border-color var(--sekai-dur, 0.2s) var(--sekai-ease-out, ease),
+    transform var(--sekai-dur, 0.2s) var(--sekai-ease-out, ease);
+}
+
+.sekai-notice__open:hover {
+  background: rgb(var(--sekai-accent) / 0.22);
+  border-color: rgb(var(--sekai-accent) / 0.6);
+  transform: translateY(-1px);
+}
+
+.sekai-notice__close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--sekai-radius-xs, 4px);
+  background: transparent;
+  color: rgb(var(--sekai-fg-muted, 189 189 189));
+  font: 400 16px/1 var(--sekai-font-sans, inherit);
+  cursor: pointer;
+}
+
+.sekai-notice__close:hover {
+  background: rgb(var(--sekai-line, 255 255 255) / 0.06);
+  color: rgb(var(--sekai-fg, 255 255 255));
+}
+
+.sekai-notice :is(button):focus-visible {
+  outline: 2px solid rgb(var(--sekai-accent));
+  outline-offset: 2px;
+}
+
+/* --- 被 @：右上角卡片，不自动消失 --- */
+
+.mention-notice {
+  top: max(72px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  width: min(360px, calc(100vw - 32px));
+  padding: 10px 10px 10px 13px;
+  border-left: 2px solid rgb(var(--sekai-accent, 167 139 250));
+  align-items: center;
+  animation: sekai-notice-in-right var(--sekai-dur-slower, 0.4s) var(--sekai-ease-spring, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+/* --- 被回复：输入框上沿的胶囊，读完即走 --- */
+
+.reply-notice {
+  left: 50%;
+  /* 展开 @ 补全浮层时，JS 量出它的顶边，改写这个变量让位 */
+  bottom: var(--reply-notice-bottom, calc(88px + env(safe-area-inset-bottom)));
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 5px 5px 5px 6px;
+  gap: 9px;
+  overflow: hidden;
+  border-radius: var(--sekai-radius-full, 9999px);
+  background: rgb(var(--sekai-surface-raised, 43 38 51) / 0.86);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: sekai-notice-in-up var(--sekai-dur-slower, 0.4s) var(--sekai-ease-spring, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+.reply-notice .sekai-notice__avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+}
+
+/* 胶囊只放一行：标题与预览并排，元信息行让位 */
+.reply-notice .sekai-notice__meta {
+  display: none;
+}
+
+.reply-notice .sekai-notice__body {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.reply-notice .sekai-notice__title {
+  flex: none;
+  font-size: var(--sekai-text-sm, 13px);
+  white-space: nowrap;
+}
+
+.reply-notice .sekai-notice__preview {
+  margin: 0;
+  max-width: 18em;
+  font-size: var(--sekai-text-sm, 13px);
+}
+
+.reply-notice .sekai-notice__preview::before {
+  content: '· ';
+}
+
+.reply-notice .sekai-notice__open {
+  border-radius: var(--sekai-radius-full, 9999px);
+  padding: 6px 12px;
+}
+
+.reply-notice .sekai-notice__close {
+  border-radius: 50%;
+  margin-right: 2px;
+}
+
+/* 倒计时发丝线：让「会自己走掉」这件事有形状 */
+.sekai-notice__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: rgb(var(--sekai-line, 255 255 255) / 0.08);
+}
+
+.sekai-notice__bar i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: rgb(var(--sekai-accent) / 0.55);
+  transform-origin: left;
+  animation-name: sekai-notice-drain;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+/* 触屏上把热区补到 44px，桌面保持紧凑 */
+@media (pointer: coarse) {
+  .sekai-notice__open {
+    min-height: 44px;
+  }
+
+  .sekai-notice__close {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .mention-notice {
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
+
+  .reply-notice {
+    max-width: calc(100vw - 24px);
+  }
+
+  .reply-notice .sekai-notice__preview {
+    max-width: 10em;
+  }
+}
+
+@keyframes sekai-notice-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sekai-notice-in-up {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes sekai-notice-drain {
+  from {
+    transform: scaleX(1);
+  }
+
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sekai-notice {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .sekai-notice__bar i {
+    animation: none;
+  }
+}
+
+/* --- Update Toast (Version Checker) --- */
 
 .sekai-update-toast {
   position: fixed;

@@ -22,6 +22,48 @@ class ReplyView {
   }
 
   /**
+   * 取出本条消息里所有被回复消息的 timestamp。
+   *
+   * 只认 token：畸形 token 在渲染器眼里本来就是纯文本，这里跟着走同一套判断。
+   * v2 是 `<$SEKAI:Reply::123>`，v1 遗留是 `[re:123|preview]`。
+   *
+   * @param {string} text 消息原文
+   * @returns {number[]} 去重后的 timestamp 列表
+   */
+  replyTargets(text) {
+    const parts = this.ui.mentions?.parts(text) || [];
+    const targets = [];
+    for (const part of parts) {
+      if (part.type !== 'sekai') continue;
+      if (part.sekaiType !== 'reply' && part.sekaiType !== 're') continue;
+      const timestamp = Number(part.payload);
+      if (!Number.isSafeInteger(timestamp) || timestamp <= 0) continue;
+      if (!targets.includes(timestamp)) targets.push(timestamp);
+    }
+    return targets;
+  }
+
+  /**
+   * 这条消息是不是在回复「我」。
+   *
+   * 归属只按消息 id 判断，和 mentions.isMentioned 一个策略：没有 id 就不认，
+   * 宁可漏报也不要因为重名把别人的回复推给我。
+   *
+   * @param {string} text 消息原文
+   * @param {{ id?: string } | null} [user] 当前用户，缺省取 ui.currentUser
+   * @returns {boolean}
+   */
+  isReplyToMe(text, user = this.ui.currentUser) {
+    if (!user?.id) return false;
+    const meta = this.ui.messageMeta;
+    if (!meta) return false;
+    return this.replyTargets(text).some(timestamp => {
+      const target = meta.get(timestamp) || meta.get(String(timestamp));
+      return !!target?.profileId && target.profileId === user.id;
+    });
+  }
+
+  /**
    * 设置回复跳转事件监听器
    * @private
    */

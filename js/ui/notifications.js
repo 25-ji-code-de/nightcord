@@ -2,7 +2,282 @@
  * Copyright (C) 2025 The 25-ji-code-de Team */
 /** ChatNotifications: notifications component; ui supplies shared presentation context. */
 class ChatNotifications {
-  constructor(ui) { this.ui = ui; }
+  /** 回复提醒自行退场的时长；悬停或聚焦时暂停。 */
+  static REPLY_NOTICE_TTL = 8000;
+
+  /** 预览文字上限，超出截断。 */
+  static PREVIEW_LIMIT = 80;
+
+  constructor(ui) {
+    this.ui = ui;
+    // 当前挂着的提醒与回复胶囊的让位观察器
+    this.mentionNotice = null;
+    this.replyNotice = null;
+    this.replyLift = null;
+  }
+
+  /**
+   * 被 @ 的站内提醒：右上角卡片，不自动消失。
+   *
+   * @param {{ name: string, message: string, timestamp: number, user?: Object, sender?: Object }} data
+   */
+  showMentionNotice(data) {
+    this._dismiss('mention');
+    const notice = this._buildNotice({ kind: 'mention', data });
+    if (!notice) return;
+    document.body.appendChild(notice);
+    this.mentionNotice = notice;
+    this.ui.mentionNotice = notice;
+  }
+
+  /**
+   * 有人回复了我的消息：底部胶囊，读完即走。
+   *
+   * 与 @ 提醒分开是因为重量不同 —— 回复只是「有人接了你一句」，
+   * 不需要一直占着屏幕，所以 8 秒后自行退场，悬停/聚焦时暂停。
+   *
+   * @param {{ name: string, message: string, timestamp: number, user?: Object, sender?: Object }} data
+   */
+  showReplyNotice(data) {
+    this._dismiss('reply');
+    const notice = this._buildNotice({ kind: 'reply', data });
+    if (!notice) return;
+    document.body.appendChild(notice);
+    this.replyNotice = notice;
+    this.ui.replyNotice = notice;
+    this._watchReplyLift(notice);
+    this._armReplyTimer(notice);
+  }
+
+  /** 离开房间、清空花名册时收起全部提醒。 */
+  clearNotices() {
+    this._dismiss('mention');
+    this._dismiss('reply');
+  }
+
+  /**
+   * 组装一条提醒。两种提醒共用同一套结构，只是 CSS 把它们摆成卡片和胶囊。
+   * @private
+   */
+  _buildNotice({ kind, data }) {
+    if (!data || typeof data !== 'object') return null;
+    const name = String(data.name || '').trim();
+    if (!name) return null;
+
+    const profile = data.user || data.sender || null;
+    const notice = document.createElement('div');
+    notice.className = `sekai-notice ${kind === 'mention' ? 'mention-notice' : 'reply-notice'}`;
+    notice.setAttribute('role', 'status');
+    notice.setAttribute('aria-live', 'polite');
+    // 备注：role="status" 本身隐含 aria-live="polite"，这里写明是为了不被外层覆盖。
+    notice.dataset.notice = kind;
+
+    const label = kind === 'mention' ? '提及' : '回复';
+    const verb = kind === 'mention' ? '提到了你' : '回复了你';
+    const clock = this._clock(data.timestamp);
+
+    const body = document.createElement('div');
+    body.className = 'sekai-notice__body';
+
+    const meta = document.createElement('p');
+    meta.className = 'sekai-notice__meta';
+    meta.textContent = clock ? `${label} · ${clock}` : label;
+
+    const title = document.createElement('p');
+    title.className = 'sekai-notice__title';
+    const who = document.createElement('b');
+    who.textContent = name;
+    title.append(who, document.createTextNode(` ${verb}`));
+
+    body.append(meta, title);
+
+    const preview = this._preview(data.message);
+    if (preview) {
+      const line = document.createElement('p');
+      line.className = 'sekai-notice__preview';
+      line.textContent = preview;
+      body.append(line);
+    }
+
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'sekai-notice__open';
+    open.textContent = '查看';
+    open.addEventListener('click', () => {
+      // 目标消息可能已经滚出渲染窗口：跳不过去也要把提醒收掉，别留个死按钮。
+      this._jumpTo(data.timestamp);
+      this._dismiss(kind);
+    });
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'sekai-notice__close';
+    close.textContent = '×';
+    close.setAttribute('aria-label', kind === 'mention' ? '关闭提及提醒' : '关闭回复提醒');
+    close.addEventListener('click', () => this._dismiss(kind));
+
+    notice.append(this._avatar(name, profile), body, open, close);
+
+    if (kind === 'reply') {
+      // 倒计时发丝线：让「会自己走掉」这件事有形状。
+      const bar = document.createElement('span');
+      bar.className = 'sekai-notice__bar';
+      const fill = document.createElement('i');
+      fill.style.animationDuration = `${ChatNotifications.REPLY_NOTICE_TTL}ms`;
+      bar.appendChild(fill);
+      bar.setAttribute('aria-hidden', 'true');
+      notice.append(bar);
+    }
+
+    return notice;
+  }
+
+  /**
+   * @ 补全浮层和胶囊抢同一个位置。浮层高度取决于筛出多少成员，所以按实际高度
+   * 让位，而不是拍一个常量——否则少几个候选人就会露出一截空隙。
+   * @private
+   */
+  _watchReplyLift(notice) {
+    const list = document.getElementById('mention-list');
+    if (!list || typeof MutationObserver === 'undefined') return;
+    const update = () => {
+      if (this.replyNotice !== notice) return;
+      if (list.classList.contains('hidden')) {
+        // 收起时交还给样式表里的默认位置
+        notice.style.removeProperty('--reply-notice-bottom');
+        return;
+      }
+      // 浮层的顶边到视口底有多远，胶囊就坐多高——列表高度随候选人数变化，
+      // 算一个常量总会在某一头像多或像少的时候露出空隙或压住一行。
+      const top = list.getBoundingClientRect().top;
+      notice.style.setProperty('--reply-notice-bottom', `${Math.round(window.innerHeight - top + 8)}px`);
+    };
+    const observer = new MutationObserver(update);
+    observer.observe(list, { attributes: true, attributeFilter: ['class'], childList: true });
+    window.addEventListener('resize', update);
+    this.replyLift = { observer, update };
+    update();
+  }
+
+  /** @private */
+  _releaseReplyLift() {
+    if (!this.replyLift) return;
+    this.replyLift.observer.disconnect();
+    window.removeEventListener('resize', this.replyLift.update);
+    this.replyLift = null;
+  }
+
+  /**
+   * 回复提醒的 8 秒计时；指针悬停或键盘聚焦时暂停，离开后按剩余时间继续。
+   * 自动消失的提示必须可以暂停（WCAG 2.2.1）。
+   * @private
+   */
+  _armReplyTimer(notice) {
+    const fill = notice.querySelector('.sekai-notice__bar i');
+    const ttl = ChatNotifications.REPLY_NOTICE_TTL;
+    let remaining = ttl;
+    let startedAt = 0;
+    let timer = null;
+
+    const dismiss = () => {
+      clearTimeout(timer);
+      timer = null;
+      // 期间已经被新提醒替换过：旧计时器不许摘掉别人的条子。
+      if (this.replyNotice !== notice) return;
+      this._dismiss('reply');
+    };
+    const start = () => {
+      if (timer) return;
+      startedAt = Date.now();
+      timer = setTimeout(dismiss, remaining);
+      if (fill) fill.style.animationPlayState = 'running';
+    };
+    const pause = () => {
+      if (!timer) return;
+      clearTimeout(timer);
+      timer = null;
+      remaining = Math.max(0, remaining - (Date.now() - startedAt));
+      if (fill) fill.style.animationPlayState = 'paused';
+    };
+
+    notice.addEventListener('pointerenter', pause);
+    notice.addEventListener('pointerleave', start);
+    notice.addEventListener('focusin', pause);
+    notice.addEventListener('focusout', start);
+    start();
+  }
+
+  /** @private */
+  _dismiss(kind) {
+    const current = kind === 'mention' ? this.mentionNotice : this.replyNotice;
+    if (kind === 'mention') {
+      this.mentionNotice = null;
+      this.ui.mentionNotice = null;
+    } else {
+      this._releaseReplyLift();
+      this.replyNotice = null;
+      this.ui.replyNotice = null;
+    }
+    // 同步摘掉：点「查看」后消息焦点要立刻接上，退场动画会把这段时间拉长。
+    current?.remove();
+  }
+
+  /**
+   * 跳到提醒指向的那条消息。
+   * @private
+   * @returns {boolean} 消息还在 DOM 里时返回 true
+   */
+  _jumpTo(timestamp) {
+    const url = Number(timestamp);
+    const message = this.ui.messageIndex?.get(Number.isNaN(url) ? timestamp : url)
+      || this.ui.messageIndex?.get(timestamp);
+    if (!message?.scrollIntoView) return false;
+    this.ui.sidebarFeatures?.close(false);
+    message.scrollIntoView({ block: 'center' });
+    message.classList.remove('message-highlighted');
+    void message.offsetWidth;
+    message.classList.add('message-highlighted');
+    setTimeout(() => message.classList.remove('message-highlighted'), 2000);
+    message.tabIndex = -1;
+    message.focus({ preventScroll: true });
+    return true;
+  }
+
+  /** @private */
+  _avatar(name, profile) {
+    const generated = this.ui.generateAvatar(name);
+    const avatar = document.createElement('span');
+    avatar.className = `sekai-notice__avatar avatar ${generated.color}`;
+    avatar.setAttribute('aria-hidden', 'true');
+    avatar.textContent = generated.avatar || '?';
+    this.ui.profileUI?.avatar(avatar, profile);
+    return avatar;
+  }
+
+  /**
+   * 预览用纯文本：剥掉 SEKAI token 与格式化标记，避免提醒里出现原始语法。
+   * @private
+   */
+  _preview(message) {
+    if (!message) return '';
+    let text = '';
+    try {
+      text = this.ui.extractPlainTextForReply(String(message));
+    } catch {
+      text = String(message);
+    }
+    text = text.replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    const limit = ChatNotifications.PREVIEW_LIMIT;
+    return text.length > limit ? `${text.slice(0, limit)}…` : text;
+  }
+
+  /** @private */
+  _clock(timestamp) {
+    const date = new Date(Number(timestamp) || Date.now());
+    if (Number.isNaN(date.getTime())) return '';
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
 
   /**
    * 显示错误消息

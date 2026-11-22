@@ -405,9 +405,19 @@ class UIManager {
 
   isMentioned(...args) { return this.mentionPicker.isMentioned(...args); }
 
+  noticeFor(...args) { return this.events.noticeFor(...args); }
+
   bindMentionAction(...args) { return this.mentionPicker.bindMentionAction(...args); }
 
-  showMentionNotice(...args) { return this.mentionPicker.showMentionNotice(...args); }
+  showMentionNotice(...args) { return this.notifications.showMentionNotice(...args); }
+
+  showReplyNotice(...args) { return this.notifications.showReplyNotice(...args); }
+
+  clearNotices(...args) { return this.notifications.clearNotices(...args); }
+
+  isReplyToMe(...args) { return this.replies.isReplyToMe(...args); }
+
+  replyTargets(...args) { return this.replies.replyTargets(...args); }
 
   createMessageElement(...args) { return this.messageView.createMessageElement(...args); }
 

@@ -5,6 +5,20 @@ class ChatUIEvents {
   constructor(ui) { this.ui = ui; }
 
   /**
+   * 决定一条消息该触发哪一种提醒。
+   *
+   * @ 优先于回复：同一条消息既回复我又 @ 我时只出卡片一条。
+   *
+   * @param {string} text 消息原文
+   * @returns {'mention'|'reply'|null}
+   */
+  noticeFor(text) {
+    if (this.ui.isMentioned(text)) return 'mention';
+    if (this.ui.isReplyToMe(text)) return 'reply';
+    return null;
+  }
+
+  /**
    * 设置事件监听器，订阅业务逻辑事件
    * @private
    */
@@ -28,10 +42,17 @@ class ChatUIEvents {
       if (data.isNako && this.ui.confirmLocalNakoMessage(data)) return;
 
       this.ui.addChatMessage(data.name, data.message, data.timestamp, undefined, undefined, data.user, data.sender);
+      // 提醒路由：同一条消息既回复我又 @ 我时，@ 赢 —— 一个人点一下给两条提醒是噪音。
       if (this.ui.mentionsReady && !data.isNako && this.ui.currentUser?.id && data.user?.id
-          && data.user.id !== this.ui.currentUser.id && this.ui.isMentioned(data.message)) {
-        this.ui.showMentionNotice(data);
-        this.ui.eventBus.emit('message:mentioned', data);
+          && data.user.id !== this.ui.currentUser.id) {
+        const kind = this.noticeFor(data.message);
+        if (kind === 'mention') {
+          this.ui.showMentionNotice(data);
+          this.ui.eventBus.emit('message:mentioned', data);
+        } else if (kind === 'reply') {
+          this.ui.showReplyNotice(data);
+          this.ui.eventBus.emit('message:replied', data);
+        }
       }
     });
     this.ui.eventBus.on('message:error', (data) => this.ui.showError(data.error));
@@ -41,6 +62,7 @@ class ChatUIEvents {
     this.ui.eventBus.on('user:quit', (data) => this.ui.removeUserFromRoster(data.username, data.userId));
     this.ui.eventBus.on('session:updated', (data) => {
       const previousId = this.ui.currentUser?.id;
+      if (previousId !== data.user.id) this.ui.clearNotices();
       this.ui.currentUser = data.user;
       this.ui.updateNavigationProfile();
       this.ui.addUserToRoster(data.user.displayName, data.user);
@@ -73,14 +95,17 @@ class ChatUIEvents {
     this.ui.eventBus.on('roster:clear', () => {
       this.ui.clearRoster();
       this.ui.mentionsReady = false;
-      this.ui.mentionNotice?.remove();
+      this.ui.clearNotices();
     });
     this.ui.eventBus.on('room:left', () => {
       this.ui.mentionsReady = false;
-      this.ui.mentionNotice?.remove();
+      this.ui.clearNotices();
       this.ui.setConnectionStatus('已断开连接');
     });
     this.ui.eventBus.on('room:joining', () => this.ui.setConnectionStatus('正在连接…'));
+    for (const event of ['room:changed', 'session:unavailable']) {
+      this.ui.eventBus.on(event, () => this.ui.clearNotices());
+    }
     this.ui.eventBus.on('connection:error', () => this.ui.setConnectionStatus('连接失败，正在重试…'));
     this.ui.eventBus.on('connection:close', () => this.ui.setConnectionStatus('连接中断，正在重试…'));
     this.ui.eventBus.on('room:ready', (data) => {

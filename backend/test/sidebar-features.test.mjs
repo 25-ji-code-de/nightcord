@@ -23,6 +23,9 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
   const origin = `http://127.0.0.1:${server.address().port}`;
   const browser = await chromium.launch({ executablePath: process.env.NIGHTCORD_TEST_CHROMIUM || undefined });
   t.after(() => browser.close());
+  // CI runners are slower and share their cores with the other browser suites,
+  // so actions get more room there while local runs keep the tight default.
+  const actionTimeout = Number(process.env.NIGHTCORD_ACTION_TIMEOUT || (process.env.CI ? 60_000 : 30_000));
 
   async function fixture(t, options = {}) {
     const context = await browser.newContext({ viewport: options.viewport || { width: 1280, height: 900 }, serviceWorkers: 'block', reducedMotion: 'reduce' });
@@ -40,6 +43,8 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     t.after(() => assert.deepEqual(errors, []));
     async function load(existing) {
       const page = existing || await context.newPage();
+      page.setDefaultTimeout(actionTimeout);
+      page.setDefaultNavigationTimeout(actionTimeout);
       if (!existing) page.on('pageerror', error => errors.push(error.message));
       await page.goto(origin);
       await page.evaluate(() => {
@@ -431,10 +436,26 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Shift+Tab');
     assert.equal(await page.evaluate(() => document.querySelector('#sidebar-tools').contains(document.activeElement)), true);
-    const checkWidth = async () => assert.equal(await page.evaluate(() => {
-      const dialog = document.querySelector('#sidebar-tools'); const rect = dialog.getBoundingClientRect();
-      return rect.left >= 0 && rect.right <= innerWidth && dialog.scrollWidth <= dialog.clientWidth;
-    }), true);
+    // A viewport change settles over a frame or two (media queries, layout), so
+    // poll for the box instead of reading a half-applied layout.
+    const measureBox = () => page.evaluate(() => {
+      const dialog = document.querySelector('#sidebar-tools');
+      const rect = dialog.getBoundingClientRect();
+      return {
+        fits: rect.left >= 0 && rect.right <= innerWidth && dialog.scrollWidth <= dialog.clientWidth,
+        left: Math.round(rect.left), right: Math.round(rect.right), viewport: innerWidth,
+        scrollWidth: dialog.scrollWidth, clientWidth: dialog.clientWidth,
+      };
+    });
+    const checkWidth = async () => {
+      await page.waitForFunction(() => {
+        const dialog = document.querySelector('#sidebar-tools');
+        const rect = dialog.getBoundingClientRect();
+        return rect.left >= 0 && rect.right <= innerWidth && dialog.scrollWidth <= dialog.clientWidth;
+      }, null, { timeout: 5_000 }).catch(() => {});
+      const box = await measureBox();
+      assert.equal(box.fits, true, `tool panel overflows: ${JSON.stringify(box)}`);
+    };
     await checkWidth();
     if (process.env.NIGHTCORD_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.NIGHTCORD_SCREENSHOT_DIR}/sidebar-mobile.png` });
     await page.setViewportSize({ width: 667, height: 375 }); await checkWidth();
@@ -446,6 +467,10 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     assert.equal(await page.locator('.sidebar').evaluate(node => node.classList.contains('show')), true);
     assert.equal(await page.locator('.tools-menu').getAttribute('aria-expanded'), 'true');
     await page.keyboard.press('Escape');
+    // The drawer is the topmost layer, so Escape closes it and leaves the tool
+    // panel standing underneath. Give the focus move a frame to land before the
+    // snapshot check so a slow runner cannot read the previous state.
+    await page.locator('#sidebar-tools').waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {});
     assert.equal(await page.locator('#sidebar-tools').isVisible(), true);
     assert.equal(await page.locator('.tools-menu').evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator('.tools-menu').getAttribute('aria-expanded'), 'false');

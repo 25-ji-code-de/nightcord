@@ -43,4 +43,6 @@ jobs:
           node backend/node_modules/wrangler/bin/wrangler.js pages functions build functions --outdir .wrangler/pages-functions --compatibility-date 2026-11-05
       - run: npm test
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser
+      # 9 个文件各自起一个 Chromium，并行跑满 4 核时相互饿死，断言读布局/焦点
+      # 就会读到半完成状态。整套串行 84s，CI 上用它换确定性；本地默认仍然并行。
+      - run: npm run test:browser -- --test-concurrency=1

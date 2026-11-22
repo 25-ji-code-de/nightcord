@@ -94,6 +94,7 @@ class ChatNavigation {
       sync();
     };
     this.ui.closeNavigationDrawer = close;
+    this.ui.isNavigationDrawerOpen = () => mobile.matches && sidebar.classList.contains('show');
     this.ui.syncNavigation = sync;
     this.ui.setupMentionPicker();
     sync();
@@ -115,8 +116,11 @@ class ChatNavigation {
       if (mobile.matches && event.target.closest('.channel')) close();
     });
     document.addEventListener('keydown', (event) => {
+      if (event.defaultPrevented || event.isComposing) return;
       if (!mobile.matches || !sidebar.classList.contains('show') || document.querySelector('dialog[open]')) return;
       if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
         close();
         focusToggle();
       } else if (event.key === 'Tab') {

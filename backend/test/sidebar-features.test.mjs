@@ -422,6 +422,31 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     assert.match(await page.evaluate(() => document.activeElement.textContent), /view this/);
   });
 
+  await t.test('Escape respects composition and consumed keys, then closes one navigation layer', async t => {
+    const { page } = await fixture(t, { viewport: { width: 375, height: 667 } });
+    await page.locator('.sidebar-toggle').click();
+    await page.locator('#navigation-search').click();
+    const sendIgnoredEscape = () => page.evaluate(() => {
+      const target = document.activeElement;
+      target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, isComposing: true }));
+      const consumed = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      consumed.preventDefault();
+      target.dispatchEvent(consumed);
+    });
+    await sendIgnoredEscape();
+    assert.equal(await page.locator('#sidebar-tools').isVisible(), true);
+    await page.locator('.tools-menu').click();
+    await sendIgnoredEscape();
+    assert.equal(await page.evaluate(() => ui.isNavigationDrawerOpen()), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => ui.isNavigationDrawerOpen()), false);
+    assert.equal(await page.locator('#sidebar-tools').isVisible(), true);
+    assert.equal(await page.locator('.tools-menu').evaluate(node => node === document.activeElement), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#sidebar-tools').isVisible(), false);
+    assert.equal(await page.locator('.sidebar-toggle').evaluate(node => node === document.activeElement), true);
+  });
+
   await t.test('mobile views stay on screen, reopen navigation and return to chat', async t => {
     const { page } = await fixture(t, { viewport: { width: 375, height: 667 } });
     await seed(page);

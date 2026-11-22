@@ -1,10 +1,11 @@
 /*
  * SPDX-License-Identifier: AGPL-3.0-only
  * Nightcord palettes. Shared by the application and the design preview.
- * Select data-palette="gray-purple" or data-palette="indigo" on an ancestor.
+ * Select data-palette="gray-purple", data-palette="indigo" or
+ * data-palette="plum-orchid" on an ancestor.
  * Space-separated RGB, as in the existing SEKAI color contract.
  * Colors only: no layout, font, radius or motion settings.
- * Sources and inferred values: docs/design/palette-notes.md.
+ * Palette references and derived values are noted below.
  */
 [data-palette="gray-purple"] {
   /* Existing colors; navigation extends the deepest existing surface. */
@@ -74,4 +75,41 @@
   --nc-card-live: 46 49 82;
   --nc-line: 211 220 248;
   --nc-line-alpha: 0.12;
+}
+[data-palette="plum-orchid"] {
+  /* Surfaces sampled from https://nightcord.esahhk.xyz/ — facts only, no code,
+   * markup, artwork or stylesheet was copied. The accent is this project's own
+   * orchid; the reference's cyan read too cold. */
+  --nc-navigation: 33 26 44;      /* #211A2C — deepest bar */
+  --nc-sidebar: 46 36 61;         /* #2E243D — sidebar */
+  --nc-canvas: 63 51 82;          /* #3F3352 — message bed */
+  --nc-header: 63 51 82;          /* #3F3352 — header sits on the bed */
+  --nc-header-alpha: 1;
+  --nc-composer: 51 40 68;        /* #332844 — input field */
+  /* The remaining steps are derived here, not lifted. */
+  --nc-selection: 71 58 92;       /* #473A5C — selected row */
+  --nc-hover: 58 45 80;           /* #3A2D50 */
+  --nc-attachment: 54 43 71;      /* #362B47 — file card */
+  --nc-attachment-icon: 82 68 104; /* #524468 — card edge / icon bed */
+  --nc-panel: 38 29 51;           /* #261D33 */
+  --nc-input: 51 40 68;           /* #332844 */
+  --nc-divider: 36 28 48;         /* #241C30 */
+  --nc-text: 239 235 245;         /* #EFEBF5 */
+  --nc-text-muted: 178 168 192;   /* #B2A8C0 — readable on canvas and selected surfaces */
+  --nc-text-on-attachment: 239 235 245;
+  --nc-text-on-attachment-muted: 194 184 211; /* #C2B8D3 */
+  --nc-icon: 220 215 229;         /* #DCD7E5 */
+  --nc-accent: 210 163 232;       /* #D2A3E8 — orchid emphasis */
+  --nc-accent-hover: 231 205 248; /* #E7CDF8 */
+  --nc-accent-fill: 123 92 149;   /* #7B5C95 — muted orchid for fills */
+  --nc-online: 130 209 143;       /* #82D18F — presence dot */
+  --nc-text-subtle: 133 122 153;  /* #857A99 */
+  --nc-member-text: 220 215 229;
+  --nc-member-muted: 178 168 192;
+  --nc-member-microphone: 194 184 211;
+  --nc-device-screen: 25 19 34;   /* #191322 */
+  --nc-card: 54 43 71;            /* #362B47 */
+  --nc-card-live: 71 58 92;       /* #473A5C */
+  --nc-line: 239 235 245;
+  --nc-line-alpha: 0.1;
 }

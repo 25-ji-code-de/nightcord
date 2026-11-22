@@ -36,7 +36,7 @@
 任务支持新增、编辑、截止日期、完成 / 重新打开、删除及撤销删除；任务和收件箱已读状态按当前身份及房间保存在本浏览器，同源标签页同步，不跨设备同步。帮助入口可搜索使用说明并打开项目文档或问题反馈。
 当前用户的头像、昵称和状态位于成员栏底部；点击头像、昵称或资料图标打开「我的资料」。
 手机上点击聊天顶栏的菜单按钮，可一起打开导航和成员列表；点击遮罩或按 Escape 收起。
-左侧齿轮「设置」可切换灰紫 / 靛蓝配色，立即应用到聊天区、成员栏、输入框和附件，并保存在当前浏览器；刷新后恢复选择，同源标签页同步。配色独立于布局、字体、圆角等风格设置。
+左侧齿轮「设置」可切换灰紫 / 靛蓝 / 兰紫配色，立即应用到聊天区、成员栏、输入框和附件，并保存在当前浏览器；刷新后恢复选择，同源标签页同步。配色独立于布局、字体、圆角等风格设置。
 设置中的「成员列表」可独立切换新版 / 旧版：新版使用 T / 扬声器 / 离线图标与较大的头像，旧版恢复原来的分组箭头、圆角频道和紧凑成员行。两版都只在语音分组显示通话状态图标，文字聊天成员不显示。选择自动保存。
 设置中的「圆角」默认开启，关闭后头像、按钮、输入框、卡片和弹窗等界面元素统一使用直角；重新开启恢复原有圆角。选择即时生效、自动保存，并同步到同源标签页。
 
@@ -529,6 +529,8 @@ eventBus.on('typing', (data) => {
 - **DOMPurify**: Apache License 2.0 / Mozilla Public License 2.0
 - **pangu.js**: Copyright (c) 2013 Vinta
 
+`plum-orchid`（兰紫）配色采样自 [nightcord.esahhk.xyz](https://nightcord.esahhk.xyz/) 的色号，未复制其代码、模板、图标或文案。
+
 ## 📧 联系方式
 
 - **GitHub Issues**: [https://github.com/25-ji-code-de/nightcord/issues](https://github.com/25-ji-code-de/nightcord/issues)
@@ -537,8 +539,10 @@ eventBus.on('typing', (data) => {
 
 ## 🙏 致谢
 
-- 感谢所有贡献者
-- 感谢 Project SEKAI 提供的精美贴纸素材
+- **原作与素材**：感谢 *Project SEKAI COLORFUL STAGE! feat. Hatsune Miku* 提供的设定与精美贴纸素材。角色、音乐、图像等素材版权归 SEGA、Colorful Palette、Crypton Future Media 等原权利方所有。
+- **配色参考**：`plum-orchid`（兰紫）的色号采样自 [nightcord.esahhk.xyz](https://nightcord.esahhk.xyz/)。该站的原创代码与 UI 模板由其作者以 CC BY-NC-SA 4.0 发布。
+- **开源依赖**：界面净化使用 [DOMPurify](https://github.com/cure53/DOMPurify)（Apache License 2.0 / Mozilla Public License 2.0）；中英文混排间距使用 [pangu.js](https://github.com/vinta/pangu.js)（Copyright © 2013 Vinta）；表情名称映射由 [Unicode 17.0 Emoji 数据](https://unicode.org/Public/17.0.0/emoji/emoji-test.txt)生成。
+- **贡献者**：感谢所有为本项目提交代码、反馈问题、校对文档与润色文案的贡献者。
 
 ## ⭐ Star History
 

@@ -579,7 +579,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <fieldset class="palette-fieldset" aria-describedby="palette-description">
         <legend>外观配色</legend>
         <p class="settings-description" id="palette-description">选择界面配色。</p>
-        <div class="palette-options">
+        <div class="palette-options palette-color-options">
           <label class="palette-option">
             <input type="radio" name="nightcord-palette" value="gray-purple" aria-labelledby="palette-gray-purple-title" checked>
             <span class="palette-option-body">
@@ -588,7 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="palette-preview-sidebar"><i></i><i></i><i></i></span>
                 <span class="palette-preview-chat"><span class="palette-preview-header"></span><span class="palette-preview-message"><i></i><span><b></b><b></b></span></span><span class="palette-preview-message"><i></i><span><b></b><b></b></span></span><span class="palette-preview-composer"></span></span>
               </span>
-              <span class="palette-option-heading"><span id="palette-gray-purple-title">灰紫</span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6"/></svg></span></span>
+              <span class="palette-option-heading"><span class="palette-option-copy"><span id="palette-gray-purple-title">灰紫</span><small>柔和 · 经典</small></span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6"/></svg></span></span>
             </span>
           </label>
           <label class="palette-option">
@@ -599,7 +599,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="palette-preview-sidebar"><i></i><i></i><i></i></span>
                 <span class="palette-preview-chat"><span class="palette-preview-header"></span><span class="palette-preview-message"><i></i><span><b></b><b></b></span></span><span class="palette-preview-message"><i></i><span><b></b><b></b></span></span><span class="palette-preview-composer"></span></span>
               </span>
-              <span class="palette-option-heading"><span id="palette-indigo-title">靛蓝</span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6"/></svg></span></span>
+              <span class="palette-option-heading"><span class="palette-option-copy"><span id="palette-indigo-title">靛蓝</span><small>冷调 · 清晰</small></span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6"/></svg></span></span>
+            </span>
+          </label>
+          <label class="palette-option">
+            <input type="radio" name="nightcord-palette" value="plum-orchid" aria-labelledby="palette-plum-orchid-title">
+            <span class="palette-option-body">
+              <span class="palette-preview" data-palette="plum-orchid" aria-hidden="true">
+                <span class="palette-preview-rail"><i></i><i></i><i></i></span>
+                <span class="palette-preview-sidebar"><i></i><i></i><i></i></span>
+                <span class="palette-preview-chat"><span class="palette-preview-header"></span><span class="palette-preview-message"><i></i><span><b></b><b></b></span></span><span class="palette-preview-message"><i></i><span><b></b><b></b></span></span><span class="palette-preview-composer"></span></span>
+              </span>
+              <span class="palette-option-heading"><span class="palette-option-copy"><span id="palette-plum-orchid-title">兰紫</span><small>深色 · 温润</small></span><span class="palette-selected" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6"/></svg></span></span>
             </span>
           </label>
         </div>

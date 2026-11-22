@@ -21,7 +21,7 @@
 :root[data-ios-layout="on"] .settings-close svg { width: 18px; height: 18px; }
 :root[data-ios-layout="on"] .settings-content { padding: 20px; }
 :root[data-ios-layout="on"] .palette-fieldset legend { color: rgb(var(--nc-text-muted)); font-size: .882rem; font-weight: 500; }
-:root[data-ios-layout="on"] .palette-options { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+:root[data-ios-layout="on"] .palette-options { gap: 12px; }
 :root[data-ios-layout="on"] .palette-option-heading { font-size: .882rem; }
 :root[data-ios-layout="on"] .settings-description { font-size: .882rem; line-height: 1.5; }
 :root[data-ios-layout="on"] .settings-preferences { margin-top: 24px; border-radius: 16px; background: rgb(var(--nc-line) / .045); }

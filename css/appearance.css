@@ -57,22 +57,23 @@ body, .chat-root, .main { background: rgb(var(--nc-canvas)); color: rgb(var(--nc
 .sekai-code-inline { background: rgb(var(--nc-panel)); }
 .sekai-text-node strong { color: rgb(var(--nc-text)); }
 
-/* Rich media keeps its current construction; the indigo palette supplies ink. */
-[data-palette="indigo"] .messages { scrollbar-color: rgb(var(--nc-input)) rgb(var(--nc-sidebar)); }
-[data-palette="indigo"] .sekai-file-card { background: rgb(var(--nc-attachment)); color: rgb(var(--nc-text-on-attachment)); }
-[data-palette="indigo"] .sekai-file-card:hover { background: rgb(var(--nc-attachment) / .85); }
-[data-palette="indigo"] .sekai-file-icon { background: rgb(var(--nc-panel) / .25); color: rgb(var(--nc-icon)); }
-[data-palette="indigo"] .sekai-file-name { color: rgb(var(--nc-text-on-attachment)); }
-[data-palette="indigo"] :is(.sekai-file-meta, .sekai-file-action) { color: rgb(var(--nc-text-on-attachment-muted)); opacity: 1; }
-[data-palette="indigo"] :is(.sekai-link-site, .sekai-link-desc, .sekai-link-arrow) { color: rgb(var(--nc-text-muted)); }
-[data-palette="indigo"] .sekai-link-title { color: rgb(var(--nc-text)); }
-[data-palette="indigo"] .sekai-code-block { background: rgb(var(--nc-panel)); color: rgb(var(--nc-text-muted)); }
-[data-palette="indigo"] .sekai-text-node em { color: rgb(var(--nc-text-muted)); }
-[data-palette="indigo"] .sekai-reply-chip { background: rgb(var(--nc-panel) / .5); color: rgb(var(--nc-text-muted)); border-left-color: rgb(var(--nc-accent-fill)); }
-[data-palette="indigo"] .sekai-reply-chip:hover { background: rgb(var(--nc-hover)); color: rgb(var(--nc-text)); border-left-color: rgb(var(--nc-accent)); }
-[data-palette="indigo"] :is(.mention-list, .file-upload-menu, .file-upload-progress) { background: rgb(var(--nc-panel)); border-color: rgb(var(--nc-divider)); }
-[data-palette="indigo"] :is(.mention-item:hover, .mention-item.selected, .file-upload-menu-item:hover) { background: rgb(var(--nc-hover)); }
-[data-palette="indigo"] .drag-overlay { background: rgb(var(--nc-canvas) / .9); }
+/* Rich media keeps its current construction; the indigo and plum-orchid palettes
+ * supply ink for it. Add a palette to this list to opt it in. */
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) .messages { scrollbar-color: rgb(var(--nc-input)) rgb(var(--nc-sidebar)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) .sekai-file-card { background: rgb(var(--nc-attachment)); color: rgb(var(--nc-text-on-attachment)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) .sekai-file-card:hover { background: rgb(var(--nc-attachment) / .85); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) .sekai-file-icon { background: rgb(var(--nc-panel) / .25); color: rgb(var(--nc-icon)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) .sekai-file-name { color: rgb(var(--nc-text-on-attachment)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) :is(.sekai-file-meta, .sekai-file-action) { color: rgb(var(--nc-text-on-attachment-muted)); opacity: 1; }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) :is(.sekai-link-site, .sekai-link-desc, .sekai-link-arrow) { color: rgb(var(--nc-text-muted)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) .sekai-link-title { color: rgb(var(--nc-text)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) .sekai-code-block { background: rgb(var(--nc-panel)); color: rgb(var(--nc-text-muted)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) .sekai-text-node em { color: rgb(var(--nc-text-muted)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) .sekai-reply-chip { background: rgb(var(--nc-panel) / .5); color: rgb(var(--nc-text-muted)); border-left-color: rgb(var(--nc-accent-fill)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) .sekai-reply-chip:hover { background: rgb(var(--nc-hover)); color: rgb(var(--nc-text)); border-left-color: rgb(var(--nc-accent)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) :is(.mention-list, .file-upload-menu, .file-upload-progress) { background: rgb(var(--nc-panel)); border-color: rgb(var(--nc-divider)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) :is(.mention-item:hover, .mention-item.selected, .file-upload-menu-item:hover) { background: rgb(var(--nc-hover)); }
+:is([data-palette="indigo"], [data-palette="plum-orchid"]) .drag-overlay { background: rgb(var(--nc-canvas) / .9); }
 @media (max-width: 768px) {
   .chat-header { background: rgb(var(--nc-header) / var(--nc-header-alpha)); }
 }

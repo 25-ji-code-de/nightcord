@@ -6,7 +6,11 @@
   const memberListKey = 'nightcord-member-list';
   const roundedCornersKey = 'nightcord-rounded-corners';
   const iosLayoutKey = 'nightcord-ios-layout';
-  const palettes = { 'gray-purple': { name: '灰紫', canvas: '#50476a' }, indigo: { name: '靛蓝', canvas: '#3d4070' } };
+  const palettes = {
+    'gray-purple': { name: '灰紫', canvas: '#50476a' },
+    indigo: { name: '靛蓝', canvas: '#3d4070' },
+    'plum-orchid': { name: '兰紫', canvas: '#3f3352' }
+  };
   const memberLists = { current: '新版', classic: '旧版' };
   const normalize = value => Object.hasOwn(palettes, value) ? value : 'gray-purple';
   const normalizeMemberList = value => Object.hasOwn(memberLists, value) ? value : 'classic';

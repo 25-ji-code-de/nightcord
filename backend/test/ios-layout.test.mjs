@@ -73,6 +73,8 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
     assert.match(await page.locator('meta[name="viewport"]').getAttribute('content'), /viewport-fit=cover/);
     await page.waitForFunction(() => getComputedStyle(document.querySelector('.input-box')).borderTopRightRadius === '24px');
     assert.equal(await radius('#appearance-settings'), '28px');
+    assert.equal(await page.locator('.palette-color-options input').count(), 3);
+    assert.equal(await page.locator('.palette-color-options .palette-option-body').evaluateAll(nodes => nodes.every(node => node.scrollWidth <= node.clientWidth)), true);
     assert.equal(await page.locator('#messageInput').inputValue(), '还没发送的草稿');
     assert.equal(await page.locator('#messages').textContent(), messages);
     await rounded.uncheck();

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -58,6 +58,7 @@ test('appearance settings independently apply palettes and member styles, preser
     const dialog = page.locator('#appearance-settings');
     const grayPurple = page.getByRole('radio', { name: '灰紫', exact: true });
     const indigo = page.getByRole('radio', { name: '靛蓝', exact: true });
+    const plumOrchid = page.getByRole('radio', { name: '兰紫', exact: true });
     const current = page.getByRole('radio', { name: '新版', exact: true });
     const classic = page.getByRole('radio', { name: '旧版', exact: true });
     const colors = () => page.evaluate(() => ['.navigation-rail', '.sidebar', '.main', '.input-box', '.chat-header']
@@ -90,7 +91,7 @@ test('appearance settings independently apply palettes and member styles, preser
     assert.equal(await page.locator('meta[name="theme-color"]').getAttribute('content'), '#3d4070');
     assert.equal(await page.evaluate(() => localStorage.getItem('nightcord-palette')), 'indigo');
     // The preview colors stay distinct even after the application theme changes.
-    assert.deepEqual(await dialog.locator('.palette-preview').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor)), ['rgb(80, 71, 106)', 'rgb(61, 64, 112)']);
+    assert.deepEqual(await dialog.locator('.palette-preview').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor)), ['rgb(80, 71, 106)', 'rgb(61, 64, 112)', 'rgb(63, 51, 82)']);
     const textRow = page.locator('#online-users .voice-user');
     const voiceRow = page.locator('#voice-users .voice-user');
     assert.equal(await textRow.locator('.member-video').isVisible(), false);
@@ -145,6 +146,36 @@ test('appearance settings independently apply palettes and member styles, preser
     await second.waitForFunction(() => document.documentElement.dataset.memberList === 'current');
     assert.equal(await second.getByRole('radio', { name: '新版', exact: true }).isChecked(), true);
     assert.equal(await second.locator('html').getAttribute('data-palette'), 'gray-purple');
+    await plumOrchid.check();
+    assert.equal(await page.locator('html').getAttribute('data-palette'), 'plum-orchid');
+    assert.deepEqual(await colors(), ['rgb(33, 26, 44)', 'rgb(46, 36, 61)', 'rgb(63, 51, 82)', 'rgb(51, 40, 68)', 'rgb(63, 51, 82)']);
+    assert.equal(await page.locator('meta[name="theme-color"]').getAttribute('content'), '#3f3352');
+    assert.equal(await page.evaluate(() => localStorage.getItem('nightcord-palette')), 'plum-orchid');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--nc-accent').trim()), '210 163 232');
+    assert.deepEqual(await geometry(), before, 'the third palette keeps the layout intact');
+    await second.waitForFunction(() => document.documentElement.dataset.palette === 'plum-orchid');
+    assert.equal(await second.getByRole('radio', { name: '兰紫', exact: true }).isChecked(), true);
+    await second.waitForFunction(() => getComputedStyle(document.querySelector('.sekai-file-card')).backgroundColor === 'rgb(54, 43, 71)');
+    // The saved third palette survives a reload, including the browser theme color.
+    await second.reload();
+    assert.equal(await second.locator('html').getAttribute('data-palette'), 'plum-orchid');
+    assert.equal(await second.locator('meta[name="theme-color"]').getAttribute('content'), '#3f3352');
+    await second.locator('#navigation-settings').click();
+    assert.equal(await second.getByRole('radio', { name: '兰紫', exact: true }).isChecked(), true);
+    const contrast = await page.evaluate(() => {
+      const style = getComputedStyle(document.documentElement);
+      const luminance = name => style.getPropertyValue(name).trim().split(/\s+/).map(Number)
+        .map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4)
+        .reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+      return (luminance('--nc-text-muted') + .05) / (luminance('--nc-selection') + .05);
+    });
+    assert.ok(contrast >= 4.5, `secondary text contrast: ${contrast}`);
+    if (process.env.NIGHTCORD_REVIEW_ARTIFACTS) {
+      await mkdir(process.env.NIGHTCORD_REVIEW_ARTIFACTS, { recursive: true });
+      await page.screenshot({ path: process.env.NIGHTCORD_REVIEW_ARTIFACTS + '/palette-desktop.png' });
+    }
+    await grayPurple.check();
+    await second.waitForFunction(() => document.documentElement.dataset.palette === 'gray-purple');
     await page.getByRole('button', { name: '关闭设置', exact: true }).click();
     await dialog.waitFor({ state: 'detached' });
     await second.close();
@@ -164,8 +195,17 @@ test('appearance settings independently apply palettes and member styles, preser
       assert.ok(bounds.left >= 15 && bounds.right <= viewport.width - 15);
       assert.ok(bounds.top >= 15 && bounds.bottom <= viewport.height - 15);
       assert.equal(bounds.overflow, false);
-      await indigo.check();
-      assert.equal(await page.locator('.input-area').evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(61, 64, 112)');
+      await plumOrchid.check();
+      assert.equal(await page.locator('.input-area').evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(63, 51, 82)');
+      assert.equal(await dialog.locator('.palette-color-options').evaluate(node => node.scrollWidth <= node.clientWidth), true);
+      if (viewport.width <= 480) {
+        const previewHeight = await dialog.locator('.palette-color-options').evaluate(node => node.getBoundingClientRect().height);
+        assert.ok(previewHeight < 300, `mobile palette choices occupy ${previewHeight}px`);
+      }
+      if (process.env.NIGHTCORD_REVIEW_ARTIFACTS) {
+        await dialog.evaluate(node => { node.scrollTop = 0; });
+        await page.screenshot({ path: process.env.NIGHTCORD_REVIEW_ARTIFACTS + '/palette-' + viewport.width + '.png' });
+      }
       for (let i = 0; i < 4; i++) {
         await page.keyboard.press('Tab');
         assert.equal(await dialog.evaluate(node => node.contains(document.activeElement)), true);
@@ -200,9 +240,12 @@ test('appearance settings independently apply palettes and member styles, preser
     await blocked.getByRole('radio', { name: '靛蓝', exact: true }).check();
     assert.equal(await blocked.locator('html').getAttribute('data-palette'), 'indigo');
     assert.match(await blocked.locator('#palette-status').textContent(), /无法保存/);
+    await blocked.getByRole('radio', { name: '兰紫', exact: true }).check();
+    assert.equal(await blocked.locator('html').getAttribute('data-palette'), 'plum-orchid');
+    assert.match(await blocked.locator('#palette-status').textContent(), /无法保存/);
     await blocked.getByRole('radio', { name: '新版', exact: true }).check();
     assert.equal(await blocked.locator('html').getAttribute('data-member-list'), 'current');
-    assert.equal(await blocked.locator('html').getAttribute('data-palette'), 'indigo');
+    assert.equal(await blocked.locator('html').getAttribute('data-palette'), 'plum-orchid');
     assert.match(await blocked.locator('#palette-status').textContent(), /无法保存/);
     assert.deepEqual(errors, []);
   } finally {

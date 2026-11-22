@@ -40,6 +40,7 @@
 .settings-toggle > input:checked + .settings-toggle-track::after { transform: translateX(20px); background: rgb(var(--nc-panel)); }
 .settings-toggle > input:focus-visible + .settings-toggle-track { outline: 2px solid rgb(var(--nc-text)); outline-offset: 4px; }
 .palette-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.palette-color-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .palette-option { position: relative; min-width: 0; cursor: pointer; }
 .palette-option > input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .palette-option-body { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: 10px; border: 1px solid rgb(var(--nc-line) / .25); border-radius: 8px; background: rgb(var(--nc-line) / .02); transition: border-color 150ms, background 150ms; pointer-events: none; }
@@ -47,6 +48,8 @@
 .palette-option > input:checked + .palette-option-body { border-color: rgb(var(--nc-accent)); box-shadow: 0 0 0 1px rgb(var(--nc-accent)); background: rgb(var(--nc-accent) / .07); }
 .palette-option > input:focus-visible + .palette-option-body { outline: 2px solid rgb(var(--nc-text)); outline-offset: 4px; }
 .palette-option-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 2px 4px; font-weight: 600; }
+.palette-option-copy { display: flex; flex-direction: column; min-width: 0; }
+.palette-option-copy small { margin-top: 2px; color: rgb(var(--nc-text-muted)); font-size: 12px; font-weight: 400; }
 .palette-selected { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex-shrink: 0; border: 1px solid rgb(var(--nc-icon) / .65); border-radius: 50%; color: rgb(var(--nc-panel)); }
 .palette-selected svg { visibility: hidden; }
 .palette-option > input:checked + .palette-option-body .palette-selected { border-color: rgb(var(--nc-accent)); background: rgb(var(--nc-accent)); }
@@ -54,7 +57,7 @@
 .settings-footer { padding: 16px 28px; border-top: 1px solid rgb(var(--nc-line) / var(--nc-line-alpha)); }
 .settings-footer p { margin: 0; color: rgb(var(--nc-text-muted)); font-size: 13px; }
 
-/* Identical composition in both previews: only the palette changes. */
+/* Identical composition in each preview: only the palette changes. */
 .palette-preview { display: grid; grid-template-columns: 22px 24% 1fr; height: 130px; overflow: hidden; border: 1px solid rgb(var(--nc-line) / .12); border-radius: 4px; background: rgb(var(--nc-canvas)); }
 .palette-preview-rail { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 10px; background: rgb(var(--nc-navigation)); }
 .palette-preview-rail i { width: 9px; height: 9px; border: 1px solid rgb(var(--nc-icon) / .8); border-radius: 2px; }
@@ -76,9 +79,21 @@
   .settings-header { padding: 20px 20px 16px; }
   .settings-content { padding: 20px; }
   .settings-footer { padding: 16px 20px; }
-  .palette-options { grid-template-columns: 1fr; }
-  .member-list-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .palette-preview { height: 112px; }
+  .palette-color-options { grid-template-columns: 1fr; gap: 10px; }
+  .palette-color-options .palette-option-body { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 12px; padding: 8px; }
+  .palette-color-options .palette-option-heading { margin: 0; gap: 6px; }
+  .palette-preview { height: 68px; grid-template-columns: 14px 24% minmax(0, 1fr); }
+  .palette-preview-rail { gap: 5px; padding-top: 6px; }
+  .palette-preview-rail i { width: 5px; height: 5px; }
+  .palette-preview-sidebar { padding: 6px 3px; gap: 6px; }
+  .palette-preview-sidebar i:first-child { height: 8px; }
+  .palette-preview-chat { gap: 5px; }
+  .palette-preview-header { height: 10px; flex-shrink: 0; }
+  .palette-preview-message { gap: 3px; margin: 0 4px; }
+  .palette-preview-message > i { width: 7px; height: 7px; }
+  .palette-preview-message > span { gap: 3px; }
+  .palette-preview-message b { height: 2px; }
+  .palette-preview-composer { height: 9px; min-height: 9px; margin: auto 4px 4px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .palette-option-body, .settings-toggle-track, .settings-toggle-track::after { transition: none; }

@@ -17,7 +17,7 @@
 
 - 外观配色：
   - Key: `nightcord-palette`
-  - Value: `gray-purple` 或 `indigo`，默认 `gray-purple`；未知值也回退到 `gray-purple`。
+  - Value: `gray-purple`、`indigo` 或 `plum-orchid`，默认 `gray-purple`；未知值也回退到 `gray-purple`。
   - 设置中选择后立即生效；刷新恢复、同源标签页同步。存储不可用时仍可切换本次页面的配色，设置内提示无法保存。只记录配色，不改变布局或风格。
 
 - 成员列表样式：

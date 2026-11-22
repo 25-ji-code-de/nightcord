@@ -30,6 +30,9 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     const apiBase = String(await runtime.ready).replace(/\/$/, '');
     const wsBase = apiBase.replace(/^http/, 'ws');
     browser = await chromium.launch({ executablePath: process.env.NIGHTCORD_TEST_CHROMIUM || undefined });
+    // CI runners are slower; allow more time for browser actions there.
+    const actionTimeout = Number(process.env.NIGHTCORD_ACTION_TIMEOUT || (process.env.CI ? 60_000 : 30_000));
+    assert.ok(Number.isFinite(actionTimeout) && actionTimeout > 0, 'NIGHTCORD_ACTION_TIMEOUT must be a positive finite number');
     const errors = [];
     const room = `browser-${crypto.randomUUID().slice(0, 12)}`;
     async function pageFor(authenticated, viewport, options = {}) {
@@ -59,6 +62,8 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
         }
       }, { wsBase, apiBase, room, authenticated, blockCookies: options.blockCookies });
       const page = await context.newPage();
+      page.setDefaultTimeout(actionTimeout);
+      page.setDefaultNavigationTimeout(actionTimeout);
       page.on('pageerror', error => errors.push(error.message));
       if (options.defer) return page;
       await page.goto(origin, { waitUntil: 'domcontentloaded' });

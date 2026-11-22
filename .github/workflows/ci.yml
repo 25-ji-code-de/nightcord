@@ -43,4 +43,5 @@ jobs:
           node backend/node_modules/wrangler/bin/wrangler.js pages functions build functions --outdir .wrangler/pages-functions --compatibility-date 2026-11-05
       - run: npm test
       - run: npx playwright install --with-deps chromium
+      # Each browser suite launches Chromium; serialize them on shared CI runners.
       - run: npm run test:browser

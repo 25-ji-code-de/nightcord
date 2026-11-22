@@ -23,6 +23,9 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
   const origin = `http://127.0.0.1:${server.address().port}`;
   const browser = await chromium.launch({ executablePath: process.env.NIGHTCORD_TEST_CHROMIUM || undefined });
   t.after(() => browser.close());
+  // CI runners are slower; allow more time for browser actions there.
+  const actionTimeout = Number(process.env.NIGHTCORD_ACTION_TIMEOUT || (process.env.CI ? 60_000 : 30_000));
+  assert.ok(Number.isFinite(actionTimeout) && actionTimeout > 0, 'NIGHTCORD_ACTION_TIMEOUT must be a positive finite number');
 
   async function fixture(t, options = {}) {
     const context = await browser.newContext({ viewport: options.viewport || { width: 1280, height: 900 }, serviceWorkers: 'block', reducedMotion: 'reduce' });
@@ -40,6 +43,8 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     t.after(() => assert.deepEqual(errors, []));
     async function load(existing) {
       const page = existing || await context.newPage();
+      page.setDefaultTimeout(actionTimeout);
+      page.setDefaultNavigationTimeout(actionTimeout);
       if (!existing) page.on('pageerror', error => errors.push(error.message));
       await page.goto(origin);
       await page.evaluate(() => {
@@ -456,10 +461,15 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Shift+Tab');
     assert.equal(await page.evaluate(() => document.querySelector('#sidebar-tools').contains(document.activeElement)), true);
-    const checkWidth = async () => assert.equal(await page.evaluate(() => {
-      const dialog = document.querySelector('#sidebar-tools'); const rect = dialog.getBoundingClientRect();
-      return rect.left >= 0 && rect.right <= innerWidth && dialog.scrollWidth <= dialog.clientWidth;
-    }), true);
+    // Wait for both the requested viewport and the resulting panel layout.
+    const checkWidth = async () => {
+      await page.waitForFunction(width => {
+        const dialog = document.querySelector('#sidebar-tools');
+        const rect = dialog.getBoundingClientRect();
+        return innerWidth === width && rect.width > 0 && rect.left >= 0
+          && rect.right <= innerWidth && dialog.scrollWidth <= dialog.clientWidth;
+      }, page.viewportSize().width);
+    };
     await checkWidth();
     if (process.env.NIGHTCORD_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.NIGHTCORD_SCREENSHOT_DIR}/sidebar-mobile.png` });
     await page.setViewportSize({ width: 667, height: 375 }); await checkWidth();
@@ -471,6 +481,12 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     assert.equal(await page.locator('.sidebar').evaluate(node => node.classList.contains('show')), true);
     assert.equal(await page.locator('.tools-menu').getAttribute('aria-expanded'), 'true');
     await page.keyboard.press('Escape');
+    // The tool panel was already visible underneath the drawer; wait for the
+    // actual dismissal and focus return, not that unchanged visibility state.
+    await page.waitForFunction(() => {
+      const toggle = document.querySelector('.tools-menu');
+      return toggle === document.activeElement && toggle.getAttribute('aria-expanded') === 'false';
+    });
     assert.equal(await page.locator('#sidebar-tools').isVisible(), true);
     assert.equal(await page.locator('.tools-menu').evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator('.tools-menu').getAttribute('aria-expanded'), 'false');

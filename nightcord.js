@@ -102,7 +102,7 @@ class Nightcord {
     this.ai = this.createAIConversation();
     this.analytics = null;
 
-    this.voiceSounds = new VoiceSounds(this.eventBus);
+    this.voiceSounds = new VoiceSounds(this.eventBus, () => this.ui.alerts.preferences.read());
     this.sounds = this.voiceSounds.sounds;
 
     // Application state
@@ -205,6 +205,7 @@ class Nightcord {
   destroy() {
     this.identity.destroy();
     this.voiceSounds.destroy();
+    this.ui.alerts.destroy();
     this.voice.destroy();
     this.voiceUI.destroy();
     // 停止事件上报

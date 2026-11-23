@@ -233,6 +233,7 @@ class UIManager {
       this.sekaiRenderer = null;
     }
     this.mentions = typeof NightcordMentions !== 'undefined' ? new NightcordMentions(this.sekaiRenderer) : null;
+    this.alerts = new ChatAlerts(this);
 
     // 监听回复跳转事件
     this.setupReplyJumpListener();

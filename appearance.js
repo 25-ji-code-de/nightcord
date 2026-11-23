@@ -132,7 +132,8 @@
       if (event.key !== 'Tab') return;
       // A native radio group contributes only the selected option to Tab order.
       const first = dialog.querySelector('.settings-close');
-      const last = iosLayoutToggle;
+      const last = [...dialog.querySelectorAll('button, input, select, summary, a[href]')]
+        .filter(element => !element.matches(':disabled') && element.tabIndex >= 0 && element.getClientRects().length).at(-1);
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last?.focus();

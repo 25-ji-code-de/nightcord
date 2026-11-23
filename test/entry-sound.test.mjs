@@ -7,7 +7,7 @@ import vm from 'node:vm';
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const blocked = () => Object.assign(new Error('User interaction required'), { name: 'NotAllowedError' });
 
-function harness({ opus = true, play = () => Promise.resolve() } = {}) {
+function harness({ opus = true, play = () => Promise.resolve(), preferences = {} } = {}) {
   const calls = [], listeners = new Map();
   const document = {
     addEventListener(event, listener) {
@@ -29,13 +29,34 @@ function harness({ opus = true, play = () => Promise.resolve() } = {}) {
   }
   const bus = vm.runInContext('new EventBus()', context);
   context.bus = bus;
-  const sounds = vm.runInContext('new VoiceSounds(bus)', context);
+  context.preferences = preferences;
+  const sounds = vm.runInContext('new VoiceSounds(bus, () => preferences)', context);
   const gesture = (event = 'click', isTrusted = true) => {
     for (const listener of [...(listeners.get(event) || [])]) listener({ isTrusted });
   };
   const waiting = () => [...listeners.values()].reduce((total, set) => total + set.size, 0);
   return { bus, sounds, calls, gesture, waiting };
 }
+
+test('effect preferences apply to entry and voice sounds, including a pending autoplay retry', async () => {
+  const preferences = { effects: false, volume: .25 };
+  const h = harness({ preferences });
+  h.bus.emit('room:ready'); h.bus.emit('voice:changed', { joined: true, members: [] });
+  assert.equal(h.calls.length, 0);
+  preferences.effects = true;
+  h.bus.emit('room:joining'); h.bus.emit('room:ready');
+  assert.equal(h.calls[0].volume, .25);
+  preferences.pausedUntil = Date.now() + 60000;
+  h.bus.emit('voice:changed', { joined: false });
+  assert.equal(h.calls.length, 1);
+  h.sounds.destroy();
+  const retry = harness({ preferences: { effects: true }, play: () => Promise.reject(blocked()) });
+  retry.bus.emit('room:ready'); await flush();
+  retry.sounds.getPreferences = () => ({ effects: false });
+  retry.gesture();
+  assert.equal(retry.calls.length, 1); assert.equal(retry.waiting(), 0);
+  retry.sounds.destroy();
+});
 
 test('successful entry plays its own cue once; reconnects and presence updates stay silent', async () => {
   const h = harness();

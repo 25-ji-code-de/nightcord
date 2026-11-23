@@ -182,7 +182,8 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     assert.equal(await guest.locator('dialog .profile-snapshot-note').textContent(), '发送时昵称：Shared name');
     assert.equal(await guest.locator('dialog .profile-cache-note').count(), 0);
     assert.equal(await guest.locator('dialog .profile-bio').textContent(), '<img onerror=alert(1)> signature');
-    assert.equal(await guest.locator('dialog .profile-actions').count(), 0);
+    assert.equal(await guest.locator('dialog .profile-action').count(), 0);
+    assert.equal(await guest.locator('dialog [data-follow]').count(), 2);
     await guest.keyboard.press('Escape');
     await guest.locator('dialog.user-profile-dialog').waitFor({ state: 'detached' });
     // Avatar and keyboard activation must resolve the same current identity.
@@ -250,7 +251,8 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
       assert.ok(bounds.left >= 15 && bounds.right <= bounds.width - 15);
       assert.ok(bounds.top >= 15 && bounds.bottom <= bounds.height - 15);
       assert.equal(bounds.overflow, false);
-      assert.equal(await card.locator('.profile-actions').count(), 0, 'other users have no account actions');
+      assert.equal(await card.locator('.profile-action').count(), 0, 'other users have no account actions');
+      assert.equal(await card.locator('[data-follow]').count(), 2, 'other users can be followed');
       await member.keyboard.press('Escape');
       await card.waitFor({ state: 'detached' });
     }

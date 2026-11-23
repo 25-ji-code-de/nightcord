@@ -47,13 +47,14 @@ class ChatUIEvents {
           && data.user.id !== this.ui.currentUser.id) {
         const kind = this.noticeFor(data.message);
         if (kind === 'mention') {
-          this.ui.showMentionNotice(data);
+          if (!this.ui.alerts) this.ui.showMentionNotice(data);
           this.ui.eventBus.emit('message:mentioned', data);
         } else if (kind === 'reply') {
-          this.ui.showReplyNotice(data);
+          if (!this.ui.alerts) this.ui.showReplyNotice(data);
           this.ui.eventBus.emit('message:replied', data);
         }
       }
+      this.ui.alerts?.receive(data);
     });
     this.ui.eventBus.on('message:error', (data) => this.ui.showError(data.error));
     this.ui.eventBus.on('message:sent', () => this.ui.clearChatInput());

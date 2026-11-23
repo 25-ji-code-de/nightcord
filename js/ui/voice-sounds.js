@@ -2,7 +2,8 @@
  * Copyright (C) 2025 The 25-ji-code-de Team */
 /** Entry and voice audio feedback; it does not control room or call state. */
 class VoiceSounds {
-  constructor(eventBus) {
+  constructor(eventBus, getPreferences = () => ({})) {
+    this.getPreferences = getPreferences;
     // 语音聊天加入、退出音效（优先 Opus，回退 MP3）
     const canOpus = new Audio().canPlayType('audio/ogg; codecs=opus');
     const ext = canOpus ? 'opus' : 'mp3';
@@ -11,7 +12,13 @@ class VoiceSounds {
       join: new Audio(`se_cord.${ext}?v=2`),
       quit: new Audio(`se_dcord.${ext}?v=2`)
     };
-    const playSound = name => this.sounds[name].cloneNode().play().catch(() => {});
+    const playSound = name => {
+      const prefs = this.getPreferences();
+      if (prefs.effects === false || prefs.pausedUntil > Date.now()) return;
+      const audio = this.sounds[name].cloneNode();
+      audio.volume = prefs.volume ?? 1;
+      audio.play().catch(() => {});
+    };
     // voiceJoined：本地上一次是否处于语音通话中，用于判断“刚加入”或“刚退出”。
     let voiceJoined = false;
     let voiceMembers = new Set();
@@ -48,7 +55,10 @@ class VoiceSounds {
     };
     const play = () => {
       if (!attempt || attempt.started) return;
+      const prefs = this.getPreferences();
+      if (prefs.effects === false || prefs.pausedUntil > Date.now()) { reset(); return; }
       const current = attempt;
+      current.audio.volume = prefs.volume ?? 1;
       current.started = true;
       stopWaiting();
       current.audio.play().catch(error => {

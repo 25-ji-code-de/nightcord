@@ -15,10 +15,12 @@ return class SidebarMessages {
     const user = this.sidebar.ui.currentUser;
     if (!user) return [];
     const seen = new Set();
+    const messages = new Map(this.messages().map(message => [Number(message.timestamp), message]));
     return this.messages().filter(message => {
       const key = messageKey(message);
       if (!message.profile?.id || message.profile.id === user.id || message.sender || seen.has(key)
-        || !this.sidebar.ui.mentions?.isMentioned(message.text, user)) return false;
+        || !(this.sidebar.ui.alerts ? this.sidebar.ui.alerts.reasons(message, ts => messages.get(ts)).some(kind => kind !== 'message')
+          : this.sidebar.ui.mentions?.isMentioned(message.text, user))) return false;
       seen.add(key); return true;
     }).sort((a, b) => b.timestamp - a.timestamp).slice(0, 2000);
   }
@@ -65,6 +67,10 @@ return class SidebarMessages {
     const content = element('span', 'tool-message-content');
     content.append(meta, element('span', 'tool-message-preview', this.preview(message)));
     if (unread) meta.append(element('span', 'tool-unread-label', '未读'));
+    if (readState && this.sidebar.ui.alerts) {
+      const labels = this.sidebar.ui.alerts.reasons(message).filter(kind => kind !== 'message').map(kind => MessageAlerts.labels[kind]);
+      meta.append(element('span', 'tool-alert-kind', labels.join(' · ')));
+    }
     jump.append(avatar, content);
     jump.title = '跳转到消息';
     row.append(jump);
@@ -145,9 +151,10 @@ return class SidebarMessages {
   }
 
   buildInbox() {
-    this.sidebar.content.append(element('p', 'tools-description', '提及你的消息，都在这里。'));
+    this.sidebar.content.append(element('p', 'tools-description', '回复与提及你的消息，都在这里。'));
     const toolbar = element('div', 'tools-inbox-toolbar');
     toolbar.append(this.filters([['all', '全部提醒'], ['unread', '只看未读']], this.sidebar.inboxFilter, value => { this.sidebar.inboxFilter = value; this.sidebar.refresh(); }));
+    toolbar.append(this.filters([['all', '所有类型'], ['mention', '@ 我'], ['reply', '回复我'], ['everyone', '全体提及']], this.sidebar.inboxKind || 'all', value => { this.sidebar.inboxKind = value; this.sidebar.refresh(); }));
     this.sidebar.markAll = button('全部标为已读', () => this.sidebar.saveRead((read, mentions) => {
       for (const message of mentions) read[messageKey(message)] = true;
     }));
@@ -155,11 +162,14 @@ return class SidebarMessages {
   }
 
   renderInbox(state, mentions, unread) {
-    const results = this.sidebar.inboxFilter === 'unread' ? unread : mentions;
+    let results = this.sidebar.inboxFilter === 'unread' ? unread : mentions;
+    if (this.sidebar.inboxKind && this.sidebar.inboxKind !== 'all') {
+      results = results.filter(message => this.sidebar.ui.alerts?.reasons(message).includes(this.sidebar.inboxKind));
+    }
     this.sidebar.markAll.disabled = !unread.length;
     this.sidebar.count.textContent = `${unread.length} 条未读 · ${mentions.length} 条提醒`;
     this.replaceResults(results.slice(0, this.sidebar.limit).map(message => this.messageRow(message, state.read)),
-      !this.sidebar.key() ? '连接聊天室后即可查看提及你的消息。' : this.sidebar.inboxFilter === 'unread' ? '没有未读提醒。' : '还没有提及你的消息。', results.length);
+      !this.sidebar.key() ? '连接聊天室后即可查看回复与提及。' : this.sidebar.inboxFilter === 'unread' ? '没有未读提醒。' : '没有符合条件的回复或提及。', results.length);
   }
 };
 })();

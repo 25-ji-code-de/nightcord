@@ -241,6 +241,7 @@
           }, 'profile-action--quiet'),
         );
       }
+      if (!own) this.ui.alerts?.view.profile(profile, actions);
       if (actions.childElementCount) dialog.appendChild(actions);
       dialog.addEventListener('cancel', event => { event.preventDefault(); void dismiss(); });
       let backdropDown = false;

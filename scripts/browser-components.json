@@ -1,5 +1,12 @@
 {
   "ui-manager.js": [
+    "js/services/message-alerts.js",
+    "js/ui/alert-preferences.js",
+    "js/ui/alert-delivery.js",
+    "js/ui/alert-sounds.js",
+    "js/ui/alert-banner.js",
+    "js/ui/alert-settings.js",
+    "js/ui/chat-alerts.js",
     "js/ui/events.js",
     "js/ui/name-chooser.js",
     "js/ui/room-view.js",

@@ -23,6 +23,7 @@ class ChatNotifications {
    * @param {{ name: string, message: string, timestamp: number, user?: Object, sender?: Object }} data
    */
   showMentionNotice(data) {
+    this.ui.alerts?.banner.dismiss();
     const focusAction = this.mentionNotice?.contains(document.activeElement)
       ? document.activeElement.className : null;
     this._dismiss('mention', false);
@@ -60,6 +61,7 @@ class ChatNotifications {
   clearNotices() {
     this._dismiss('mention');
     this._dismiss('reply');
+    this.ui.alerts?.banner.dismiss();
   }
 
   /**
@@ -80,8 +82,8 @@ class ChatNotifications {
     notice.dataset.notice = kind;
     notice.returnFocus = document.activeElement;
 
-    const label = kind === 'mention' ? '提及' : '回复';
-    const verb = kind === 'mention' ? '提到了你' : '回复了你';
+    const label = data.noticeLabel || (kind === 'mention' ? '提及' : '回复');
+    const verb = data.noticeLabel === '全体提及' ? '提及了所有人' : kind === 'mention' ? '提到了你' : '回复了你';
     const clock = this._clock(data.timestamp);
 
     const body = document.createElement('div');

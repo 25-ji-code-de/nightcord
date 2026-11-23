@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 class AlertSettingsView {
   constructor(alerts) {
-    this.alerts = alerts; this.controls = new Map();
+    this.alerts = alerts; this.controls = new Map(); this.panels = new Map();
     this.open = () => this.mount();
     window.addEventListener('nightcord:settings-open', this.open);
   }
@@ -22,7 +22,7 @@ class AlertSettingsView {
   save(change) {
     const saved = this.alerts.preferences.save(change);
     this.alerts.settingsChanged();
-    if (this.status) this.status.textContent = saved ? '已保存，仅对当前身份和聊天室生效。' : '浏览器无法保存，改动仅在当前页面保留。';
+    this.setStatus(saved ? '已保存，仅对当前身份和聊天室生效。' : '浏览器无法保存，改动仅在当前页面保留。');
     this.refresh();
     return saved;
   }
@@ -62,9 +62,9 @@ class AlertSettingsView {
     if (kind) header.append(this.preview(kind, label));
     parent.append(header);
   }
-  kind(parent, kind, label, description) {
+  kind(parent, kind, label, description, level = 'h4') {
     const group = this.node('section', '', 'alert-kind'); group.setAttribute('aria-label', label);
-    this.heading(group, label, description, kind, 'h4');
+    this.heading(group, label, description, kind, level);
     const controls = this.node('div', '', 'alert-kind-controls');
     this.checkbox(controls, `${kind}Notice`, '提醒', '', `${label}：站内提醒`);
     this.checkbox(controls, `${kind}Sound`, '声音', '', `${label}：声音`);
@@ -78,16 +78,29 @@ class AlertSettingsView {
     summary.append(copy, this.icon('chevron')); details.append(summary); parent.append(details);
     return details;
   }
+  setStatus(message) {
+    if (this.status) this.status.textContent = message;
+  }
+  page(key, title, description) {
+    const root = this.node('section', '', 'alert-settings'); root.setAttribute('aria-label', title);
+    const context = this.node('p', '', 'settings-description');
+    const fields = this.node('fieldset', '', 'alert-fields');
+    const state = this.node('p', '', 'alert-page-state'); state.hidden = true;
+    root.append(this.node('h2', title), context, state, fields);
+    if (description) fields.append(this.node('p', description, 'alert-page-description'));
+    document.querySelector(`#settings-${key}`).replaceChildren(root);
+    this.panels.set(key, { root, context, fields, state });
+    return fields;
+  }
   mount() {
-    const content = document.querySelector('#appearance-settings .settings-content');
-    if (!content) return;
-    if (this.root?.parentElement === content) { this.refresh(); return; }
-    this.root?.remove(); this.controls.clear();
-    this.root = this.node('section', '', 'alert-settings'); this.root.setAttribute('aria-label', '提醒与声音');
-    this.root.append(this.node('h2', '提醒与声音'));
-    this.context = this.node('p', '', 'settings-description'); this.root.append(this.context);
-    this.fields = this.node('fieldset'); this.fields.className = 'alert-fields'; this.root.append(this.fields);
-    const general = this.node('div', '', 'alert-general'); this.fields.append(general);
+    const keys = ['sound', 'messages', 'presence'];
+    if (keys.some(key => !document.querySelector(`#settings-${key}`))) return;
+    this.status = document.querySelector('#palette-status');
+    if (keys.every(key => this.panels.get(key)?.root.parentElement === document.querySelector(`#settings-${key}`))) { this.refresh(); return; }
+    for (const panel of this.panels.values()) panel.root.remove();
+    this.panels.clear(); this.controls.clear();
+    const soundFields = this.page('sound', '声音与免打扰', '统一调整消息提醒与成员动态的音量和暂停；各类提醒的声音开关与试听在对应分类中。');
+    const general = this.node('div', '', 'alert-general'); soundFields.append(general);
     this.checkbox(general, 'sound', '提醒声音', '消息与成员动态的声音总开关');
     const volume = this.node('label', '', 'alert-volume'); volume.append(this.node('span', '音量'));
     const range = this.node('input'); range.type = 'range'; range.min = '0'; range.max = '100'; range.step = '5'; range.dataset.alert = 'volume';
@@ -113,32 +126,33 @@ class AlertSettingsView {
     });
     const select = this.node('span', '', 'alert-select-control'); select.append(this.pause, this.icon('chevron'));
     pause.append(select); general.append(pause);
-    const advanced = this.disclosure(this.fields, 'sound', '更多声音选项');
-    this.checkbox(advanced, 'awayOnly', '阅读时静音', '正在查看最新消息时，不播放提醒音');
-    this.checkbox(advanced, 'effects', '进入/退出音效', '进入聊天室，或加入/离开语音会话时播放声音');
+    this.checkbox(general, 'awayOnly', '阅读时静音', '正在查看最新消息时，不播放提醒音');
+    this.checkbox(general, 'effects', '进入/退出音效', '进入聊天室，或加入/离开语音会话时播放声音');
+    soundFields.append(this.node('p', '暂停提醒时，收件箱仍会保留记录。', 'alert-hint'));
 
-    const message = this.node('section', '', 'alert-message'); this.fields.append(message);
+    const messageFields = this.page('messages', '消息提醒');
+    const message = this.node('section', '', 'alert-message'); messageFields.append(message);
     this.heading(message, '新消息', '普通聊天消息的提示方式', 'message');
     const modes = [['off', '关闭'], ['away', '未被查看时'], ['always', '始终']];
     this.choices(message, 'messageNotice', '悬浮提醒', modes);
     this.choices(message, 'message', '提示声音', modes);
     message.append(this.node('p', '“未被查看时”包括离开页面、浏览历史记录或打开其他面板。', 'alert-hint'));
 
-    const mentions = this.node('section', '', 'alert-category'); mentions.append(this.node('h3', '回复与提及')); this.fields.append(mentions);
+    const mentions = this.node('section', '', 'alert-category'); mentions.append(this.node('h3', '回复与提及')); messageFields.append(mentions);
     this.kind(mentions, 'reply', '回复我', '显示在输入框上方');
     this.kind(mentions, 'mention', '@ 我', '保留该卡片，直到您查看或将其关闭');
     this.kind(mentions, 'everyone', '全体提及', '有人提及聊天室中的所有人');
 
-    const presence = this.disclosure(this.fields, 'presence', '成员动态与关注', '选择您希望追踪的在线/离线状态更新');
+    const presence = this.page('presence', '成员动态与关注');
     this.choices(presence, 'presence', '提醒范围', [['off', '关闭'], ['followed', '关注的人'], ['all', '所有人']]);
-    this.kind(presence, 'online', '成员上线', '在上线 2 秒后发出通知');
-    this.kind(presence, 'offline', '成员下线', '在离开 15 秒后提醒，忽略短暂掉线');
+    this.kind(presence, 'online', '成员上线', '在上线 2 秒后发出通知', 'h3');
+    this.kind(presence, 'offline', '成员下线', '在离开 15 秒后提醒，忽略短暂掉线', 'h3');
     presence.append(this.node('p', '打开成员的个人资料卡，即可关注其在线或离线状态。', 'alert-hint'));
     this.followed = this.node('div', '', 'alert-followed'); presence.append(this.followed);
-    this.activity = this.node('div', '', 'alert-activity'); presence.append(this.activity);
-    this.status = this.node('p', '', 'alert-status'); this.status.setAttribute('role', 'status');
-    this.root.append(this.status, this.node('p', '在暂停期间，收件箱记录仍会保留。当屏幕锁定或网页关闭时，系统不会发送通知。', 'alert-hint alert-footnote'));
-    content.append(this.root); this.refresh();
+    const activity = this.disclosure(presence, 'activity', '近期动态');
+    this.activity = this.node('div', '', 'alert-activity'); activity.append(this.activity);
+    for (const fields of [messageFields, presence]) fields.append(this.node('p', '锁屏或关闭网页后暂不发送通知。', 'alert-hint alert-footnote'));
+    this.refresh();
   }
   preview(kind, label) {
     const button = this.node('button', '', 'alert-preview'); button.type = 'button';
@@ -146,11 +160,11 @@ class AlertSettingsView {
     button.setAttribute('aria-label', `试听${label}音效`);
     button.addEventListener('click', async () => {
       const prefs = this.alerts.preferences.read();
-      if (!prefs.volume) { this.status.textContent = '当前音量为 0，请先调高提醒音量。'; return; }
+      if (!prefs.volume) { this.setStatus('当前音量为 0，请在“声音与免打扰”中调高提醒音量。'); return; }
       // Explicit preview is allowed even while notifications are muted/paused.
       const played = await this.alerts.sounds.play(kind === 'everyone' ? 'message' : kind, prefs.volume);
-      if (this.status) this.status.textContent = played ? `正在试听：${label}。` : this.alerts.sounds.state === 'blocked'
-        ? '浏览器尚未允许播放，请再次点击试听。' : '音效加载失败，请检查网络后重试。';
+      this.setStatus(played ? `正在试听：${label}。` : this.alerts.sounds.state === 'blocked'
+        ? '浏览器尚未允许播放，请再次点击试听。' : '音效加载失败，请检查网络后重试。');
     });
     return button;
   }
@@ -160,12 +174,18 @@ class AlertSettingsView {
     range.style.setProperty('--alert-volume', `${range.value}%`);
   }
   refresh() {
-    if (!this.root) return;
+    if (!this.panels.size) return;
     const prefs = this.alerts.preferences.read(), scope = this.alerts.preferences.key();
-    this.fields.disabled = !scope;
-    this.fields.hidden = !scope;
-    this.context.textContent = scope ? `仅对「${this.alerts.ui.elements.roomName?.textContent || this.alerts.ui.currentRoom}」生效，自动保存在此浏览器。`
-      : '进入聊天室后即可设置提醒。';
+    for (const [key, panel] of this.panels) {
+      panel.fields.disabled = !scope;
+      panel.fields.hidden = !scope;
+      panel.context.textContent = scope ? `仅对当前身份在「${this.alerts.ui.elements.roomName?.textContent || this.alerts.ui.currentRoom}」中的提醒生效，自动保存。`
+        : '进入聊天室后即可设置提醒。';
+      panel.state.textContent = this.alerts.paused(prefs) ? '提醒已暂停，可在“声音与免打扰”中恢复。'
+        : !prefs.sound ? '提醒声音已关闭，可在“声音与免打扰”中开启。'
+          : !prefs.volume ? '提醒音量为 0，可在“声音与免打扰”中调整。' : '';
+      panel.state.hidden = !scope || key === 'sound' || !panel.state.textContent;
+    }
     for (const [key, control] of this.controls) {
       if (control.matches('fieldset')) {
         for (const input of control.querySelectorAll('input')) input.checked = input.value === prefs[key];
@@ -177,9 +197,6 @@ class AlertSettingsView {
     const until = new Date(Math.min(prefs.pausedUntil, 8640000000000000));
     this.timedPause.textContent = `至 ${until.toLocaleDateString([], { month: 'numeric', day: 'numeric' })} ${until.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     this.pause.value = prefs.pausedUntil <= Date.now() ? 'off' : prefs.pausedUntil === Number.MAX_SAFE_INTEGER ? 'manual' : 'until';
-    if (this.alerts.paused(prefs)) this.status.textContent = prefs.pausedUntil === Number.MAX_SAFE_INTEGER ? '已暂停提醒，手动恢复后生效。'
-      : `已暂停至 ${new Date(prefs.pausedUntil).toLocaleString()}。`;
-    else if (this.alerts.sounds.state === 'blocked') this.status.textContent = '浏览器尚未允许播放，点击试听可启用后续音效。';
     this.followed.replaceChildren(this.node('h3', '已关注成员'));
     const entries = Object.entries(prefs.followed);
     if (!entries.length) this.followed.append(this.node('p', '尚未关注任何成员。', 'settings-description'));
@@ -192,14 +209,14 @@ class AlertSettingsView {
       const remove = this.node('button', '取消关注'); remove.type = 'button'; remove.setAttribute('aria-label', `取消关注 ${follow.name}`);
       remove.addEventListener('click', () => {
         this.save(prefs => { delete prefs.followed[id]; });
-        (this.followed.querySelector('button') || this.followed.closest('details').querySelector('summary')).focus();
+        (this.followed.querySelector('button') || this.controls.get('presence').querySelector('input:checked')).focus();
       }); row.append(remove); this.followed.append(row);
     }
     this.refreshActivity();
   }
   refreshActivity() {
     if (!this.activity) return;
-    this.activity.replaceChildren(this.node('h3', '近期动态'));
+    this.activity.replaceChildren();
     if (!this.alerts.recent.length) this.activity.append(this.node('p', '自您上次打开此页面以来，没有新的成员通知。', 'settings-description'));
     for (const event of this.alerts.recent.slice(0, 10)) {
       const row = this.node('p', '', 'alert-activity-row');
@@ -230,5 +247,10 @@ class AlertSettingsView {
     }
     group.append(this.node('p', '短暂掉线不会提醒。声音可在设置中调整。', 'alert-hint'), status); parent.append(group);
   }
-  destroy() { window.removeEventListener('nightcord:settings-open', this.open); this.root?.remove(); }
+  destroy() {
+    window.removeEventListener('nightcord:settings-open', this.open);
+    for (const panel of this.panels.values()) panel.root.remove();
+    this.panels.clear();
+    this.status = null;
+  }
 }

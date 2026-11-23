@@ -59,8 +59,10 @@ test('appearance settings independently apply palettes and member styles, preser
     const grayPurple = page.getByRole('radio', { name: '灰紫', exact: true });
     const indigo = page.getByRole('radio', { name: '靛蓝', exact: true });
     const plumOrchid = page.getByRole('radio', { name: '兰紫', exact: true });
-    const current = page.getByRole('radio', { name: '新版', exact: true });
-    const classic = page.getByRole('radio', { name: '旧版', exact: true });
+    const current = page.getByRole('radio', { name: '新版', exact: true, includeHidden: true });
+    const classic = page.getByRole('radio', { name: '旧版', exact: true, includeHidden: true });
+    const appearanceTab = page.getByRole('tab', { name: '外观与布局', exact: true });
+    const soundTab = page.getByRole('tab', { name: '声音与免打扰', exact: true });
     const colors = () => page.evaluate(() => ['.navigation-rail', '.sidebar', '.main', '.input-box', '.chat-header']
       .map(selector => getComputedStyle(document.querySelector(selector)).backgroundColor));
     const geometry = () => page.evaluate(() => ['.navigation-rail', '.sidebar', '.main', '.input-box']
@@ -80,6 +82,21 @@ test('appearance settings independently apply palettes and member styles, preser
     assert.equal(await page.locator('#navigation-settings').getAttribute('aria-controls'), 'appearance-settings');
     assert.equal(await grayPurple.isChecked(), true);
     assert.equal(await classic.isChecked(), true);
+    assert.equal(await appearanceTab.evaluate(node => document.activeElement === node), true);
+    assert.equal(await page.getByRole('tabpanel').count(), 1);
+    assert.equal(await classic.isVisible(), true);
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await soundTab.getAttribute('aria-selected'), 'true');
+    assert.equal(await current.isVisible(), false);
+    assert.equal(await grayPurple.isVisible(), false);
+    await page.keyboard.press('End');
+    assert.equal(await page.getByRole('tab', { name: '成员动态与关注' }).getAttribute('aria-selected'), 'true');
+    assert.equal(await page.locator('#settings-presence .alert-settings').isVisible(), true);
+    await page.keyboard.press('Home');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.getByRole('tab', { name: '成员动态与关注' }).getAttribute('aria-selected'), 'true');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Tab');
     assert.equal(await grayPurple.evaluate(node => document.activeElement === node), true);
     await page.keyboard.press('ArrowRight');
     assert.equal(await indigo.isChecked(), true);
@@ -135,7 +152,7 @@ test('appearance settings independently apply palettes and member styles, preser
     const second = await load();
     await second.locator('#navigation-settings').click();
     assert.equal(await second.getByRole('radio', { name: '靛蓝', exact: true }).isChecked(), true);
-    assert.equal(await second.getByRole('radio', { name: '旧版', exact: true }).isChecked(), true);
+    assert.equal(await second.getByRole('radio', { name: '旧版', exact: true, includeHidden: true }).isChecked(), true);
     await page.locator('#navigation-settings').click();
     await grayPurple.check();
     assert.equal(await page.locator('html').getAttribute('data-member-list'), 'classic');
@@ -144,8 +161,9 @@ test('appearance settings independently apply palettes and member styles, preser
     assert.equal(await second.getByRole('radio', { name: '灰紫', exact: true }).isChecked(), true);
     await current.check();
     await second.waitForFunction(() => document.documentElement.dataset.memberList === 'current');
-    assert.equal(await second.getByRole('radio', { name: '新版', exact: true }).isChecked(), true);
+    assert.equal(await second.getByRole('radio', { name: '新版', exact: true, includeHidden: true }).isChecked(), true);
     assert.equal(await second.locator('html').getAttribute('data-palette'), 'gray-purple');
+    await appearanceTab.click();
     await plumOrchid.check();
     assert.equal(await page.locator('html').getAttribute('data-palette'), 'plum-orchid');
     assert.deepEqual(await colors(), ['rgb(33, 26, 44)', 'rgb(46, 36, 61)', 'rgb(63, 51, 82)', 'rgb(51, 40, 68)', 'rgb(63, 51, 82)']);
@@ -188,6 +206,8 @@ test('appearance settings independently apply palettes and member styles, preser
       await page.setViewportSize(viewport);
       await page.locator('.sidebar-toggle').click();
       await page.locator('#navigation-settings').click();
+      assert.equal(await dialog.locator('.settings-sidebar').isVisible(), false);
+      assert.equal(await dialog.locator('.settings-page[hidden]').count(), 0);
       const bounds = await dialog.evaluate(node => {
         const rect = node.getBoundingClientRect();
         return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, overflow: node.scrollWidth > node.clientWidth };
@@ -220,6 +240,21 @@ test('appearance settings independently apply palettes and member styles, preser
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.locator('#navigation-settings').click();
+    await soundTab.click();
+    await page.getByRole('button', { name: '关闭设置', exact: true }).click();
+    await page.locator('#navigation-settings').click();
+    assert.equal(await soundTab.getAttribute('aria-selected'), 'true', 'reopening remembers the selected category');
+    assert.equal(await soundTab.evaluate(node => node === document.activeElement), true);
+    await page.setViewportSize({ width: 375, height: 812 });
+    assert.equal(await dialog.locator('.settings-sidebar').isVisible(), false);
+    assert.equal(await dialog.locator('.settings-page[hidden]').count(), 0);
+    assert.equal(await page.locator('.settings-close').evaluate(node => node === document.activeElement), true);
+    await plumOrchid.focus();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    assert.equal(await soundTab.evaluate(node => node === document.activeElement), true, 'resizing moves focus out of the hidden page');
+    assert.equal(await page.getByRole('tabpanel').count(), 1);
+    await appearanceTab.click();
+    assert.ok(await appearanceTab.evaluate(node => parseFloat(getComputedStyle(node).transitionDuration) <= .001));
     assert.ok(await dialog.locator('.palette-option-body').first().evaluate(node => parseFloat(getComputedStyle(node).transitionDuration) <= .001));
     // Clicking empty panel space keeps it open; the backdrop closes it.
     await dialog.locator('.settings-header').click({ position: { x: 150, y: 20 } });

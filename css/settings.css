@@ -22,6 +22,26 @@
 .settings-close:hover, .settings-close:active { background: rgb(var(--nc-line) / .08); color: rgb(var(--nc-text)); }
 .settings-close:focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: -2px; }
 .settings-content { padding: 24px 28px 28px; }
+.settings-sidebar[hidden], .settings-page[hidden] { display: none; }
+.settings-page { min-width: 0; }
+.settings-page-title { display: none; }
+/* Wide screens use one persistent sidebar and one scrolling settings page. */
+@media (min-width: 769px) and (pointer: fine), (min-width: 1025px) {
+  .settings-dialog { width: min(900px, calc(100vw - 48px)); height: min(720px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px); overflow: hidden; }
+  .settings-dialog[open] { display: grid; grid-template-columns: 208px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
+  .settings-header, .settings-footer { grid-column: 1 / -1; }
+  .settings-sidebar { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; padding: 20px 12px; border-right: 1px solid rgb(var(--nc-line) / var(--nc-line-alpha)); background: rgb(var(--nc-line) / .025); }
+  .settings-tab { position: relative; display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-height: 44px; padding: 10px 14px; border: 0; border-radius: 6px; background: transparent; color: rgb(var(--nc-text-muted)); font: inherit; font-size: 14px; text-align: left; cursor: pointer; transition: background 150ms, color 150ms; }
+  .settings-tab svg { flex-shrink: 0; width: 20px; height: 20px; }
+  .settings-tab:hover { background: rgb(var(--nc-line) / .06); color: rgb(var(--nc-text)); }
+  .settings-tab[aria-selected="true"] { background: rgb(var(--nc-accent) / .12); color: rgb(var(--nc-accent)); font-weight: 600; }
+  .settings-tab[aria-selected="true"]::before { content: ""; position: absolute; left: 0; width: 3px; height: 20px; border-radius: 2px; background: currentColor; }
+  .settings-tab:focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: 2px; }
+  .settings-content { min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .settings-page-title { display: block; margin: 0 0 24px; font-size: 20px; line-height: 1.5; font-weight: 600; }
+  .settings-page .alert-settings { margin-top: 0; padding-top: 0; border-top: 0; }
+  .settings-page .alert-settings > h2 { font-size: 20px; }
+}
 .palette-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .palette-fieldset legend { padding: 0; font-size: 16px; font-weight: 600; }
 .member-list-fieldset { margin-top: 28px; }
@@ -96,5 +116,5 @@
   .palette-preview-composer { height: 9px; min-height: 9px; margin: auto 4px 4px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .palette-option-body, .settings-toggle-track, .settings-toggle-track::after { transition: none; }
+  .settings-tab, .palette-option-body, .settings-toggle-track, .settings-toggle-track::after { transition: none; }
 }

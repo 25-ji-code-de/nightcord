@@ -63,6 +63,39 @@ test('chat notifications, preferences, presence and multiple tabs', { timeout: 1
   }
   const atMe = '<$SEKAI:Mention:type=user;display=Me:sekai:me>';
 
+  await t.test('settings categories share volume and mute state while preserving room preferences', async t => {
+    const { page } = await fixture(t);
+    await page.locator('#navigation-settings').click();
+    await page.getByRole('tab', { name: '声音与免打扰' }).click();
+    await page.getByRole('slider', { name: '提醒音量' }).focus();
+    await page.keyboard.press('Home');
+    await page.getByRole('tab', { name: '消息提醒' }).click();
+    await page.getByRole('button', { name: '试听新消息音效', exact: true }).click();
+    assert.match(await page.locator('#palette-status').textContent(), /音量为 0/);
+    assert.equal(await page.evaluate(() => played.length), 0);
+    assert.equal(await page.locator('#settings-messages .alert-page-state').isVisible(), true);
+    await page.getByRole('tab', { name: '声音与免打扰' }).click();
+    await page.getByRole('slider', { name: '提醒音量' }).focus();
+    await page.keyboard.press('End');
+    await page.getByRole('switch', { name: '提醒声音', exact: true }).uncheck();
+    await page.getByRole('tab', { name: '成员动态与关注' }).click();
+    assert.match(await page.locator('#settings-presence .alert-page-state').textContent(), /声音已关闭/);
+    await page.evaluate(() => ui.setCurrentRoom('another-room'));
+    assert.equal(await page.locator('#settings-presence .alert-page-state').isVisible(), false);
+    await page.getByRole('tab', { name: '声音与免打扰' }).click();
+    assert.equal(await page.getByRole('switch', { name: '提醒声音', exact: true }).isChecked(), true);
+    await page.evaluate(() => ui.setCurrentRoom('alerts-test'));
+    assert.equal(await page.getByRole('switch', { name: '提醒声音', exact: true }).isChecked(), false);
+    await page.locator('.settings-close').click();
+    await page.locator('#navigation-settings').click();
+    assert.equal(await page.locator('[data-alert=sound]').count(), 1, 'reopening reuses controls');
+    assert.equal(await page.getByRole('tab', { name: '声音与免打扰' }).getAttribute('aria-selected'), 'true');
+    await page.getByRole('tab', { name: '成员动态与关注' }).click();
+    await page.getByRole('button', { name: '试听成员上线音效', exact: true }).click();
+    await page.waitForFunction(() => played.length === 1);
+    assert.match(await page.locator('#palette-status').textContent(), /正在试听：成员上线/);
+  });
+
   await t.test('ordinary arrivals group without stealing focus and open the latest message', async t => {
     const { page } = await fixture(t);
     await page.locator('#navigation-tasks').click();
@@ -222,6 +255,23 @@ test('chat notifications, preferences, presence and multiple tabs', { timeout: 1
     assert.equal(await page.locator('.tool-message').count(), 0);
     await page.locator('.tools-back').click();
     await page.locator('#navigation-settings').click();
+    await page.getByRole('tab', { name: '消息提醒' }).click();
+    const pinnedBounds = () => page.locator('.settings-header, .settings-sidebar, .settings-footer').evaluateAll(nodes => nodes.map(node => {
+      const { x, y, width, height } = node.getBoundingClientRect(); return { x, y, width, height };
+    }));
+    const beforeScroll = await pinnedBounds();
+    const content = page.locator('#appearance-settings .settings-content');
+    assert.ok(await content.evaluate(node => { node.scrollTop = node.scrollHeight; return node.scrollTop; }) > 0);
+    assert.deepEqual(await pinnedBounds(), beforeScroll, 'only the page content scrolls');
+    await page.getByRole('tab', { name: '外观与布局', exact: true }).click();
+    assert.equal(await content.evaluate(node => node.scrollTop), 0);
+    if (process.env.NIGHTCORD_ALERT_ARTIFACTS) {
+      await mkdir(process.env.NIGHTCORD_ALERT_ARTIFACTS, { recursive: true });
+      await page.screenshot({ path: join(process.env.NIGHTCORD_ALERT_ARTIFACTS, 'settings-layout-desktop.png') });
+    }
+    await page.getByRole('tab', { name: '消息提醒' }).click();
+    assert.equal(await content.evaluate(node => node.scrollTop), 0);
+    if (process.env.NIGHTCORD_ALERT_ARTIFACTS) await page.screenshot({ path: join(process.env.NIGHTCORD_ALERT_ARTIFACTS, 'settings-notifications-desktop.png') });
     await page.locator('[data-alert=mentionSound]').uncheck();
     await page.locator('[data-alert=replyNotice]').uncheck();
     await page.locator('#appearance-settings .settings-close').click();
@@ -230,7 +280,12 @@ test('chat notifications, preferences, presence and multiple tabs', { timeout: 1
     assert.match((await page.evaluate(() => played))[1], /reply\.opus\?v=3$/);
     assert.equal(await page.locator('.mention-notice').count(), 0);
     await page.locator('#navigation-settings').click();
+    await page.getByRole('tab', { name: '声音与免打扰' }).click();
     await page.locator('[data-alert=pause]').selectOption('hour');
+    await page.getByRole('tab', { name: '消息提醒' }).click();
+    assert.match(await page.locator('#settings-messages .alert-page-state').textContent(), /提醒已暂停/);
+    await page.getByRole('tab', { name: '成员动态与关注' }).click();
+    assert.equal(await page.locator('#settings-presence .alert-page-state').isVisible(), true);
     await page.locator('#appearance-settings .settings-close').click();
     await page.evaluate(text => incoming(text, 22), atMe);
     assert.equal(await page.locator('.mention-notice').count(), 0);
@@ -257,7 +312,7 @@ test('chat notifications, preferences, presence and multiple tabs', { timeout: 1
     const other = await pageFor();
     assert.equal(await other.evaluate(() => ui.alerts.preferences.read().followed[peer.id].offline), true);
     await other.locator('#navigation-settings').click();
-    await other.locator('[data-alert-section=presence] > summary').click();
+    await other.getByRole('tab', { name: '成员动态与关注' }).click();
     await other.getByRole('button', { name: '取消关注 Peer', exact: true }).click();
     await page.waitForFunction(() => !ui.alerts.preferences.read().followed[peer.id]);
   });
@@ -310,7 +365,6 @@ test('chat notifications, preferences, presence and multiple tabs', { timeout: 1
     // Use the settings event through the actual button, including the mobile drawer.
     await page.locator('.sidebar-toggle').first().click();
     await page.locator('#navigation-settings').click();
-    await page.locator('[data-alert-section=presence] > summary').click();
     for (const kind of ['新消息', '回复我', '@ 我', '成员上线', '成员下线']) {
       await page.getByRole('button', { name: `试听${kind}音效`, exact: true }).click();
       await page.waitForFunction(() => ui.alerts.sounds.active?.currentTime > 0);
@@ -323,7 +377,7 @@ test('chat notifications, preferences, presence and multiple tabs', { timeout: 1
       await page.waitForFunction(() => ui.alerts.sounds.active?.currentTime > 0 && ui.alerts.sounds.active?.ended);
       assert.equal(await page.evaluate(() => ui.alerts.sounds.state), 'ready');
     }
-    assert.equal(await page.locator('.alert-settings').evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
+    assert.equal(await page.locator('.alert-settings').evaluateAll(nodes => nodes.every(node => node.scrollWidth <= node.clientWidth + 1)), true);
     await page.locator('[data-alert=message]:checked').focus();
     await page.keyboard.press('ArrowRight');
     assert.equal(await page.evaluate(() => ui.alerts.preferences.read().message), 'always');
@@ -349,7 +403,7 @@ test('chat notifications, preferences, presence and multiple tabs', { timeout: 1
     assert.equal(await page.getByRole('slider').getAttribute('aria-valuetext'), '55%');
     if (process.env.NIGHTCORD_ALERT_ARTIFACTS) {
       await mkdir(process.env.NIGHTCORD_ALERT_ARTIFACTS, { recursive: true });
-      await page.locator('.alert-settings h2').scrollIntoViewIfNeeded();
+      await page.locator('#settings-sound h2').scrollIntoViewIfNeeded();
       await page.evaluate(() => { const dialog = document.querySelector('#appearance-settings'); dialog.scrollTop += document.querySelector('.alert-settings').getBoundingClientRect().top - dialog.getBoundingClientRect().top - 24; });
       await page.screenshot({ path: join(process.env.NIGHTCORD_ALERT_ARTIFACTS, 'settings-mobile.png') });
       await page.locator('.alert-category').evaluate(node => {

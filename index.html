@@ -575,7 +575,27 @@ document.addEventListener('DOMContentLoaded', () => {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M6 18 18 6"/></svg>
       </button>
     </header>
+    <div class="settings-sidebar" role="tablist" aria-label="设置分类" aria-orientation="vertical" hidden>
+      <button type="button" class="settings-tab" id="settings-tab-appearance" role="tab" aria-controls="settings-appearance" aria-selected="true" data-settings-page="appearance">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.4-3.4 1.5 1.5 0 0 1 1.1-2.6H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><circle cx="7.5" cy="10" r=".75"/><circle cx="10" cy="6.5" r=".75"/><circle cx="14" cy="6.5" r=".75"/><circle cx="17" cy="10" r=".75"/></svg>
+        <span>外观与布局</span>
+      </button>
+      <button type="button" class="settings-tab" id="settings-tab-sound" role="tab" aria-controls="settings-sound" aria-selected="false" tabindex="-1" data-settings-page="sound">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m11 5-6 4H2v6h3l6 4V5Zm4 3a5 5 0 0 1 0 8m3-11a9 9 0 0 1 0 14"/></svg>
+        <span>声音与免打扰</span>
+      </button>
+      <button type="button" class="settings-tab" id="settings-tab-messages" role="tab" aria-controls="settings-messages" aria-selected="false" tabindex="-1" data-settings-page="messages">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+        <span>消息提醒</span>
+      </button>
+      <button type="button" class="settings-tab" id="settings-tab-presence" role="tab" aria-controls="settings-presence" aria-selected="false" tabindex="-1" data-settings-page="presence">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 4v2"/></svg>
+        <span>成员动态与关注</span>
+      </button>
+    </div>
     <div class="settings-content">
+      <section class="settings-page" id="settings-appearance" aria-label="外观与布局">
+      <h2 class="settings-page-title" id="settings-appearance-title">外观与布局</h2>
       <fieldset class="palette-fieldset" aria-describedby="palette-description">
         <legend>外观配色</legend>
         <p class="settings-description" id="palette-description">选择界面配色。</p>
@@ -650,6 +670,19 @@ document.addEventListener('DOMContentLoaded', () => {
         <span class="settings-toggle-track" aria-hidden="true"></span>
       </label>
       </div>
+      </section>
+      <section class="settings-page" id="settings-sound" aria-label="声音与免打扰">
+        <h2 class="settings-page-title">声音与免打扰</h2>
+        <p class="settings-description">进入聊天室后即可设置声音与免打扰。</p>
+      </section>
+      <section class="settings-page" id="settings-messages" aria-label="消息提醒">
+        <h2 class="settings-page-title">消息提醒</h2>
+        <p class="settings-description">进入聊天室后即可设置提醒。</p>
+      </section>
+      <section class="settings-page" id="settings-presence" aria-label="成员动态与关注">
+        <h2 class="settings-page-title">成员动态与关注</h2>
+        <p class="settings-description">进入聊天室后即可设置成员动态与关注。</p>
+      </section>
     </div>
     <footer class="settings-footer"><p id="palette-status" role="status">选择后立即生效，自动保存在此浏览器。</p></footer>
   </dialog>

@@ -24,6 +24,9 @@
 .alert-select svg { position: absolute; right: 12px; top: 14px; width: 16px; height: 16px; color: rgb(var(--nc-text-muted)); pointer-events: none; }
 .alert-select select:hover { border-color: rgb(var(--nc-accent)); }
 .alert-message, .alert-category { margin-top: 28px; }
+.alert-fields > :is(.alert-message, .alert-choice):first-child { margin-top: 0; }
+.alert-page-description { margin: 0 0 12px; color: rgb(var(--nc-text-muted)); font-size: 13px; }
+.alert-page-state { margin: 0 0 16px; padding: 10px 12px; border-left: 2px solid rgb(var(--nc-accent)); background: rgb(var(--nc-accent) / .07); color: rgb(var(--nc-text)); font-size: 13px; }
 .alert-kind-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .alert-kind-heading > div { min-width: 0; }
 .alert-kind-heading .settings-description { margin: 3px 0 0; font-size: 13px; line-height: 1.6; }
@@ -46,11 +49,9 @@
 :root .alert-settings .alert-kind-controls .settings-toggle.alert-toggle { box-sizing: border-box; flex: none; gap: 10px; padding: 4px 0; border: 0; background: transparent; }
 .alert-kind-controls .settings-toggle-copy { flex: none; }
 .alert-disclosure { margin-top: 12px; border-bottom: 1px solid rgb(var(--nc-line) / var(--nc-line-alpha)); }
-.alert-disclosure[data-alert-section=presence] { margin-top: 28px; }
 .alert-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; padding: 8px 0; list-style: none; cursor: pointer; }
 .alert-disclosure > summary::-webkit-details-marker { display: none; }
 .alert-disclosure-title { display: block; font-size: 14px; font-weight: 500; }
-.alert-disclosure[data-alert-section=presence] .alert-disclosure-title { font-size: 16px; font-weight: 600; }
 .alert-disclosure-description { display: block; margin-top: 3px; color: rgb(var(--nc-text-muted)); font-size: 13px; line-height: 1.6; }
 .alert-disclosure > summary svg { width: 16px; height: 16px; flex: none; color: rgb(var(--nc-text-muted)); transition: transform 150ms; }
 .alert-disclosure > summary:hover svg { color: rgb(var(--nc-text)); }

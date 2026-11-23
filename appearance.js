@@ -102,6 +102,59 @@
     const roundedCornersToggle = dialog.querySelector('#rounded-corners-toggle');
     const iosLayoutToggle = dialog.querySelector('#ios-layout-toggle');
     const status = dialog.querySelector('#palette-status');
+    const sidebar = dialog.querySelector('.settings-sidebar');
+    const content = dialog.querySelector('.settings-content');
+    const tabs = [...sidebar.querySelectorAll('[role="tab"]')];
+    const pages = tabs.map(tab => dialog.querySelector(`#${tab.getAttribute('aria-controls')}`));
+    const desktopSettings = window.matchMedia('(min-width: 769px) and (pointer: fine), (min-width: 1025px)');
+    let selectedPage = 'appearance';
+    const syncPages = () => {
+      const desktop = desktopSettings.matches;
+      const focused = document.activeElement;
+      sidebar.hidden = !desktop;
+      tabs.forEach((tab, index) => {
+        const selected = tab.dataset.settingsPage === selectedPage;
+        tab.setAttribute('aria-selected', String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        const page = pages[index];
+        page.hidden = desktop && !selected;
+        if (desktop) {
+          page.setAttribute('role', 'tabpanel');
+          page.setAttribute('aria-labelledby', tab.id);
+        } else {
+          page.removeAttribute('role');
+          page.removeAttribute('aria-labelledby');
+        }
+      });
+      // Resizing must never leave keyboard focus inside a hidden page or tab.
+      if (dialog.open && focused?.closest('[hidden]')) {
+        (desktop ? tabs.find(tab => tab.tabIndex === 0) : dialog.querySelector('.settings-close')).focus({ preventScroll: true });
+      }
+    };
+    const selectPage = tab => {
+      selectedPage = tab.dataset.settingsPage;
+      syncPages();
+      content.scrollTop = 0;
+    };
+    sidebar.addEventListener('click', event => {
+      const tab = event.target.closest('[role="tab"]');
+      if (tab) selectPage(tab);
+    });
+    sidebar.addEventListener('keydown', event => {
+      const index = tabs.indexOf(event.target);
+      if (index < 0) return;
+      let next;
+      if (event.key === 'ArrowDown') next = (index + 1) % tabs.length;
+      else if (event.key === 'ArrowUp') next = (index + tabs.length - 1) % tabs.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      selectPage(tabs[next]);
+      tabs[next].focus({ preventScroll: true });
+    });
+    desktopSettings.addEventListener('change', syncPages);
+    syncPages();
     const sync = palette => options.forEach(option => { option.checked = option.value === palette; });
     const syncMemberList = value => memberListOptions.forEach(option => { option.checked = option.value === value; });
     const syncRoundedCorners = value => { roundedCornersToggle.checked = value === 'on'; };
@@ -117,9 +170,11 @@
       previousFocus = document.activeElement;
       document.body.appendChild(dialog);
       trigger.setAttribute('aria-controls', dialog.id);
+      syncPages();
       dialog.showModal();
       window.dispatchEvent(new CustomEvent('nightcord:settings-open'));
-      options.find(option => option.checked)?.focus({ preventScroll: true });
+      if (desktopSettings.matches) tabs.find(tab => tab.tabIndex === 0).focus({ preventScroll: true });
+      else options.find(option => option.checked)?.focus({ preventScroll: true });
     });
     dialog.querySelector('.settings-close').addEventListener('click', () => dialog.close());
     dialog.addEventListener('keydown', event => {

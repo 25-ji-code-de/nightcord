@@ -279,4 +279,14 @@ describe('login 与 logout', () => {
     assert.equal(local.getItem('sekai_pass_user'), null);
     assert.equal(redirectedTo, '', 'nightcord 的 logout 不跳转');
   });
+
+  test('放弃失效会话在离线时也能完成，不请求撤销接口', async () => {
+    local.setItem('sekai_pass_access_token', 'AT');
+    local.setItem('sekai_pass_refresh_token', 'RT');
+    local.setItem('sekai_pass_user', '{"sub":"u1"}');
+    await auth.clearSession();
+    assert.equal(auth.isAuthenticated(), false);
+    assert.equal(auth.getCurrentUser(), null);
+    assert.equal(fetchCalls.length, 0);
+  });
 });

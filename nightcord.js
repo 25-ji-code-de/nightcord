@@ -41,7 +41,7 @@ class Nightcord {
     this.eventBus = new EventBus();
     this.chatRoom = new NightcordManager({
       hostname: config.hostname,
-      getAccessToken: async () => this.sekaiPassAuth.isAuthenticated() ? this.sekaiPassAuth.getAccessToken() : null,
+      getAccessToken: () => this.identity.getAccessToken(),
       eventBus: this.eventBus,
       aiConfig: window.AIConfig
     });

@@ -148,6 +148,11 @@
     logout() {
       return this._auth.logout();
     }
+
+    /** 放弃已失效的会话；本地清理即可，离线时也能选择访客模式。 */
+    clearSession() {
+      return this._auth.logout({ revoke: false });
+    }
   }
 
   global.SekaiPassAuth = SekaiPassAuth;

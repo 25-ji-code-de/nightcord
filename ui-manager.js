@@ -394,6 +394,7 @@ class UIManager {
   showError(...args) { return this.notifications.showError(...args); }
 
   showAuthError(...args) { return this.notifications.showAuthError(...args); }
+  showAuthExpired(...args) { return this.notifications.showAuthExpired(...args); }
 
   /**
    * 获取所有 DOM 元素引用

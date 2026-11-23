@@ -323,6 +323,84 @@ class ChatNotifications {
     this.ui.addChatMessage('系统', `错误: ${message}`, null, this.ui.systemIcon, 'bg-red-600');
   }
 
+  /** A persistent choice, including when the phone resumes after its session expired. */
+  showAuthExpired({ onRetry, onContinue, notice }) {
+    const overlay = document.createElement('dialog');
+    overlay.id = 'auth-expired-overlay';
+    overlay.className = 'auth-error-overlay auth-expired-overlay';
+    overlay.setAttribute('role', 'alertdialog');
+    overlay.setAttribute('aria-labelledby', 'auth-expired-title');
+    overlay.setAttribute('aria-describedby', 'auth-expired-description');
+    overlay.innerHTML = `
+      <div class="auth-error-dialog">
+        <img class="auth-expired-mark" src="/icons/sekai-pass.svg" width="48" height="48" alt="" aria-hidden="true">
+        <h2 id="auth-expired-title" class="auth-error-title">SEKAI Pass 登录已过期。</h2>
+        <p id="auth-expired-description" class="auth-error-desc">您可以重新登录 SEKAI Pass，也可以暂时以访客身份继续聊天。需要登录才能使用的功能（例如语音聊天），在您重新登录后即可恢复使用。</p>
+        <p class="auth-error-desc" data-auth-error role="alert" hidden></p>
+        <div class="auth-error-actions">
+          <button type="button" class="auth-error-btn auth-error-btn--primary" data-action="retry">重新登录</button>
+          <button type="button" class="auth-error-btn" data-action="continue">暂不登录，继续使用</button>
+        </div>
+      </div>
+    `;
+    if (notice) {
+      const errorMessage = overlay.querySelector('[data-auth-error]');
+      errorMessage.textContent = notice;
+      errorMessage.hidden = false;
+    }
+    const buttons = [...overlay.querySelectorAll('button')];
+    let busy = false;
+    const dismiss = () => {
+      if (overlay.open) overlay.close();
+      overlay.remove();
+    };
+    const choose = async (retry) => {
+      if (busy) return;
+      busy = true;
+      buttons.forEach(button => { button.disabled = true; });
+      const button = buttons[retry ? 0 : 1];
+      const label = button.textContent;
+      button.textContent = retry ? '正在打开登录…' : '正在继续…';
+      const errorMessage = overlay.querySelector('[data-auth-error]');
+      errorMessage.hidden = true;
+      try {
+        await (retry ? onRetry() : onContinue());
+        if (retry) {
+          // Keep the choice usable if mobile Back restores this page from the page cache.
+          busy = false;
+          buttons.forEach(control => { control.disabled = false; });
+          button.textContent = label;
+        } else dismiss();
+      } catch {
+        errorMessage.textContent = retry ? '目前无法打开登录页面；请重试，或选择继续使用。' : '目前无法恢复访客身份；请重试。';
+        errorMessage.hidden = false;
+        busy = false;
+        buttons.forEach(control => { control.disabled = false; });
+        button.textContent = label;
+        button.focus();
+      }
+    };
+    buttons[0].addEventListener('click', () => { void choose(true); });
+    buttons[1].addEventListener('click', () => { void choose(false); });
+    overlay.addEventListener('cancel', event => {
+      event.preventDefault();
+      void choose(false);
+    });
+    overlay.addEventListener('keydown', event => {
+      if (event.key === 'Escape') event.stopPropagation();
+      if (event.key !== 'Tab') return;
+      if (event.shiftKey && document.activeElement === buttons[0]) {
+        event.preventDefault(); buttons[1].focus();
+      } else if (!event.shiftKey && document.activeElement === buttons[1]) {
+        event.preventDefault(); buttons[0].focus();
+      }
+    });
+    document.body.appendChild(overlay);
+    overlay.showModal();
+    buttons[0].focus();
+    return dismiss;
+  }
+
   /**
    * 显示结构化的认证错误弹层。
    *

@@ -38,6 +38,25 @@ test('token failure stops reconnect and never silently claims a guest session', 
   manager.disconnect();
 });
 
+test('an auth close still reports expiry when its preceding error frame was lost', async () => {
+  const { manager, errors } = websocketHarness(async () => 'test-bearer');
+  await manager.connect('identity-test', 'Member');
+  manager.ws.close(4001);
+  assert.equal(errors.length, 1);
+  assert.equal(manager.shouldReconnect, false);
+  manager.disconnect();
+});
+
+test('the auth error frame and close together report only once', async () => {
+  const { manager, errors } = websocketHarness(async () => 'test-bearer');
+  await manager.connect('identity-test', 'Member');
+  const socket = manager.ws;
+  socket.message({ code: 'auth_invalid', error: 'expired' });
+  socket.close(4001);
+  assert.equal(errors.length, 1);
+  manager.disconnect();
+});
+
 test('authenticated handshake and revalidation wait for the server before sending', async () => {
   const { manager, fetches } = websocketHarness(async () => 'test-bearer');
   await manager.connect('identity-test', 'Guest nickname');

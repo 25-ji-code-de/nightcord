@@ -96,7 +96,12 @@ class ChatSessionProtocol {
 
   close(event) {
     this.reset();
-    if (event.code === 4001) this.connection.pauseAutoReconnect();
+    if (event.code === 4001) {
+      const notify = this.connection.shouldReconnect;
+      this.connection.pauseAutoReconnect();
+      // The preceding auth_invalid frame can be lost during a mobile network change.
+      if (notify) this.onAuthError(new Error('SEKAI Pass session expired'));
+    }
   }
 
   canSend() {

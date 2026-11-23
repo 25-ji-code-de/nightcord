@@ -70,6 +70,7 @@ const PRECACHE = [
   '/icons/task-tools.svg',
   '/icons/task-printer.svg',
   '/icons/task-recorder.svg',
+  '/icons/sekai-pass.svg',
   // index.html 中的脚本
   '/appearance.js',
   '/purify.js',

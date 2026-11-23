@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="logo-title">
+  <title id="logo-title">SEKAI Pass</title>
+
+  <!-- Source: sekai-pass/public/favicon.svg. Keep the original colors and proportions. -->
+  <rect width="512" height="512" rx="204.8" fill="#884499" />
+  <g fill="#ffffff">
+    <polygon points="86.32,184.34 178.64,184.34 130.76,331.05" />
+    <polygon points="257.72,145.31 358.57,234.09 163.26,350.06" />
+    <polygon points="186.67,373.98 351.48,297.99 365.62,407.47" />
+  </g>
+</svg>

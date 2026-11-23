@@ -4,6 +4,11 @@
 
 ## Key 格式
 
+- SEKAI Pass 会话提醒：
+  - Key: `nightcord-sekai-session`
+  - Value: `1` 表示用户尚未选择退出登录或以访客身份继续；仅用于在刷新页面后识别登录状态丢失，不作为身份凭据。
+  - 登录失效时保留标记并提示「重新登录 / 暂不登录，继续使用」。主动登出或选择继续后清除；同源标签页同步这一选择。
+
 - 侧边栏任务与收件箱已读状态：
   - Key: `nightcord-sidebar:<encodeURIComponent(roomname)>:<encodeURIComponent(userId)>`
   - 任务列表 `tasks`、待贴红单 `slips`、已读标记 `read`、最后使用的单号 `sequence` 和操作人 `operator` 保存在同一条记录里。删除或归档后，单号继续递增。

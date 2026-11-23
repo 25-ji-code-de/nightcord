@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Navigation destinations share the chat canvas, header and message rhythm. */
 .main.tool-view > :not(.sidebar-tools) { display: none !important; }
-body:has(.main.tool-view) :is(.mention-notice, .reply-notice) { top: auto; bottom: calc(20px + env(safe-area-inset-bottom)); }
+body:has(.main.tool-view) :is(.notice-card, .reply-notice) { top: auto; bottom: calc(20px + env(safe-area-inset-bottom)); }
 .sidebar-tools { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; color: rgb(var(--nc-text)); background: rgb(var(--nc-canvas)); font: inherit; }
 .sidebar-tools[hidden], .sidebar-tools [hidden], .navigation-badge[hidden] { display: none; }
 .tools-header { display: flex; flex: 0 0 48px; align-items: center; gap: 10px; box-sizing: border-box; padding: 0 24px; border-bottom: 1px solid rgb(var(--nc-divider)); background: rgb(var(--nc-header) / var(--nc-header-alpha)); }

@@ -24,15 +24,16 @@ class ChatNotifications {
    */
   showMentionNotice(data) {
     this.ui.alerts?.banner.dismiss();
-    const focusAction = this.mentionNotice?.contains(document.activeElement)
-      ? document.activeElement.className : null;
+    const focused = this.mentionNotice?.contains(document.activeElement);
+    const focusAction = document.activeElement.closest('.sekai-notice__close')
+      ? '.sekai-notice__close' : '.sekai-notice__open';
     this._dismiss('mention', false);
     const notice = this._buildNotice({ kind: 'mention', data });
     if (!notice) return;
     document.body.appendChild(notice);
     this.mentionNotice = notice;
     this.ui.mentionNotice = notice;
-    if (focusAction) notice.querySelector(`.${focusAction}`)?.focus({ preventScroll: true });
+    if (focused) notice.querySelector(focusAction)?.focus({ preventScroll: true });
   }
 
   /**
@@ -65,25 +66,24 @@ class ChatNotifications {
   }
 
   /**
-   * 组装一条提醒。两种提醒共用同一套结构，只是 CSS 把它们摆成卡片和胶囊。
+   * 提及使用与新消息相同的卡片，回复保留输入框上方的紧凑布局。
    * @private
    */
   _buildNotice({ kind, data }) {
     if (!data || typeof data !== 'object') return null;
     const name = String(data.name || '').trim();
     if (!name) return null;
+    if (kind === 'mention') return this._buildMentionCard(data, name);
 
     const profile = data.user || data.sender || null;
     const notice = document.createElement('div');
-    notice.className = `sekai-notice ${kind === 'mention' ? 'mention-notice' : 'reply-notice'}`;
+    notice.className = 'sekai-notice reply-notice';
     notice.setAttribute('role', 'status');
     notice.setAttribute('aria-live', 'polite');
     // 备注：role="status" 本身隐含 aria-live="polite"，这里写明是为了不被外层覆盖。
     notice.dataset.notice = kind;
     notice.returnFocus = document.activeElement;
 
-    const label = data.noticeLabel || (kind === 'mention' ? '提及' : '回复');
-    const verb = data.noticeLabel === '全体提及' ? '提及了所有人' : kind === 'mention' ? '提到了你' : '回复了你';
     const clock = this._clock(data.timestamp);
 
     const body = document.createElement('div');
@@ -91,13 +91,13 @@ class ChatNotifications {
 
     const meta = document.createElement('p');
     meta.className = 'sekai-notice__meta';
-    meta.textContent = clock ? `${label} · ${clock}` : label;
+    meta.textContent = clock ? `回复 · ${clock}` : '回复';
 
     const title = document.createElement('p');
     title.className = 'sekai-notice__title';
     const who = document.createElement('b');
     who.textContent = name;
-    title.append(who, document.createTextNode(` ${verb}`));
+    title.append(who, document.createTextNode(' 回复了你'));
 
     body.append(meta, title);
 
@@ -113,7 +113,7 @@ class ChatNotifications {
     open.type = 'button';
     open.className = 'sekai-notice__open';
     open.textContent = '查看';
-    open.setAttribute('aria-label', `查看 ${name} 的${kind === 'mention' ? '提及' : '回复'}消息`);
+    open.setAttribute('aria-label', `查看 ${name} 的回复消息`);
     open.addEventListener('click', () => {
       this._jumpTo(data.timestamp);
       this._dismiss(kind);
@@ -123,7 +123,7 @@ class ChatNotifications {
     close.type = 'button';
     close.className = 'sekai-notice__close';
     close.textContent = '×';
-    close.setAttribute('aria-label', kind === 'mention' ? '关闭提及提醒' : '关闭回复提醒');
+    close.setAttribute('aria-label', '关闭回复提醒');
     close.addEventListener('click', () => this._dismiss(kind));
     notice.addEventListener('keydown', event => {
       if (event.key !== 'Escape' || event.isComposing) return;
@@ -134,18 +134,46 @@ class ChatNotifications {
 
     notice.append(this._avatar(name, profile), body, open, close);
 
-    if (kind === 'reply') {
-      // 倒计时发丝线：让「会自己走掉」这件事有形状。
-      const bar = document.createElement('span');
-      bar.className = 'sekai-notice__bar';
-      const fill = document.createElement('i');
-      fill.style.animationDuration = `${ChatNotifications.REPLY_NOTICE_TTL}ms`;
-      bar.appendChild(fill);
-      bar.setAttribute('aria-hidden', 'true');
-      notice.append(bar);
-    }
+    // 倒计时发丝线：让「会自己走掉」这件事有形状。
+    const bar = document.createElement('span');
+    bar.className = 'sekai-notice__bar';
+    const fill = document.createElement('i');
+    fill.style.animationDuration = `${ChatNotifications.REPLY_NOTICE_TTL}ms`;
+    bar.appendChild(fill);
+    bar.setAttribute('aria-hidden', 'true');
+    notice.append(bar);
 
     return notice;
+  }
+
+  /** @private */
+  _buildMentionCard(data, name) {
+    const card = new NotificationCard({
+      className: 'sekai-notice mention-notice', prefix: 'sekai-notice__',
+      onOpen: () => { this._jumpTo(data.timestamp); this._dismiss('mention'); },
+      onClose: () => this._dismiss('mention'), closeLabel: '关闭提及提醒',
+    });
+    card.node.dataset.notice = 'mention';
+    card.node.returnFocus = document.activeElement;
+    card.node.setAttribute('role', 'status');
+    card.node.setAttribute('aria-live', 'polite');
+    card.kind.textContent = data.noticeLabel || '提及';
+    card.context.textContent = this.ui.elements.roomName?.textContent || this.ui.currentRoom || 'Nightcord';
+    const who = document.createElement('b');
+    who.textContent = name;
+    const verb = data.noticeLabel === '全体提及' ? '提及了所有人' : '提到了你';
+    card.title.append(who, document.createTextNode(` ${verb}`));
+    card.summary.classList.add('sekai-notice__preview');
+    card.summary.textContent = this._preview(data.message) || '发来了一条消息';
+    card.footer.textContent = `${NotificationCard.clock(data.timestamp)} · 查看消息`;
+    card.avatar.textContent = name.slice(0, 1);
+    this.ui.profileUI?.avatar(card.avatar, data.user || data.sender, card.avatar.textContent);
+    card.open.setAttribute('aria-label', `查看 ${name} 的提及消息`);
+    card.node.addEventListener('keydown', event => {
+      if (event.key !== 'Escape' || event.isComposing) return;
+      event.preventDefault(); event.stopPropagation(); this._dismiss('mention');
+    });
+    return card.node;
   }
 
   /**
@@ -312,9 +340,7 @@ class ChatNotifications {
 
   /** @private */
   _clock(timestamp) {
-    const date = new Date(Number(timestamp) || Date.now());
-    if (Number.isNaN(date.getTime())) return '';
-    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    return NotificationCard.clock(timestamp);
   }
 
   /**

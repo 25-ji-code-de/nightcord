@@ -1,4 +1,44 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+/** Shared presentation for message and mention cards; callers own their lifetime. */
+class NotificationCard {
+  constructor({ className, prefix, onOpen, onClose, closeLabel = '关闭提醒' }) {
+    const element = (tag, part) => {
+      const node = document.createElement(tag);
+      node.className = `notice-card__${part} ${prefix}${part}`;
+      return node;
+    };
+    this.node = document.createElement('section');
+    this.node.className = `notice-card ${className}`;
+    this.node.setAttribute('aria-label', '新提醒');
+    this.open = element('button', 'open');
+    this.open.type = 'button';
+    this.open.addEventListener('click', onOpen);
+    this.avatar = element('span', 'avatar');
+    this.avatar.setAttribute('aria-hidden', 'true');
+    this.body = element('span', 'body');
+    this.meta = element('span', 'meta');
+    this.kind = element('span', 'kind');
+    this.context = element('span', 'context');
+    this.meta.append(this.kind, this.context);
+    this.title = element('strong', 'title');
+    this.summary = element('span', 'summary');
+    this.footer = element('span', 'footer');
+    this.body.append(this.meta, this.title, this.summary, this.footer);
+    this.open.append(this.avatar, this.body);
+    this.close = element('button', 'close');
+    this.close.type = 'button';
+    this.close.setAttribute('aria-label', closeLabel);
+    this.close.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+    this.close.addEventListener('click', onClose);
+    this.node.append(this.open, this.close);
+  }
+
+  static clock(timestamp) {
+    const date = new Date(Number(timestamp) || Date.now());
+    return Number.isNaN(date.getTime()) ? '' : `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
+}
+
 /** A single, grouped heads-up card. It never moves keyboard focus on arrival. */
 class AlertBanner {
   constructor(alerts) { this.alerts = alerts; this.ui = alerts.ui; }
@@ -27,30 +67,19 @@ class AlertBanner {
     return (content || '发来了一条消息').slice(0, 150);
   }
   mount() {
-    this.node = this.element('section', 'chat-alert');
     this.returnFocus = document.activeElement;
-    this.node.setAttribute('aria-label', '新提醒');
-    const open = this.element('button', 'chat-alert-open'); open.type = 'button';
-    this.avatar = this.element('span', 'chat-alert-avatar'); this.avatar.setAttribute('aria-hidden', 'true');
-    const body = this.element('span', 'chat-alert-body');
-    this.meta = this.element('span', 'chat-alert-meta');
-    this.context = this.element('span', 'chat-alert-context');
-    this.kind = this.element('span', 'chat-alert-kind');
-    this.meta.append(this.context, this.kind);
-    this.title = this.element('strong', 'chat-alert-title');
-    this.summary = this.element('span', 'chat-alert-summary');
-    this.footer = this.element('span', 'chat-alert-footer');
-    body.append(this.meta, this.title, this.summary, this.footer);
-    open.append(this.avatar, body);
-    open.addEventListener('click', () => {
-      const message = this.message;
-      this.dismiss();
-      if (message) this.alerts.jump(message);
+    const card = new NotificationCard({
+      className: 'chat-alert', prefix: 'chat-alert-',
+      onOpen: () => {
+        const message = this.message;
+        this.dismiss();
+        if (message) this.alerts.jump(message);
+      },
+      onClose: () => this.dismiss(),
     });
-    const close = this.element('button', 'chat-alert-close', '×'); close.type = 'button';
-    close.setAttribute('aria-label', '关闭提醒'); close.addEventListener('click', () => this.dismiss());
+    Object.assign(this, card);
     this.live = this.element('span', 'chat-alert-live'); this.live.setAttribute('role', 'status'); this.live.setAttribute('aria-atomic', 'true');
-    this.node.append(open, close, this.live);
+    this.node.append(this.live);
     const pause = () => this.pause();
     this.node.addEventListener('pointerenter', () => { this.hover = true; pause(); });
     this.node.addEventListener('pointerleave', () => { this.hover = false; this.arm(); });
@@ -87,12 +116,13 @@ class AlertBanner {
     this.count = grouped ? this.count + 1 : 1;
     this.node.dataset.kind = kind;
     const room = this.ui.elements.roomName?.textContent || this.ui.currentRoom || 'Nightcord';
-    this.context.textContent = `Nightcord · ${room}`;
+    this.context.textContent = room;
     const labels = { message: '新消息', mention: '提到了你', reply: '回复了你', everyone: '全体提及', online: '上线动态', offline: '下线动态' };
     this.kind.textContent = labels[kind] || '动态';
     this.title.textContent = message?.user || text;
     this.summary.textContent = message ? this.preview(message) : '关注成员的新动态';
-    this.footer.textContent = this.count > 1 ? `${this.count} 条新提醒 · 查看最新一条` : message ? '现在 · 点按查看' : '现在';
+    const clock = NotificationCard.clock(message?.timestamp);
+    this.footer.textContent = this.count > 1 ? `${clock} · ${this.count} 条新提醒` : message ? `${clock} · 查看消息` : clock;
     this.avatar.textContent = message?.user?.slice(0, 1) || 'N';
     if (message?.profile) this.ui.profileUI?.avatar(this.avatar, message.profile, this.avatar.textContent);
     const announcement = `${this.title.textContent}，${this.kind.textContent}，${this.summary.textContent}${this.count > 1 ? `，共 ${this.count} 条` : ''}`;

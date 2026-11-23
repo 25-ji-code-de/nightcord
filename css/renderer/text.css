@@ -221,8 +221,9 @@
 /* --- Images --- */
 
 .sekai-image-container {
-  display: inline-block;
-  margin: 6px 0;
+  display: block;
+  width: fit-content;
+  margin: 8px 0;
   position: relative;
   overflow: hidden;
   border-radius: var(--sekai-radius-control);
@@ -271,11 +272,11 @@
 
 /* Image size classes - based on naturalWidth */
 .sekai-image-container.sekai-image-large {
-  max-width: 400px;
+  max-width: min(400px, 100%);
 }
 
 .sekai-image-container.sekai-image-small {
-  max-width: 200px;
+  max-width: min(200px, 100%);
 }
 
 .sekai-error-placeholder {

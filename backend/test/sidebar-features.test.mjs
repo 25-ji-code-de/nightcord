@@ -80,6 +80,65 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     await page.locator('#messages .message').first().waitFor();
   }
 
+  await t.test('system notices stay in chat without persisting or advancing history', async t => {
+    const { page } = await fixture(t);
+    const timestamp = 1700000012345;
+    const ready = () => page.evaluate(timestamp => ui.eventBus.emit('room:ready', {
+      roomname: 'sidebar-test', messages: [{ user: 'Reader', text: 'server message', timestamp }]
+    }), timestamp);
+    await ready();
+    await page.waitForFunction(() => document.querySelectorAll('#messages .message').length === 4);
+    assert.match(await page.locator('#messages').innerText(), /欢迎来到聊天室: sidebar-test/);
+    assert.equal(await page.evaluate(() => ui.storage.getLastMsgTimestamp('sidebar-test')), timestamp);
+    await page.evaluate(() => ui.eventBus.emit('message:notice', { message: 'command completed' }));
+    await page.locator('#messages').getByText('command completed', { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => ui.storage.loadMessages('sidebar-test').some(message => message.user === '系统')), false);
+    assert.equal(await page.evaluate(() => ui.storage.getLastMsgTimestamp('sidebar-test')), timestamp);
+    await ready();
+    await page.waitForFunction(() => document.querySelectorAll('#messages .message').length === 4);
+    assert.equal(await page.locator('#messages').getByText('欢迎来到聊天室: sidebar-test', { exact: true }).count(), 1);
+  });
+
+  await t.test('empty history and cached system notices cannot advance the room cursor', async t => {
+    const { page } = await fixture(t);
+    await page.evaluate(() => ui.eventBus.emit('room:ready', { roomname: 'sidebar-test' }));
+    await page.waitForFunction(() => document.querySelectorAll('#messages .message').length === 3);
+    assert.equal(await page.locator('#messages .message').count(), 3);
+    assert.equal(await page.evaluate(() => ui.storage.getLastMsgTimestamp('sidebar-test')), 0);
+    const timestamp = 1700000012345;
+    await page.evaluate(timestamp => {
+      ui.storage.saveMessages('sidebar-test', [
+        { user: 'Reader', text: 'cached message', timestamp },
+        { user: '系统', text: 'stale welcome', timestamp: timestamp + 10000 }
+      ]);
+      ui.eventBus.emit('room:ready', { roomname: 'sidebar-test' });
+    }, timestamp);
+    await page.locator('#messages').getByText('cached message', { exact: true }).waitFor();
+    assert.equal(await page.locator('#messages .message').count(), 4);
+    assert.equal(await page.locator('#messages').getByText('stale welcome', { exact: true }).count(), 0);
+    assert.equal(await page.evaluate(() => ui.storage.getLastMsgTimestamp('sidebar-test')), timestamp);
+    assert.equal(await page.locator('#messages .message').filter({ hasText: '警告:' }).locator('.bg-red-600').count(), 1);
+  });
+
+  await t.test('a navigation toggle outside the chat header opens the drawer and restores focus', async t => {
+    const { page } = await fixture(t, { viewport: { width: 375, height: 667 } });
+    await page.evaluate(() => ui.elements.main.prepend(document.querySelector('.sidebar-toggle')));
+    const toggle = page.locator('.sidebar-toggle');
+    await toggle.locator('svg').click();
+    assert.equal(await page.evaluate(() => ui.isNavigationDrawerOpen()), true);
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(await page.locator('.main').evaluate(node => node.inert), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => ui.isNavigationDrawerOpen()), false);
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    assert.equal(await toggle.evaluate(node => node === document.activeElement), true);
+    await toggle.press('Enter');
+    assert.equal(await page.evaluate(() => ui.isNavigationDrawerOpen()), true);
+    await page.locator('#navigation-members').click();
+    assert.equal(await toggle.evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator('.main').evaluate(node => node.inert), false);
+  });
+
   await t.test('search filters, safe previews, keyboard focus and original message jumps', async t => {
     const { page } = await fixture(t);
     await seed(page);

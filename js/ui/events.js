@@ -120,11 +120,12 @@ class ChatUIEvents {
       // 只保留非系统消息
       serverMsgs = serverMsgs.filter(m => m.user !== '系统');
       // 取本地消息中比服务器最早一条还早的部分
-      let localMsgs = (this.ui.storage ? this.ui.storage.loadMessages(room) : this.ui.loadLocalMessages(room)) || [];
+      let localMsgs = ((this.ui.storage ? this.ui.storage.loadMessages(room) : this.ui.loadLocalMessages(room)) || [])
+        .filter(m => m.user !== '系统');
       if (serverMsgs.length > 0 && localMsgs.length > 0) {
         const minServerTs = Math.min(...serverMsgs.map(m => m.timestamp));
         // 只取比服务器最早一条还早的本地消息
-        localMsgs = localMsgs.filter(m => m.timestamp < minServerTs && m.user !== '系统');
+        localMsgs = localMsgs.filter(m => m.timestamp < minServerTs);
       }
       // 合并：本地早期消息 + 服务器消息
       this.ui.messages = [...localMsgs, ...serverMsgs].map(m => {
@@ -141,15 +142,13 @@ class ChatUIEvents {
           sender: m.sender
         };
       });
-      // 欢迎消息（在渲染之前添加到 messages 数组）
-      this.ui.showWelcomeMessages(data);
-      // 渲染（包含欢迎消息）
-      this.ui.renderMessages();
-      // 记录最新消息时间戳 到 per-room lastmsg
+      // 先记录聊天历史的时间戳，避免欢迎提示推进同步游标。
       if (this.ui.messages.length > 0) {
         const lastTs = this.ui.messages[this.ui.messages.length - 1].timestamp;
         if (this.ui.storage) this.ui.storage.setLastMsgTimestamp(room, lastTs); else this.ui.setLastMsgTimestamp(room, lastTs);
       }
+      this.ui.showWelcomeMessages(data);
+      this.ui.renderMessages();
     });
     this.ui.eventBus.on('error', (data) => this.ui.showError(data.message));
     this.ui.eventBus.on('room:synced', () => { this.ui.mentionsReady = true; this.ui.setConnectionStatus(''); });

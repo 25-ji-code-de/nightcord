@@ -104,7 +104,7 @@ class ChatNavigation {
       if (e.target.closest('dialog')) return;
       if (sidebar.classList.contains('show')) {
         // 检查点击是否在侧边栏外部且不是头部按钮
-        if (!sidebar.contains(e.target) && !e.target.closest('.chat-header')) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.chat-header') && !e.target.closest(toggleSelector)) {
           close();
         }
       }

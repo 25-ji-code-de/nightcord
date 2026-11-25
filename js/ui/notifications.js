@@ -294,6 +294,7 @@ class ChatNotifications {
       || this.ui.messageIndex?.get(timestamp);
     if (!message?.scrollIntoView) return false;
     this.ui.sidebarFeatures?.close(false);
+    this.ui.directMessageView?.close(false);
     message.scrollIntoView({ block: 'center' });
     message.classList.remove('message-highlighted');
     void message.offsetWidth;

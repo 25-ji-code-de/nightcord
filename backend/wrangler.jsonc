@@ -8,6 +8,10 @@
   "workers_dev": true,
   "preview_urls": false,
   "vars": {
+    "DM_MODE": "on",
+    "DM_MAX_BYTES": "52428800",
+    "DM_REQUESTS_HOUR": "10",
+    "DM_REQUESTS_DAY": "30",
     "VOICE_MODE": "on",
     "VOICE_ALLOWED_ROOMS": "nightcord-test,nightcord-default",
     "VOICE_REQUIRE_PASS": "true",
@@ -24,6 +28,8 @@
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "ChatRoom" },
+      { "name": "DM_ROOMS", "class_name": "DirectRoom" },
+      { "name": "DM_INBOXES", "class_name": "UserInbox" },
       { "name": "VOICE_ROOMS", "class_name": "VoiceRoom" },
       { "name": "VOICE_QUOTAS", "class_name": "VoiceQuota" },
       { "name": "LIMITERS", "class_name": "RateLimiter" }
@@ -32,7 +38,8 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ChatRoom", "RateLimiter"] },
     { "tag": "v2-voice", "new_sqlite_classes": ["VoiceRoom"] },
-    { "tag": "v3-voice-quota", "new_sqlite_classes": ["VoiceQuota"] }
+    { "tag": "v3-voice-quota", "new_sqlite_classes": ["VoiceQuota"] },
+    { "tag": "v4-direct-messages", "new_sqlite_classes": ["DirectRoom", "UserInbox"] }
   ],
   "observability": {
     "enabled": true,

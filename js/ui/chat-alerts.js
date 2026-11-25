@@ -41,7 +41,8 @@ class ChatAlerts {
   }
   viewing() {
     return !document.hidden && document.hasFocus() && this.ui.isAtBottom
-      && !this.ui.elements.main?.classList.contains('tool-view') && !document.querySelector('dialog[open]');
+      && !this.ui.elements.main?.classList.contains('tool-view')
+      && !this.ui.elements.main?.classList.contains('dm-view') && !document.querySelector('dialog[open]');
   }
   reasons(message, lookup) {
     return this.classifier.classify(message, this.ui.currentUser,
@@ -153,6 +154,7 @@ class ChatAlerts {
   }
   jump(message) {
     this.ui.sidebarFeatures?.close(false);
+    this.ui.directMessageView?.close(false);
     const target = this.ui.messageIndex.get(Number(message.timestamp));
     if (!target) { this.ui.sidebarFeatures?.open('inbox'); return; }
     if (this.ui.sidebarFeatures && this.reasons(message).some(kind => kind !== 'message')) {
@@ -167,6 +169,7 @@ class ChatAlerts {
       this.unreadButton.className = 'chat-unread';
       this.unreadButton.addEventListener('click', () => {
         this.ui.sidebarFeatures?.close(false);
+        this.ui.directMessageView?.close(false);
         const log = this.ui.elements.chatlog;
         log.scrollTop = log.scrollHeight; this.ui.isAtBottom = true; this.unread = 0;
         this.renderUnread(); this.delivery.announce(); this.ui.elements.chatInput?.focus();

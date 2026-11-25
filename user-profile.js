@@ -241,6 +241,9 @@
           }, 'profile-action--quiet'),
         );
       }
+      if (!own && profile.authenticated && this.ui.currentUser?.authenticated && this.ui.directMessages?.mode !== 'off' && this.ui.directMessageView) {
+        actions.appendChild(action('发私信', 'chevron', () => this.ui.directMessageView.start(profile), 'profile-action--primary'));
+      }
       if (!own) this.ui.alerts?.view.profile(profile, actions);
       if (actions.childElementCount) dialog.appendChild(actions);
       dialog.addEventListener('cancel', event => { event.preventDefault(); void dismiss(); });

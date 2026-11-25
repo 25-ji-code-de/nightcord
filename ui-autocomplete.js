@@ -26,11 +26,12 @@
     get mentionView() { return this._mentionView ||= new AutocompleteMentions(this); }
     get pickerView() { return this._pickerView ||= new AutocompletePicker(this); }
 
-    constructor({ input, list, atButton, stickerButton, getAllUsers, getStickers, getEmojis, formatMention, renderAvatar, onError } = {}) {
+    constructor({ input, list, atButton, stickerButton, pickerButtons = {}, getAllUsers, getStickers, getEmojis, formatMention, renderAvatar, onError } = {}) {
       this.input = input;
       this.list = list;
       this.atButton = atButton;
       this.stickerButton = stickerButton;
+      this.pickerButtons = pickerButtons;
       this.getAllUsers = getAllUsers || (() => []);
       this.getStickers = getStickers || (() => []);
       this.getEmojis = getEmojis || (() => []);
@@ -49,30 +50,43 @@
     init() {
       if (!this.input || !this.list) return;
 
-      this.input.addEventListener('input', (e) => this.handleInput(e));
-      this.input.addEventListener('keydown', (e) => this.handleNav(e));
+      this.listeners = new AbortController();
+      const options = { signal: this.listeners.signal };
+      this.input.addEventListener('input', (e) => this.handleInput(e), options);
+      this.input.addEventListener('keydown', (e) => this.handleNav(e), options);
 
       document.addEventListener('click', (e) => {
-        if (!this.list.contains(e.target) && e.target !== this.input && !this.stickerButton?.contains(e.target)) {
+        if (!this.list.contains(e.target) && e.target !== this.input && !this.stickerButton?.contains(e.target)
+            && !Object.values(this.pickerButtons).some(button => button.contains(e.target))) {
           this.hideList();
         }
-      }, true);
+      }, { ...options, capture: true });
 
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && !e.isComposing && this.isOpen() &&
-            (this.list.contains(e.target) || this.stickerButton?.contains(e.target))) {
+            (this.list.contains(e.target) || this.stickerButton?.contains(e.target)
+              || Object.values(this.pickerButtons).some(button => button.contains(e.target)))) {
           e.preventDefault();
           this.hideList();
-          (this.autocompleteType === 'sticker' ? this.stickerButton : this.input)?.focus();
+          (this.pickerButtons[this.autocompleteType] || (this.autocompleteType === 'sticker' ? this.stickerButton : this.input))?.focus();
         }
-      });
+      }, options);
+
+      for (const [type, button] of Object.entries(this.pickerButtons)) {
+        button.setAttribute('aria-controls', this.list.id);
+        button.setAttribute('aria-expanded', 'false');
+        button.addEventListener('click', () => {
+          if (this.isOpen(type)) { this.hideList(); this.input.focus(); }
+          else this.openPicker(type);
+        }, options);
+      }
 
       if (this.atButton) {
         this.atButton.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
           this.insertAtSymbol();
-        });
+        }, options);
       }
     }
 
@@ -83,6 +97,16 @@
     syncExpanded() {
       this.atButton?.setAttribute('aria-expanded', String(this.isOpen('mention')));
       this.stickerButton?.setAttribute('aria-expanded', String(this.isOpen('sticker') || this.isOpen('emoji')));
+      for (const [type, button] of Object.entries(this.pickerButtons)) button.setAttribute('aria-expanded', String(this.isOpen(type)));
+    }
+
+    /** Open the existing picker without changing the draft until an item is chosen. */
+    openPicker(type) {
+      this.hideList();
+      this.autocompleteType = type;
+      this.pickerSelection = { start: this.input.selectionStart, end: this.input.selectionEnd };
+      this.showList('');
+      if (this.isOpen()) this.list.querySelector('.picker-category.active')?.focus({ preventScroll: true });
     }
 
     insertAtSymbol() {
@@ -111,6 +135,7 @@
       const targetInput = e.target || this.input;
       const text = targetInput.value;
       const cursor = targetInput.selectionStart;
+      this.pickerSelection = null;
       if (this.pendingStickerPair && text !== this.pendingStickerPair.value) {
         this.pendingStickerPair = null;
       }
@@ -246,6 +271,7 @@
 
     hideList() {
       if (!this.list) return;
+      this.pickerSelection = null;
       const pair = this.pendingStickerPair;
       this.pendingStickerPair = null;
       if (pair && this.input.value === pair.value) {
@@ -288,42 +314,58 @@
     completeSticker(code) {
       const input = this.input;
       if (!input) return;
+      if (this.pickerSelection) {
+        this.insertPickerToken(`[${code}]`, this.pickerSelection.start, this.pickerSelection.end);
+        return;
+      }
 
       const text = input.value;
       const cursor = input.selectionStart;
       const lastBracket = text.lastIndexOf('[', cursor - 1);
+      if (lastBracket < 0) return;
 
       let afterCursor = text.substring(cursor);
       if (afterCursor.startsWith(']')) {
         afterCursor = afterCursor.substring(1);
       }
 
-      const before = text.substring(0, lastBracket);
-      input.value = `${before}[${code}]${afterCursor}`;
-      this.hideList();
-      input.focus();
-
-      const newPos = lastBracket + code.length + 2;
-      input.setSelectionRange(newPos, newPos);
+      this.insertPickerToken(`[${code}]`, lastBracket, text.length - afterCursor.length);
     }
 
     completeEmoji(shortcode) {
       const input = this.input;
       if (!input) return;
+      if (this.pickerSelection) {
+        this.insertPickerToken(`:${shortcode}:`, this.pickerSelection.start, this.pickerSelection.end);
+        return;
+      }
 
       const text = input.value;
       const cursor = input.selectionStart;
       let afterCursor = text.substring(cursor);
       if (afterCursor.startsWith(':')) afterCursor = afterCursor.substring(1);
 
-      const before = text.substring(0, this.autocompleteStart);
-      input.value = `${before}:${shortcode}:${afterCursor}`;
+      this.insertPickerToken(`:${shortcode}:`, this.autocompleteStart, text.length - afterCursor.length);
+    }
+
+    insertPickerToken(token, start, end) {
+      const input = this.input;
+      const value = input.value.slice(0, start) + token + input.value.slice(end);
+      if (input.maxLength > 0 && value.length > input.maxLength) {
+        this.onError('消息剩余空间不足，请缩短内容后再添加表情或贴纸。');
+        return;
+      }
+      input.value = value;
       this.hideList();
       input.focus();
-
-      const newPos = this.autocompleteStart + shortcode.length + 2;
+      const newPos = start + token.length;
       input.setSelectionRange(newPos, newPos);
       input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    destroy() {
+      this.listeners?.abort();
+      this.hideList();
     }
   }
 

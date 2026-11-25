@@ -27,6 +27,14 @@ participants after 120 cumulative daily minutes without interrupting the call.
 The `v3-voice-quota`
 migration adds its binding. These time limits do not constitute a billing cap.
 
+Private messages use separate SQLite `DirectRoom` and `UserInbox` objects, added
+by migration `v4-direct-messages`. `DM_MODE=on` enables them, `read-only` preserves
+history and personal read/hide/refusal controls while stopping new conversations,
+messages and request decisions; `off` disables access without deleting data.
+An absent or unrecognized mode defaults to off. The checked-in configuration is
+on. See [private messaging](../docs/DIRECT_MESSAGES.md) for the API, limits,
+storage behavior and local verification.
+
 ## Development and deployment
 
 ```sh
@@ -67,7 +75,7 @@ the production site instead. The production pair uses `SameSite=Lax`. Unrelated
 Pages/Workers preview domains are not interchangeable with the production pair.
 
 The `SEKAI_PASS` service binding must target the deployed
-`sekai-pass` Worker in the same account. Both DO classes use SQLite and support the Workers Free plan.
+`sekai-pass` Worker in the same account. The DO classes use SQLite and support the Workers Free plan.
 `wrangler types` generates the ignored `worker-configuration.d.ts` file.
 
 The frontend is built with `node scripts/build-pages.mjs` from the repository

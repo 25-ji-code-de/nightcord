@@ -246,11 +246,14 @@ test('appearance settings independently apply palettes and member styles, preser
     assert.equal(await soundTab.getAttribute('aria-selected'), 'true', 'reopening remembers the selected category');
     assert.equal(await soundTab.evaluate(node => node === document.activeElement), true);
     await page.setViewportSize({ width: 375, height: 812 });
+    // setViewportSize resolves before the matchMedia change handler updates the dialog.
+    await dialog.locator('.settings-sidebar').waitFor({ state: 'hidden' });
     assert.equal(await dialog.locator('.settings-sidebar').isVisible(), false);
     assert.equal(await dialog.locator('.settings-page[hidden]').count(), 0);
     assert.equal(await page.locator('.settings-close').evaluate(node => node === document.activeElement), true);
     await plumOrchid.focus();
     await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForFunction(() => document.querySelector('.settings-tab[aria-selected="true"]') === document.activeElement);
     assert.equal(await soundTab.evaluate(node => node === document.activeElement), true, 'resizing moves focus out of the hidden page');
     assert.equal(await page.getByRole('tabpanel').count(), 1);
     await appearanceTab.click();

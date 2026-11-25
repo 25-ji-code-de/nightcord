@@ -142,6 +142,7 @@
 
     open(kind) {
       if (!TITLES[kind]) return;
+      this.ui.directMessageView?.close(false);
       this.ensurePanel();
       this.ui.closeMentionPicker({ restoreFocus: false });
       this.returnFocus = document.activeElement;

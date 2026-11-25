@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname.replace(/^\/(.:)/, '$1');
+const root = fileURLToPath(new URL('..', import.meta.url));
 const read = (path) => readFileSync(join(root, path), 'utf8');
 
 describe('SEKAI Design chat components', () => {

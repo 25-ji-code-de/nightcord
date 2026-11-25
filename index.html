@@ -48,6 +48,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
   <link rel="stylesheet" href="/css/appearance.css">
   <link rel="stylesheet" href="/css/settings.css">
   <link rel="stylesheet" href="/css/sidebar-tools.css">
+  <link rel="stylesheet" href="/css/direct-messages.css">
   <link rel="stylesheet" href="/css/task-station.css">
   <link rel="stylesheet" href="/css/ios-layout.css">
 </head>
@@ -110,7 +111,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="search"><circle cx="13.5" cy="13.5" r="11.2"/><path d="m21.65 21.65 7.05 7.05"/></svg>
             <span class="navigation-tooltip" aria-hidden="true">搜索</span>
           </button>
-          <button type="button" class="navigation-item" aria-label="私信（暂未开放）" disabled>
+          <button type="button" class="navigation-item" id="navigation-dm" aria-label="私信（暂未开放）" aria-controls="direct-messages" disabled>
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="plane"><path d="m2.8 2.8 26.4 8.8-11 6.6-6.6 11Z"/><path d="m2.8 2.8 15.4 15.4"/></svg>
             <span class="navigation-tooltip" aria-hidden="true">私信（暂未开放）</span>
           </button>
@@ -759,6 +760,8 @@ document.addEventListener('DOMContentLoaded', () => {
   <script src="/js/app/identity.js"></script>
   <script src="/js/services/ai-conversation.js"></script>
   <script src="/js/ui/voice-sounds.js"></script>
+  <script src="/js/services/direct-messages.js"></script>
+  <script src="/js/ui/direct-messages.js"></script>
   <script src="/nightcord.js"></script>
   <script src="/boot.js"></script>
   <script src="/pangu.js"></script>

@@ -8,7 +8,7 @@ export function createRuntime(state = {}, options = {}) {
     ...(options.inspectDurableObjects ? { unsafeInspectDurableObjects: true } : {}),
     ...(options.persistencePath ? { resourcePersistencePath: options.persistencePath } : {}),
     workers: [{
-      name: 'nightcord-chat', modules: true, scriptPath: 'dist/chat.js',
+      name: 'nightcord-chat', modules: true, ...(options.script ? { script: options.script } : { scriptPath: 'dist/chat.js' }),
       compatibilityDate: '2026-11-04', compatibilityFlags: ['nodejs_compat'],
       bindings: {
         GUEST_SIGNING_KEY: 'ab'.repeat(32),
@@ -17,12 +17,15 @@ export function createRuntime(state = {}, options = {}) {
       },
       durableObjects: {
         ROOMS: { className: 'ChatRoom', useSQLite: true },
+        DM_ROOMS: { className: 'DirectRoom', useSQLite: true },
+        DM_INBOXES: { className: 'UserInbox', useSQLite: true },
         LIMITERS: { className: 'RateLimiter', useSQLite: true },
         VOICE_ROOMS: { className: 'VoiceRoom', useSQLite: true },
         VOICE_QUOTAS: { className: 'VoiceQuota', useSQLite: true },
       },
       ...(options.outboundService ? { outboundService: options.outboundService } : {}),
       serviceBindings: { SEKAI_PASS: async request => {
+        state.passCalls = (state.passCalls || 0) + 1;
         assert.equal(new URL(request.url).pathname, '/oauth/userinfo');
         const identity = options.identities?.[request.headers.get('Authorization')];
         if ((!identity && request.headers.get('Authorization') !== 'Bearer local-test-token') || state.revoked) {
@@ -32,6 +35,7 @@ export function createRuntime(state = {}, options = {}) {
           sub: identity || 'stable-subject', preferred_username: 'unique-handle',
           name: state.name || 'Shared name', picture: 'https://example.com/avatar.png',
           bio: '<img onerror=alert(1)> signature',
+          ...options.profiles?.[identity],
         });
       } },
     }],

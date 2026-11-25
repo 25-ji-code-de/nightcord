@@ -56,6 +56,13 @@ class Nightcord {
     });
     this.sidebarFeatures = new SidebarFeatures(this.ui);
     this.ui.sidebarFeatures = this.sidebarFeatures;
+    this.directMessages = new DirectMessageManager({
+      eventBus: this.eventBus, hostname: config.hostname,
+      getAccessToken: () => this.identity.getAccessToken()
+    });
+    this.directMessageView = new DirectMessageView(this.ui, this.directMessages);
+    this.ui.directMessages = this.directMessages;
+    this.ui.directMessageView = this.directMessageView;
     this.voice = new VoiceManager({ eventBus: this.eventBus, chatRoom: this.chatRoom });
     this.voiceUI = new VoiceUI(this.voice, this.eventBus);
 
@@ -203,6 +210,8 @@ class Nightcord {
    * 销毁应用实例
    */
   destroy() {
+    this.directMessageView.destroy();
+    this.directMessages.destroy();
     this.identity.destroy();
     this.voiceSounds.destroy();
     this.ui.alerts.destroy();

@@ -9,10 +9,11 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import vm from 'node:vm';
 import { inflateSync } from 'node:zlib';
+import { fileURLToPath } from 'node:url';
 
 import { generateAll } from '../scripts/generate-icons.mjs';
 
-const root = new URL('..', import.meta.url).pathname.replace(/^\/(.:)/, '$1');
+const root = fileURLToPath(new URL('..', import.meta.url));
 const read = (path) => readFileSync(join(root, path), 'utf8');
 
 /** 从 sw.js 中取出 PRECACHE；handler 里的 caches/fetch 不会被执行。 */

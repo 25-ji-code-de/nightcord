@@ -33,6 +33,9 @@
 const CACHE_NAME = 'nightcord-v1';
 
 const PRECACHE = [
+  '/css/direct-messages.css',
+  '/js/services/direct-messages.js',
+  '/js/ui/direct-messages.js',
   '/',
   '/manifest.json',
   // index.html 中的样式表

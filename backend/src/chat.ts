@@ -8,8 +8,11 @@ import { AUTH_LEASE_MS, guestProfile, ISSUER, profileFromUserInfo, type Profile 
 import { allowedOrigin, corsHeaders, guestSession, verifyGuest, type ChatEnv, type GuestIdentity } from './guest';
 import { isMobileRequest } from './device';
 import { configuration, readJson, record, VoiceError } from './voice/protocol';
+import { dmRoute } from './dm/routes';
 export { VoiceRoom } from './voice/room';
 export { VoiceQuota } from './voice/quota';
+export { DirectRoom } from './dm/room';
+export { UserInbox } from './dm/inbox';
 
 const HISTORY_LIMIT = 100;
 const STORED_MESSAGE_LIMIT = 1000;
@@ -46,6 +49,7 @@ export default {
     }
     const origin = allowedOrigin(request, env);
     if (!origin) return response('Origin is not allowed', 403);
+    if (url.pathname.startsWith('/api/dm/')) return dmRoute(request, env, origin);
     const voiceRoute = /^\/api\/room\/([a-z0-9-]{1,32}|[0-9a-f]{64})\/voice\/([a-z/]+)$/.exec(url.pathname);
     if (voiceRoute) {
       const headers = { ...corsHeaders(origin), 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' };
@@ -93,6 +97,12 @@ export default {
 } satisfies ExportedHandler<ChatEnv>;
 
 export class ChatRoom extends DurableObject<ChatEnv> {
+  directPeer(actorId: string, peerId: string): Profile | null {
+    const rows = this.ctx.storage.sql.exec<{ id: string; profile: string }>('SELECT id,profile FROM room_members WHERE id IN (?,?)', actorId, peerId).toArray();
+    if (rows.length !== 2) return null;
+    const peer = rows.find(row => row.id === peerId);
+    return peer ? JSON.parse(peer.profile) : null;
+  }
   constructor(ctx: DurableObjectState, env: ChatEnv) {
     super(ctx, env);
     this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS messages (

@@ -78,6 +78,17 @@ test('resuming a phone detects missing credentials without a message or automati
   assert.equal(calls.at(-1), 'login', 'only an explicit choice starts OAuth');
 });
 
+test('explicit logout clears the account without waiting for push cleanup to reach the network', async () => {
+  const { app, browser, calls } = fixture();
+  let finish;
+  browser.NightcordPWA = { logout: () => new Promise(resolve => { finish = resolve; }) };
+  const loggingOut = app.ui.onLogout();
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(app.sekaiPassAuth.signedIn, false);
+  assert.ok(calls.includes('leave')); assert.ok(calls.includes('unavailable'));
+  finish(); await loggingOut;
+});
+
 test('the foreground timer checks tokens and server revocation while the user only reads', async () => {
   const { identity, app, calls, prompts, timers } = fixture();
   app.chatRoom.refreshAuthentication = async () => { calls.push('validate'); app.eventBus.emit('auth:required'); };

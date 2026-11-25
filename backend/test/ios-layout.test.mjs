@@ -83,9 +83,12 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
     await rounded.check();
     await toggle.focus();
     await page.keyboard.press('Tab');
+    assert.equal(await page.locator('#pwa-storage').evaluate(node => node === document.activeElement), true);
+    await page.locator('#pwa-update').focus();
+    await page.keyboard.press('Tab');
     assert.equal(await page.locator('.settings-close').evaluate(node => node === document.activeElement), true);
     await page.keyboard.press('Shift+Tab');
-    assert.equal(await toggle.evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator('#pwa-update').evaluate(node => node === document.activeElement), true);
     const second = await context.newPage();
     await second.goto(origin);
     assert.equal(await second.locator('html').getAttribute('data-ios-layout'), 'on');

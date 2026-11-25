@@ -47,6 +47,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
   <link rel="stylesheet" href="/css/voice.css">
   <link rel="stylesheet" href="/css/appearance.css">
   <link rel="stylesheet" href="/css/settings.css">
+  <link rel="stylesheet" href="/css/pwa.css">
   <link rel="stylesheet" href="/css/sidebar-tools.css">
   <link rel="stylesheet" href="/css/direct-messages.css">
   <link rel="stylesheet" href="/css/task-station.css">
@@ -589,6 +590,10 @@ document.addEventListener('DOMContentLoaded', () => {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
         <span>消息提醒</span>
       </button>
+      <button type="button" class="settings-tab" id="settings-tab-pwa" role="tab" aria-controls="settings-pwa" aria-selected="false" tabindex="-1" data-settings-page="pwa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/></svg>
+        <span>应用与推送通知</span>
+      </button>
       <button type="button" class="settings-tab" id="settings-tab-presence" role="tab" aria-controls="settings-presence" aria-selected="false" tabindex="-1" data-settings-page="presence">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 4v2"/></svg>
         <span>成员动态与关注</span>
@@ -684,6 +689,26 @@ document.addEventListener('DOMContentLoaded', () => {
         <h2 class="settings-page-title">成员动态与关注</h2>
         <p class="settings-description">进入聊天室后即可设置成员动态与关注。</p>
       </section>
+      <section class="settings-page" id="settings-pwa" aria-label="应用与推送通知">
+        <h2 class="settings-page-title">应用与推送通知</h2>
+        <section class="pwa-section">
+          <h3>安装 Nightcord</h3>
+          <p class="settings-description" id="pwa-install-description">您可以将 Nightcord 添加到主屏幕或桌面，以便在独立窗口中打开它。</p>
+          <div class="pwa-actions"><button type="button" id="pwa-install" hidden>安装应用</button></div>
+        </section>
+        <section class="pwa-section">
+          <h3>私信后台推送通知</h3>
+          <p class="settings-description">即使关闭页面，也能收到私信提醒。通知中不会显示发送者姓名或消息内容。此设置仅适用于当前账户和设备，且与聊天内的通知设置相互独立。</p>
+          <p class="settings-description" id="pwa-push-description">正在检查是否支持推送通知……</p>
+          <div class="pwa-actions"><button type="button" id="pwa-push-enable" disabled>启用推送通知</button><button type="button" id="pwa-push-pause" hidden>暂停一小时</button></div>
+        </section>
+        <section class="pwa-section">
+          <h3>离线模式与存储</h3>
+          <p class="settings-description" id="pwa-storage-description">在离线状态下，仍可访问已缓存的界面，不过，实时聊天和私信功能需要连接互联网。私信内容不会存储在离线缓存中。</p>
+          <div class="pwa-actions"><button type="button" id="pwa-storage">保护本地数据</button><button type="button" id="pwa-update">检查更新</button></div>
+        </section>
+        <p class="settings-description pwa-status" id="pwa-status" role="status" aria-live="polite"></p>
+      </section>
     </div>
     <footer class="settings-footer"><p id="palette-status" role="status">选择后立即生效，自动保存在此浏览器。</p></footer>
   </dialog>
@@ -765,6 +790,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <script src="/nightcord.js"></script>
   <script src="/boot.js"></script>
   <script src="/pangu.js"></script>
+  <script src="/js/services/push-notifications.js"></script>
   <script src="/pwa.js"></script>
   <script src="/version-checker.js"></script>
 </body>

@@ -20,6 +20,7 @@ class IdentityController {
     this.app.ui.sekaiPassLoginCallback = () => this.app.sekaiPassAuth.login();
     this.app.ui.onRefreshProfile = () => this.app.chatRoom.refreshAuthentication();
     this.app.ui.onLogout = async () => {
+      void window.NightcordPWA?.logout();
       this.resetSession(false);
       this.app.chatRoom.leave();
       this.app.ui.setSessionUnavailable();
@@ -156,6 +157,7 @@ class IdentityController {
   handleAuthExpired(notice) {
     if (this.destroyed || this.authExpired || !this.sessionExpected) return;
     this.authExpired = true;
+    void window.NightcordPWA?.logout();
     this.app.chatRoom.wsManager.pauseAutoReconnect();
     this.app.chatRoom.leave();
     this.app.chatRoom.currentUser = null;

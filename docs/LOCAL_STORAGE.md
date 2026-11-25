@@ -4,6 +4,11 @@
 
 ## Key 格式
 
+- 私信后台推送：
+  - localStorage Key: `nightcord-push-device`，仅保存当前设备订阅所属账号 `ownerId`、VAPID 公钥和 `pausedUntil`。不保存访问令牌或消息正文。
+  - Service Worker 的 `nightcord-device` Cache 保存相同账号、暂停时间和 90 天有效期，用于过滤不属于当前账号的通知。退出登录会清除状态并撤销浏览器订阅；同步到服务端失败时，失效端点会在后续投递中清理。
+  - sessionStorage Key: `nightcord-push-destination`，暂存通知对应的会话 ID，供 OAuth 返回并完成私信同步后打开；打开后删除。
+
 - SEKAI Pass 会话提醒：
   - Key: `nightcord-sekai-session`
   - Value: `1` 表示用户尚未选择退出登录或以访客身份继续；仅用于在刷新页面后识别登录状态丢失，不作为身份凭据。

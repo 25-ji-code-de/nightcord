@@ -9,6 +9,7 @@ import { allowedOrigin, corsHeaders, guestSession, verifyGuest, type ChatEnv, ty
 import { isMobileRequest } from './device';
 import { configuration, readJson, record, VoiceError } from './voice/protocol';
 import { dmRoute } from './dm/routes';
+import { pushRoute } from './push';
 export { VoiceRoom } from './voice/room';
 export { VoiceQuota } from './voice/quota';
 export { DirectRoom } from './dm/room';
@@ -49,6 +50,7 @@ export default {
     }
     const origin = allowedOrigin(request, env);
     if (!origin) return response('Origin is not allowed', 403);
+    if (url.pathname.startsWith('/api/push/')) return pushRoute(request, env, origin);
     if (url.pathname.startsWith('/api/dm/')) return dmRoute(request, env, origin);
     const voiceRoute = /^\/api\/room\/([a-z0-9-]{1,32}|[0-9a-f]{64})\/voice\/([a-z/]+)$/.exec(url.pathname);
     if (voiceRoute) {

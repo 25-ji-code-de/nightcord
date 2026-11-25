@@ -31,6 +31,8 @@
 'use strict';
 
 const CACHE_NAME = 'nightcord-v1';
+const DEVICE_CACHE = 'nightcord-device';
+const DEVICE_STATE = '/__nightcord_push_state__';
 
 const PRECACHE = [
   '/css/direct-messages.css',
@@ -151,6 +153,8 @@ const PRECACHE = [
   '/boot.js',
   '/pangu.js',
   '/pwa.js',
+  '/js/services/push-notifications.js',
+  '/css/pwa.css',
   '/version-checker.js',
   // 图标与 favicon
   '/icons/nightcord-logotype.svg',
@@ -159,6 +163,7 @@ const PRECACHE = [
   '/icons/favicon-32.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/icons/icon-maskable-512.png',
   '/icons/apple-touch-icon.png',
 ];
 
@@ -227,7 +232,7 @@ self.addEventListener('activate', (event) => {
       const names = await caches.keys();
       await Promise.all(
         names
-          .filter((name) => name.startsWith('nightcord-') && name !== CACHE_NAME)
+          .filter((name) => name.startsWith('nightcord-') && name !== CACHE_NAME && name !== DEVICE_CACHE)
           .map((name) => caches.delete(name)),
       );
       await self.clients.claim();
@@ -240,6 +245,69 @@ self.addEventListener('message', (event) => {
   if (data && data.type === 'SKIP_WAITING') {
     event.waitUntil(self.skipWaiting());
   }
+  if (data?.type === 'PUSH_STATE' && event.source?.url && new URL(event.source.url).origin === self.location.origin) {
+    event.waitUntil((async () => {
+      try {
+        const cache = await caches.open(DEVICE_CACHE);
+        const state = data.state;
+        if (state && typeof state.ownerId === 'string' && state.ownerId.startsWith('sekai:')) {
+          await cache.put(DEVICE_STATE, new Response(JSON.stringify({ ownerId: state.ownerId, pausedUntil: state.pausedUntil || 0, expiresAt: Date.now() + 90 * 86400000 }), { headers: { 'Content-Type': 'application/json' } }));
+        } else {
+          await cache.delete(DEVICE_STATE);
+          for (const notification of await self.registration.getNotifications()) notification.close();
+          await self.navigator?.clearAppBadge?.();
+        }
+        event.ports?.[0]?.postMessage({ ok: true });
+      } catch { event.ports?.[0]?.postMessage({ ok: false }); }
+    })());
+  }
+});
+
+self.addEventListener('push', event => {
+  event.waitUntil((async () => {
+    let payload;
+    try { payload = event.data?.json(); } catch { return; }
+    if (payload?.type !== 'dm' || !/^[a-f0-9]{64}$/.test(payload.conversation)) return;
+    const state = await (await (await caches.open(DEVICE_CACHE)).match(DEVICE_STATE))?.json();
+    if (!state || state.ownerId !== payload.ownerId || state.pausedUntil > Date.now() || state.expiresAt <= Date.now()) return;
+    // userVisibleOnly requires a notification even when a window is focused;
+    // silently consuming pushes can revoke the subscription on Safari.
+    await self.registration.showNotification('Nightcord', {
+      body: '您有新的私信，请打开 Nightcord 查看。', icon: '/icons/icon-192.png',
+      tag: 'dm:' + payload.conversation, renotify: false,
+      data: { ownerId: payload.ownerId, conversation: payload.conversation },
+    });
+    try { await self.navigator?.setAppBadge?.(); } catch { /* Optional API. */ }
+  })());
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const data = event.notification.data;
+    if (!data || !/^[a-f0-9]{64}$/.test(data.conversation)) return;
+    const state = await (await (await caches.open(DEVICE_CACHE)).match(DEVICE_STATE))?.json();
+    if (state?.ownerId !== data.ownerId || state.expiresAt <= Date.now()) return;
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const client = windows.find(window => {
+      const url = new URL(window.url);
+      return url.origin === self.location.origin && ['/', '/index.html'].includes(url.pathname);
+    });
+    if (client) {
+      await client.focus();
+      const received = await new Promise(resolve => {
+        const channel = new MessageChannel();
+        const finish = ok => { clearTimeout(timer); channel.port1.close(); resolve(ok); };
+        const timer = setTimeout(() => finish(false), 1500);
+        channel.port1.onmessage = event => finish(event.data?.ok === true);
+        try { client.postMessage({ ...data, type: 'OPEN_DM' }, [channel.port2]); }
+        catch { finish(false); }
+      });
+      if (received) return;
+    }
+    // An older or still-loading tab may not understand notification navigation.
+    // Open another window rather than navigating away from its unsent draft.
+    await self.clients.openWindow('/?dm=' + data.conversation);
+  })());
 });
 
 /** 导航：network-first，失败时回退到预缓存的应用外壳。 */

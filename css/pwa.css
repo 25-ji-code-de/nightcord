@@ -1,0 +1,19 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+.pwa-section { padding-block: 20px; border-bottom: var(--sekai-hairline); }
+.pwa-section:first-of-type { padding-top: 0; }
+.pwa-section:last-of-type { border-bottom: 0; }
+.pwa-section .settings-description { margin-bottom: 12px; }
+.pwa-section h3 { margin: 0 0 8px; font-size: 16px; }
+.pwa-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.pwa-actions button {
+  min-height: 44px; padding: 9px 16px; border: 1px solid rgb(var(--nc-text) / .25);
+  border-radius: var(--sekai-radius-control); color: inherit; background: var(--sekai-tint-hover);
+  font: inherit; cursor: pointer;
+}
+.pwa-actions button:hover:not(:disabled) { background: var(--sekai-tint-active); }
+.pwa-actions button:focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: 3px; }
+.pwa-actions button:disabled { opacity: .55; cursor: default; }
+.pwa-status { min-height: 1.5em; overflow-wrap: anywhere; }
+.pwa-offline { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: var(--sekai-z-toast);
+  max-width: calc(100% - 32px); box-sizing: border-box; padding: 10px 16px; border: var(--sekai-hairline); border-radius: var(--sekai-radius-panel);
+  background: rgb(var(--nc-panel)); color: rgb(var(--nc-text)); box-shadow: var(--sekai-elev-2); font-size: 14px; text-align: center; pointer-events: none; }

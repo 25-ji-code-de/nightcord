@@ -5,7 +5,7 @@ export interface GuestEnv {
   CHAT_ALLOWED_ORIGINS: string;
 }
 
-export type ChatEnv = Omit<Env, 'VOICE_MODE' | 'VOICE_ALLOWED_ROOMS' | 'VOICE_REQUIRE_PASS' | 'VOICE_MONTHLY_MINUTES' | 'VOICE_DAILY_MINUTES' | keyof import('./dm/protocol').DMSettings> & GuestEnv & import('./voice/protocol').VoiceSecrets & import('./dm/protocol').DMSettings;
+export type ChatEnv = Omit<Env, 'VOICE_MODE' | 'VOICE_ALLOWED_ROOMS' | 'VOICE_REQUIRE_PASS' | 'VOICE_MONTHLY_MINUTES' | 'VOICE_DAILY_MINUTES' | keyof import('./dm/protocol').DMSettings> & GuestEnv & import('./voice/protocol').VoiceSecrets & import('./dm/protocol').DMSettings & import('./push').PushSecrets;
 export type GuestIdentity = { id: string; expiresAt: number };
 const COOKIE = '__Host-nightcord_guest';
 const LIFETIME = 180 * 86400;

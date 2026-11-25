@@ -7,6 +7,10 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "categories": ["social", "communication"],
+  "shortcuts": [
+    { "name": "打开私信", "short_name": "私信", "url": "/?view=messages", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] }
+  ],
   "background_color": "#50476a",
   "theme_color": "#50476a",
   "icons": [

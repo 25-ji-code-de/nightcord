@@ -4,6 +4,11 @@ Cloudflare Worker + SQLite Durable Objects, compatible with the JSON/WebSocket
 protocol used by [workers-chat-demo](https://github.com/cloudflare/workers-chat-demo).
 Production hostname: `chat.nightcord.de5.net`, Worker: `nightcord-chat`.
 
+Optional private-message Web Push shares the per-account `UserInbox` storage and alarm.
+Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` using Wrangler secrets;
+it stays disabled until all three exist and `DM_MODE=on`. No new binding or migration
+is needed. See [PWA setup, endpoints and delivery limits](../docs/PWA.md).
+
 Optional room voice uses a separate SQLite `VoiceRoom` with Cloudflare Realtime
 SFU/TURN. It currently enables `nightcord-test` and `nightcord-default`, supports up to eight
 members, and keeps media credentials on the server. `VOICE_REQUIRE_PASS=true`

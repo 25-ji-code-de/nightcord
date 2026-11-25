@@ -21,6 +21,8 @@
   let currentVersion = null;
   let updateBar = null;
   let checking = false;
+  window.addEventListener('nightcord:update-ready', () => showUpdateBar());
+  window.addEventListener('nightcord:check-update', () => check());
 
   async function check() {
     if (checking || document.hidden) return;

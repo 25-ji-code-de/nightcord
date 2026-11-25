@@ -2,6 +2,8 @@
 
 本文档详细说明了聊天应用中各个类的 API 使用方法。
 
+私信后台推送的 `/api/push/config`、`/api/push/subscribe`、`/api/push/unsubscribe` 接口、鉴权与部署配置见 [PWA 与推送](PWA.md#api)。
+
 ## 目录
 
 - [EventBus](#eventbus) - 事件总线

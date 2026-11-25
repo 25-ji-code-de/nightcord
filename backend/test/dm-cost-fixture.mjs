@@ -10,7 +10,7 @@ export function instrumentCosts(script) {
     body = body.replaceAll('this.ctx.storage.sql.exec(', '__costSQL(this, ')
       .replaceAll('this.ctx.storage.setAlarm(', '__costAlarm(this, "set", ')
       .replaceAll('this.ctx.storage.deleteAlarm()', '__costAlarm(this, "delete")')
-      .replaceAll('this.apply(snapshot);', '__costCount(this, "localApply"); this.apply(snapshot);');
+      .replaceAll('await this.apply(snapshot);', '__costCount(this, "localApply"); await this.apply(snapshot);');
     body = body.replace(/((?:async )?(?:handle|apply|check|alarm|webSocketMessage)\([^\n]*\) \{)/g,
       (method) => method + '\n __costCount(this, ' + JSON.stringify(method.match(/(?:async )?(\w+)\(/)[1]) + ');');
     script = script.slice(0, start) + body + script.slice(end);

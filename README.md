@@ -62,7 +62,7 @@
 
 未查看最新消息时，普通新消息会显示带头像和正文摘要的顶部卡片，连续消息合并计数，点击可跳转；聊天区还提供「回到最新」入口。个人 @ 保留常驻卡片，回复保留底部胶囊。五种原创短旋律分别用于新消息、回复、个人 @、成员上线与下线；全体提及默认不响铃。
 
-在设置的「声音与免打扰」中调整总音量、静音或暂停提醒；「消息提醒」按新消息、回复和提及分别设置提醒与声音，也可试听。「成员动态与关注」管理上线 / 下线提醒和关注列表，近期动态可展开查看；也可从成员资料卡关注，短暂掉线不会立刻提醒。设置与关注按当前身份和房间保存，同源标签页协调发声。网页关闭或被系统冻结后暂不提供推送。
+在设置的「声音与免打扰」中调整总音量、静音或暂停提醒；「消息提醒」按新消息、回复和提及分别设置提醒与声音，也可试听。「成员动态与关注」管理上线 / 下线提醒和关注列表，近期动态可展开查看；也可从成员资料卡关注，短暂掉线不会立刻提醒。设置与关注按当前身份和房间保存，同源标签页协调发声。「应用与推送通知」可单独开启当前账号、当前设备的私信后台推送，支持关闭页面后提醒；聊天室消息仍使用站内提醒。
 
 实现范围见 [提醒说明](docs/NOTIFICATIONS_PLAN.md)，原创通知音效的许可与生成方式见 [音效说明](docs/NOTIFICATION_SOUNDS.md)。
 
@@ -103,7 +103,7 @@ Unicode 映射由 `scripts/generate-emoji-unicode.mjs` 生成。更新表情库�
 ├── index.html                # HTML 入口文件
 ├── manifest.json             # PWA 清单
 ├── sw.js                     # Service Worker（离线外壳，network-first）
-├── pwa.js                    # PWA 引导（注册 SW、更新时激活新 SW）
+├── pwa.js                    # PWA 安装、离线状态、更新与推送设置
 ├── icons/                    # 主屏图标、favicon 与 mark 矢量源
 ├── docs/API.md               # API 文档
 ├── docs/ARCHITECTURE.md      # 架构文档
@@ -184,8 +184,10 @@ Pages 构建命令为 `node scripts/build-pages.mjs`、输出目录为 `dist`，
 
 离线只保证**应用外壳 + localStorage 里的历史消息**；聊天本身仍然需要网络。
 
-更新流程只有一条：`version-checker.js` 每 30 秒以 `no-store` 检查 `/version.json`，
-版本变化时显示 Update Toast；用户点击后才刷新。新 Service Worker 默认处于 `waiting`，
+在设置 →「应用与推送通知」中可安装应用、开启或暂停私信推送、申请长期保留本地数据、检查更新。支持的设备会显示未读私信角标。后台推送需部署后端并配置 VAPID 密钥，详见 [PWA 与推送部署说明](docs/PWA.md)。
+
+`version-checker.js` 每 30 秒以 `no-store` 检查 `/version.json`，
+版本变化或新 Service Worker 就绪时显示 Update Toast；用户点击后才刷新。新 Service Worker 默认处于 `waiting`，
 不会自动 `skipWaiting`，也不会自动刷新页面，避免聊天输入被清空。
 
 维护 Service Worker 时请遵守以下约定（`test/pwa.test.mjs` 会检查）：

@@ -2,14 +2,18 @@
 import { DurableObject } from 'cloudflare:workers';
 import { allowedOrigin, type ChatEnv } from '../guest';
 import type { Profile } from '../identity';
+import { PushDelivery, pushConfigured } from '../push';
 import { account, authenticate, available, boolean, DMError, fail, mode, object, positive, reply, sequence, type Snapshot } from './protocol';
 
 type Entry = { id: string; snapshot: string; version: number; read_seq: number; read_incoming: number; hidden: number };
 type Session = { ownerId: string; expiresAt: number; deadline: number; authAt?: number; busy?: boolean; closed?: boolean };
 
 export class UserInbox extends DurableObject<ChatEnv> {
+  private push: PushDelivery | null;
   constructor(ctx: DurableObjectState, env: ChatEnv) {
     super(ctx, env);
+    const hadPush = ctx.storage.sql.exec("SELECT 1 FROM sqlite_master WHERE type='table' AND name='push_devices'").toArray().length;
+    this.push = pushConfigured(env) || hadPush ? new PushDelivery(ctx.storage.sql, env) : null;
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS dm_owner (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, revision INTEGER NOT NULL)');
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS dm_conversations (id TEXT PRIMARY KEY, snapshot TEXT NOT NULL, version INTEGER NOT NULL, read_seq INTEGER NOT NULL DEFAULT 0, read_incoming INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0)');
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS dm_requests (peer TEXT PRIMARY KEY, created_at INTEGER NOT NULL)');
@@ -41,24 +45,41 @@ export class UserInbox extends DurableObject<ChatEnv> {
       try { ws.send(text); } catch { this.close(ws); }
     }
   }
-  apply(snapshot: Snapshot) {
-    this.owner(snapshot.ownerId);
-    const existing = this.entry(snapshot.id);
-    if (existing && existing.version >= snapshot.version) return;
-    this.ctx.storage.transactionSync(() => {
+  async apply(snapshot: Snapshot) {
+    await this.ctx.storage.transaction(async () => {
+      this.owner(snapshot.ownerId);
+      const existing = this.entry(snapshot.id);
+      if (existing && existing.version >= snapshot.version) return;
       this.ctx.storage.sql.exec('INSERT INTO dm_conversations(id,snapshot,version) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET snapshot=excluded.snapshot,version=excluded.version',
         snapshot.id, JSON.stringify(snapshot), snapshot.version);
       this.changed(snapshot.id, !!existing?.hidden);
+      const previous: Snapshot | undefined = existing ? JSON.parse(existing.snapshot) : undefined;
+      if (!existing?.hidden && !snapshot.refuseIncoming && snapshot.state !== 'rejected' && snapshot.incoming > (previous?.incoming || 0)) this.push?.enqueue(snapshot);
+      if (snapshot.refuseIncoming || snapshot.state === 'rejected') this.push?.cancel(snapshot.id);
+      // Persist the wakeup with the delivery record; waitUntil alone cannot
+      // recover an outbox left behind by an eviction between the two writes.
+      if (this.push) await this.schedule();
     });
   }
+  async pushSettings(actor: Profile, enabled: boolean, input: Record<string, unknown>) {
+    const result = await reply(() => {
+      if (!actor.authenticated) return fail('login_required', 401);
+      this.owner(actor.id);
+      const push = this.push;
+      if (!push) return enabled ? fail('push_unavailable', 503) : { enabled: false };
+      return this.ctx.storage.transactionSync(() => push.manage(enabled, input));
+    });
+    await this.scheduleExpiry();
+    return { status: result.status, code: String(result.data.code || ''), enabled: result.data.enabled === true, pausedUntil: Number(result.data.pausedUntil || 0) };
+  }
   async handle(actor: Profile, action: string, input: Record<string, unknown>, snapshot?: Snapshot) {
-    return reply(() => {
+    return reply(async () => {
       available(this.env, action === 'reserve');
       if (!actor.authenticated) return fail('login_required', 401);
       // Only the HTTP router supplies this fourth RPC argument, from DirectRoom.
       if (snapshot) {
         if (snapshot.ownerId !== actor.id || snapshot.id !== input.id) return fail('not_found', 404);
-        this.apply(snapshot);
+        await this.apply(snapshot);
       } else this.owner(actor.id);
       if (action === 'reserve') {
         const peer = account(input.peerId);
@@ -87,6 +108,7 @@ export class UserInbox extends DurableObject<ChatEnv> {
           const hidden = boolean(input.hidden);
           if (Number(hidden) !== row.hidden) {
             this.ctx.storage.sql.exec('UPDATE dm_conversations SET hidden=? WHERE id=?', Number(hidden), row.id);
+            if (hidden) this.push?.cancel(row.id);
             this.changed(row.id, true);
           }
         });
@@ -96,6 +118,7 @@ export class UserInbox extends DurableObject<ChatEnv> {
         if (seq > row.read_seq) {
           this.ctx.storage.transactionSync(() => {
             this.ctx.storage.sql.exec('UPDATE dm_conversations SET read_seq=?,read_incoming=MAX(read_incoming,?) WHERE id=?', seq, incoming, row.id);
+            if (incoming >= (JSON.parse(row.snapshot) as Snapshot).incoming) this.push?.cancel(row.id);
             this.changed(row.id, true);
           });
         }
@@ -153,22 +176,26 @@ export class UserInbox extends DurableObject<ChatEnv> {
   async webSocketClose(ws: WebSocket) { this.close(ws); await this.scheduleExpiry(); }
   async webSocketError(ws: WebSocket) { this.close(ws, 1011); await this.scheduleExpiry(); }
   private async scheduleExpiry() {
-    await this.ctx.storage.transaction(async () => {
-      const deadlines = this.ctx.getWebSockets().map(ws => ws.deserializeAttachment() as Session).filter(session => !session.closed).map(session => session.deadline);
-      const alarm = await this.ctx.storage.getAlarm();
-      if (deadlines.length) {
-        const next = Math.max(Date.now() + 100, Math.min(...deadlines));
-        // Track the actual earliest deadline: retaining old lease alarms creates
-        // an extra wakeup every renewal, without saving writes for one device.
-        if (alarm !== next) await this.ctx.storage.setAlarm(next);
-      } else if (alarm !== null) await this.ctx.storage.deleteAlarm();
-    });
+    await this.ctx.storage.transaction(() => this.schedule());
+  }
+  private async schedule() {
+    const deadlines = this.ctx.getWebSockets().map(ws => ws.deserializeAttachment() as Session).filter(session => !session.closed).map(session => session.deadline);
+    const alarm = await this.ctx.storage.getAlarm();
+    const pushDue = this.push?.next() ?? null;
+    if (pushDue !== null) deadlines.push(pushDue);
+    if (deadlines.length) {
+      const next = Math.max(Date.now() + 100, Math.min(...deadlines));
+      // Track the actual earliest deadline: retaining old lease alarms creates
+      // an extra wakeup every renewal, without saving writes for one device.
+      if (alarm !== next) await this.ctx.storage.setAlarm(next);
+    } else if (alarm !== null) await this.ctx.storage.deleteAlarm();
   }
   async alarm() {
     for (const ws of this.ctx.getWebSockets()) {
       const session = ws.deserializeAttachment() as Session;
       if (!session.closed && (mode(this.env) === 'off' || session.deadline <= Date.now())) this.close(ws, 4001, 'Authentication required');
     }
+    await this.push?.drain();
     await this.scheduleExpiry();
   }
 }

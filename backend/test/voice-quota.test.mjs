@@ -128,3 +128,47 @@ test('invalid minute configuration fails closed without allocating time', async 
     assert.deepEqual(await f.storage.exec('SELECT * FROM voice_quota_totals'), []);
   } finally { await f.close(); }
 });
+
+test('delayed quota finalization uses the recorded media closure time and remains idempotent', async () => {
+  const f = await fixture();
+  try {
+    await f.stub.grant('ended', 'room-a', 'one', Date.now() + 60000);
+    await delay(30);
+    const closedAt = Date.now();
+    const lease = JSON.parse((await f.storage.exec("SELECT data FROM voice_quota_leases WHERE id='ended'"))[0].data);
+    await delay(150);
+    await f.stub.release('ended', 'room-a', closedAt);
+    const totals = await f.storage.exec('SELECT * FROM voice_quota_totals ORDER BY scope');
+    assert.ok(totals.every(row => row.spent_ms === closedAt - lease.startedAt));
+    await f.stub.release('ended', 'room-a', Date.now());
+    assert.deepEqual(await f.storage.exec('SELECT * FROM voice_quota_totals ORDER BY scope'), totals);
+    assert.equal((await f.stub.grant('ended', 'room-a', 'one', Date.now() + 60000)).code, 'voice_quota_expired');
+  } finally { await f.close(); }
+});
+
+test('closure validation rejects future/pre-membership dates and legacy review preserves existing charges', async () => {
+  const f = await fixture();
+  try {
+    await f.stub.grant('old', 'room-a', 'one', Date.now() + 60000);
+    const lease = JSON.parse((await f.storage.exec("SELECT data FROM voice_quota_leases WHERE id='old'"))[0].data);
+    const before = await f.storage.exec('SELECT * FROM voice_quota_totals ORDER BY scope');
+    await assert.rejects(f.stub.release('old', 'room-a', Date.now() + 86400000));
+    await assert.rejects(f.stub.release('old', 'room-a', lease.startedAt - 1));
+    assert.deepEqual(await f.storage.exec('SELECT * FROM voice_quota_totals ORDER BY scope'), before);
+    await f.stub.release('old', 'room-a', Date.now(), true);
+    assert.deepEqual(await f.storage.exec('SELECT * FROM voice_quota_totals ORDER BY scope'), before);
+    const closed = JSON.parse((await f.storage.exec("SELECT data FROM voice_quota_leases WHERE id='old'"))[0].data);
+    assert.equal(closed.settlement, 'legacy_settlement_review'); assert.equal(closed.closed, true);
+  } finally { await f.close(); }
+});
+
+test('retention never deletes an unresolved lease and grants cannot resurrect it', async () => {
+  const f = await fixture();
+  try {
+    await f.stub.grant('pending', 'room-a', 'one', Date.now() + 60000);
+    await f.storage.exec("UPDATE voice_quota_leases SET updated_at=?,data=json_set(data,'$.until',?) WHERE id='pending'", Date.now() - 61 * 86400000, Date.now() - 1);
+    await f.stub.grant('other', 'room-b', 'two', Date.now() + 60000);
+    assert.equal((await f.storage.exec("SELECT id FROM voice_quota_leases WHERE id='pending'")).length, 1);
+    assert.equal((await f.stub.grant('pending', 'room-a', 'one', Date.now() + 60000)).code, 'voice_quota_expired');
+  } finally { await f.close(); }
+});

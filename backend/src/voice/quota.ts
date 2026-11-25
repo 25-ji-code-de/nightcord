@@ -8,7 +8,7 @@ export const QUOTA_LEASE_MS = MINUTE;
 const DAY = 86400000;
 
 type Slice = { from: number; until: number; month: string; day: string };
-type Lease = { roomId: string; userId: string; until: number; slices: Slice[]; closed?: boolean };
+type Lease = { roomId: string; userId: string; until: number; slices: Slice[]; startedAt?: number; closed?: boolean; closedAt?: number; settlement?: 'legacy_settlement_review' };
 type Meter = { usedMinutes: number; reservedMinutes: number; limitMinutes: number; resetsAt: number };
 export type VoiceUsage = { sampledAt: number; monthly: Meter; daily: Meter };
 export type QuotaCode = 'voice_monthly_limit' | 'voice_daily_limit' | 'voice_quota_expired' | 'voice_quota_unavailable';
@@ -60,7 +60,7 @@ export class VoiceQuota extends DurableObject<ChatEnv> {
     if (!limits.valid || !Number.isSafeInteger(deadline) || deadline <= now) return { ok: false, code: 'voice_quota_unavailable' };
     return this.ctx.storage.transactionSync(() => {
       // Keep recent closed IDs so a delayed/retried RPC cannot resurrect a grant.
-      this.ctx.storage.sql.exec('DELETE FROM voice_quota_leases WHERE updated_at<?', now - 60 * DAY);
+      this.ctx.storage.sql.exec('DELETE FROM voice_quota_leases WHERE reserved_until=0 AND updated_at<?', now - 60 * DAY);
       this.ctx.storage.sql.exec('DELETE FROM voice_quota_totals WHERE period<?', quotaPeriods(now - 60 * DAY).month);
       let lease = this.lease(id);
       if (lease && (lease.closed || lease.roomId !== roomId || lease.userId !== userId)) return { ok: false, code: 'voice_quota_expired' };
@@ -70,7 +70,7 @@ export class VoiceQuota extends DurableObject<ChatEnv> {
       // Missing renewals consume their reservation, rather than granting free time
       // after a room crash. The room must close its media and join again.
       if (lease && lease.until <= now) return { ok: false, code: exhausted() };
-      lease ??= { roomId, userId, until: now, slices: [] };
+      lease ??= { roomId, userId, until: now, startedAt: now, slices: [] };
       lease.slices = lease.slices.filter(slice => slice.until > now);
       const target = Math.min(now + QUOTA_LEASE_MS, deadline);
       let denied: QuotaCode = 'voice_quota_expired';
@@ -91,25 +91,33 @@ export class VoiceQuota extends DurableObject<ChatEnv> {
       return { ok: true, until: lease.until, usage: this.usage(userId, now) };
     });
   }
-  release(id: string, roomId: string) {
+  release(id: string, roomId: string, closedAt = Date.now(), legacyReview = false) {
     const now = Date.now();
+    if (!Number.isSafeInteger(closedAt) || closedAt < 0 || closedAt > now) throw new Error('Invalid voice closure time');
     this.ctx.storage.transactionSync(() => {
       const lease = this.lease(id);
-      if (!lease) { this.save(id, { roomId, userId: '', until: now, slices: [], closed: true }, now); return; }
+      if (!lease) { this.save(id, { roomId, userId: '', until: closedAt, slices: [], closed: true, closedAt }, now); return; }
       if (lease.closed || lease.roomId !== roomId) return;
+      if (closedAt < (lease.startedAt ?? lease.slices[0]?.from ?? 0)) throw new Error('Closure predates voice membership');
+      // Pre-migration departures without a media closure timestamp retain their
+      // existing charges for review; never turn days of TURN retries into minutes.
+      if (legacyReview) {
+        lease.settlement = 'legacy_settlement_review'; lease.closed = true; lease.closedAt = closedAt; lease.slices = [];
+        this.save(id, lease, now); return;
+      }
       for (const slice of lease.slices) {
-        const unused = Math.max(0, slice.until - Math.max(now, slice.from));
+        const unused = Math.max(0, slice.until - Math.max(closedAt, slice.from));
         if (unused) { this.add('month', slice.month, '*', -unused); this.add('day', slice.day, lease.userId, -unused); }
       }
       // Closing can finish after the grant expires. Keep that elapsed time in
       // the counters too; a slow/failed close must not make minutes disappear.
-      for (let from = lease.until; from < now;) {
+      for (let from = lease.until; from < closedAt;) {
         const window = quotaPeriods(from);
-        const until = Math.min(now, window.monthResetsAt, window.dayResetsAt);
+        const until = Math.min(closedAt, window.monthResetsAt, window.dayResetsAt);
         this.add('month', window.month, '*', until - from); this.add('day', window.day, lease.userId, until - from);
         from = until;
       }
-      lease.closed = true; lease.slices = []; this.save(id, lease, now);
+      lease.closed = true; lease.closedAt = closedAt; lease.slices = []; this.save(id, lease, now);
     });
   }
 }

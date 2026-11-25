@@ -5,6 +5,7 @@ import type { Profile } from '../identity';
 import { capability, configuration, description, digest, fail, identifier, randomToken, record, VoiceError, type VoiceResult } from './protocol';
 import { Provider, type MediaSession } from './provider';
 import type { VoiceUsage } from './quota';
+import { cleanupComplete, retryAfter, type RetryState } from './cleanup';
 
 type Member = {
   id: string; tokenHash: string; user: Pick<Profile, 'id' | 'displayName' | 'avatarUrl' | 'authenticated'>;
@@ -12,15 +13,19 @@ type Member = {
   authUntil: number; expiresAt: number; heartbeatAt: number; nextMutationAt: number;
   leaving: boolean; tombstoneUntil?: number; disconnectUntil?: number; generations: { publisher: number; receiver: number };
   publication?: { sessionId: string; trackName: string; version: string; microphone?: boolean; microphoneSequence?: number };
-  turnUsers: string[]; ice?: Record<string, unknown>;
+  turnUsers: string[]; turnCredentials?: TurnCredential[]; ice?: Record<string, unknown>;
+  cleanupVersion?: number; mediaClosedAt?: number; settlementRetry?: RetryState; legacySettlementReview?: boolean;
   quotaUntil?: number; usage?: VoiceUsage; leaveReason?: string;
 };
+type TurnCredential = { id: string; username: string; keyId?: string; expiresAt: number; retry?: RetryState };
+type TurnCleanup = TurnCredential & { memberId: string };
 type Ticket = { user: Member['user']; chatConnectionId: string; chatId: string; authUntil: number; expiresAt: number };
 
 export class VoiceRoom extends DurableObject<ChatEnv> {
   private provider: Provider;
   private active = new Set<string>();
   private pendingQuota = new Map<string, Promise<Member>>();
+  private cleanupSlots = 0;
   constructor(ctx: DurableObjectState, env: ChatEnv) {
     super(ctx, env);
     this.provider = new Provider(env);
@@ -29,11 +34,47 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_tickets (hash TEXT PRIMARY KEY, data TEXT NOT NULL)');
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_events (revision INTEGER PRIMARY KEY AUTOINCREMENT)');
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_operations (member_id TEXT NOT NULL, request_id TEXT NOT NULL, action TEXT NOT NULL, fingerprint TEXT NOT NULL, result TEXT, expires_at INTEGER NOT NULL, PRIMARY KEY(member_id, request_id))');
+    ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_turn_cleanup (id TEXT PRIMARY KEY, data TEXT NOT NULL)');
+    if (this.migrateCleanup()) ctx.blockConcurrencyWhile(() => this.schedule());
   }
   private members(): Member[] { return this.ctx.storage.sql.exec<{ data: string }>('SELECT data FROM voice_members').toArray().map(row => JSON.parse(row.data)); }
   private sessions(): MediaSession[] { return this.ctx.storage.sql.exec<{ data: string }>('SELECT data FROM voice_sessions').toArray().map(row => JSON.parse(row.data)); }
   private save(member: Member) { this.ctx.storage.sql.exec('INSERT INTO voice_members VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data', member.id, member.tokenHash, JSON.stringify(member)); }
-  private saveSession(session: MediaSession) { this.ctx.storage.sql.exec('INSERT INTO voice_sessions VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data', session.id, JSON.stringify(session)); }
+  private saveSession(session: MediaSession) {
+    const stored = this.current(session.id);
+    if (stored?.retired) { session.retired = true; session.retiredAt ??= stored.retiredAt; session.cleanup ??= stored.cleanup; }
+    if (session.retired) session.retiredAt ??= Date.now();
+    this.ctx.storage.sql.exec('INSERT INTO voice_sessions VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data', session.id, JSON.stringify(session));
+  }
+  private turnTasks(): TurnCleanup[] { return this.ctx.storage.sql.exec<{ data: string }>('SELECT data FROM voice_turn_cleanup').toArray().map(row => JSON.parse(row.data)); }
+  private saveTurn(task: TurnCleanup) { this.ctx.storage.sql.exec('INSERT INTO voice_turn_cleanup VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data', task.id, JSON.stringify(task)); }
+  private enqueueTurn(member: Member) {
+    for (const credential of member.turnCredentials || []) this.saveTurn({ ...credential, memberId: member.id });
+    member.turnCredentials = []; member.turnUsers = []; delete member.ice;
+  }
+  private migrateCleanup() {
+    let migrated = false;
+    this.ctx.storage.transactionSync(() => {
+      const now = Date.now(), sessions = this.sessions();
+      for (const member of this.members()) if (!member.cleanupVersion) {
+        // Historical code always issued a one-hour TTL. A missing cache uses a
+        // conservative upper bound from migration, never a guessed past expiry.
+        const cachedExpiry = Number(member.ice?.iceExpiresAt);
+        const expiresAt = Number.isSafeInteger(cachedExpiry) && cachedExpiry > 0 ? cachedExpiry : now + 3600000;
+        member.turnCredentials = [...new Set(member.turnUsers)].map(username => ({ id: crypto.randomUUID(), username, expiresAt }));
+        member.cleanupVersion = 1;
+        member.legacySettlementReview = member.leaving && !member.tombstoneUntil && !sessions.some(session => session.memberId === member.id);
+        if (member.leaving) this.enqueueTurn(member);
+        this.save(member); migrated = true;
+      }
+      for (const session of sessions) if (session.retired && !session.cleanup) {
+        session.cleanup = { attempts: session.cleanupAttempts || 0, nextAttemptAt: now + Math.floor(Math.random() * 5000),
+          ...(session.cleanupAttempts ? { firstFailedAt: now - 300000 } : {}) };
+        this.saveSession(session); migrated = true;
+      }
+    });
+    return migrated;
+  }
   private latest(id: string): Member { return this.members().find(member => member.id === id) || fail('membership_expired', 401); }
   private current(id: string): MediaSession | undefined { return this.sessions().find(session => session.id === id); }
   private revision(): number { return this.ctx.storage.sql.exec<{ revision: number }>('SELECT COALESCE(MAX(rowid),0) AS revision FROM voice_events').one().revision; }
@@ -55,11 +96,36 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
     if (chatId) this.ctx.waitUntil(this.env.ROOMS.get(this.env.ROOMS.idFromString(chatId)).voiceChanged(snapshot).catch(() => {}));
   }
   private async schedule() {
-    if (!this.members().length && !this.sessions().length && !this.ctx.storage.sql.exec('SELECT 1 FROM voice_tickets LIMIT 1').toArray().length) { await this.ctx.storage.deleteAlarm(); return; }
-    const alarm = await this.ctx.storage.getAlarm();
-    const now = Date.now();
-    const deadline = Math.max(now + 1, Math.min(now + 20000, ...this.members().filter(member => !member.leaving).map(member => Math.min(this.expiry(member), member.quotaUntil ?? now + 20000))));
-    if (alarm === null || alarm > deadline) await this.ctx.storage.setAlarm(deadline);
+    await this.ctx.storage.transaction(async txn => {
+      const alarm = await txn.getAlarm(), now = Date.now(), deadlines: number[] = [];
+      const sessions = this.sessions();
+      const budget = this.cleanupBudget();
+      const taskDeadline = (due: number) => this.cleanupSlots >= 2 ? Math.max(due, now + 10000)
+        : budget - now < 50 ? Math.max(due, budget) : due;
+      for (const member of this.members()) {
+        if (member.tombstoneUntil) deadlines.push(member.tombstoneUntil);
+        else if (!member.leaving) deadlines.push(Math.min(now + 20000, this.expiry(member), member.quotaUntil ?? now + 20000));
+        else if (!sessions.some(session => session.memberId === member.id)) {
+          deadlines.push(this.pendingQuota.has(member.id) || this.active.has(`turn:${member.id}`) || this.active.has(`settle:${member.id}`)
+            ? now + 10000 : member.settlementRetry?.nextAttemptAt ?? now + 1);
+        }
+      }
+      for (const session of sessions) {
+        deadlines.push(session.retired
+          ? this.active.has(session.id) ? now + 10000 : taskDeadline(session.cleanup?.nextAttemptAt ?? now + 1)
+          : session.deadline);
+      }
+      for (const task of this.turnTasks()) deadlines.push(Math.min(task.expiresAt,
+        task.keyId ? taskDeadline(task.retry?.nextAttemptAt ?? now + 1) : task.expiresAt));
+      for (const row of this.ctx.storage.sql.exec<{ data: string }>('SELECT data FROM voice_tickets').toArray()) deadlines.push((JSON.parse(row.data) as Ticket).expiresAt);
+      const operation = this.ctx.storage.sql.exec<{ deadline: number | null }>('SELECT MIN(expires_at) AS deadline FROM voice_operations').one().deadline;
+      if (operation !== null) deadlines.push(operation);
+      if (!deadlines.length) { if (alarm !== null) await txn.deleteAlarm(); return; }
+      const deadline = Math.max(now + 1, Math.min(...deadlines));
+      // Retain an already earlier wake-up; never let concurrent request handlers
+      // postpone an authentication or quota deadline.
+      if (alarm === null || alarm > deadline) await txn.setAlarm(deadline);
+    });
   }
   async issueTicket(room: string, chatId: string, connectionId: string, user: Profile, authUntil: number): Promise<{ ticket?: string; code?: string }> {
     if (!configuration(this.env, room).enabled && this.env.VOICE_MODE !== 'drain') return { code: 'voice_disabled' };
@@ -102,7 +168,7 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
     try { return await pending; }
     finally {
       this.pendingQuota.delete(member.id);
-      if (this.latest(member.id).leaving) this.ctx.waitUntil(this.cleanup());
+      if (this.latest(member.id).leaving) { this.recordMediaClosure(member.id); this.ctx.waitUntil(this.cleanup()); }
     }
   }
   private async grantQuota(member: Member): Promise<Member> {
@@ -149,7 +215,7 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
           member = { id: crypto.randomUUID(), tokenHash: hash, user: ticket.user, clientId, joinRequestId,
             chatId: ticket.chatId, chatConnectionId: ticket.chatConnectionId, authUntil: ticket.authUntil,
             expiresAt: Date.now() + 90000, heartbeatAt: 0, nextMutationAt: 0, leaving: false,
-            generations: { publisher: 0, receiver: 0 }, turnUsers: [] };
+            generations: { publisher: 0, receiver: 0 }, turnUsers: [], turnCredentials: [], cleanupVersion: 1 };
           this.save(member); this.changed();
         }
         member = await this.quota(member);
@@ -158,7 +224,8 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
       }
       if (!member) return fail('membership_expired', 401);
       if (action === 'leave') {
-        this.retireMember(member); this.changed(); await this.schedule();
+        if (!member.leaving) { this.retireMember(member); this.changed(); }
+        await this.schedule();
         this.ctx.waitUntil(this.cleanup());
         return { ok: true, value: { cleanupState: member.tombstoneUntil ? 'complete' : 'pending' } };
       }
@@ -214,8 +281,18 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
   }
   private retireMember(member: Member, reason?: string) {
     if (reason) member.leaveReason = reason;
-    member.leaving = true; delete member.publication; this.save(member);
+    member.leaving = true; delete member.publication; this.enqueueTurn(member); this.save(member);
     for (const session of this.sessions().filter(value => value.memberId === member.id)) { session.retired = true; this.saveSession(session); }
+    this.recordMediaClosure(member.id);
+  }
+  private recordMediaClosure(id: string) {
+    const member = this.latest(id);
+    // Initial admission must finish before its lease can be settled. Once a
+    // member has joined, neither quota retries nor TURN issuance extend media time.
+    if (!member.leaving || member.mediaClosedAt !== undefined
+      || (!member.quotaUntil && this.pendingQuota.has(id))
+      || this.sessions().some(session => session.memberId === id)) return;
+    member.mediaClosedAt = Date.now(); this.save(member);
   }
   private assertSession(memberId: string, sessionId: string): MediaSession {
     this.valid(this.latest(memberId));
@@ -233,8 +310,13 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
       const value = await this.provider.ice();
       // Save credential ownership even when the user leaves during the call.
       member = this.latest(memberId);
-      for (const item of value.iceServers) if ('username' in item && item.username) member.turnUsers.push(item.username);
-      member.ice = value; this.save(member); this.valid(member);
+      member.turnCredentials ??= [];
+      for (const username of new Set(value.iceServers.flatMap(item => 'username' in item && item.username ? [item.username] : []))) {
+        member.turnCredentials.push({ id: crypto.randomUUID(), username, keyId: this.env.REALTIME_TURN_KEY_ID, expiresAt: value.iceExpiresAt });
+      }
+      member.ice = value;
+      if (member.leaving) this.enqueueTurn(member);
+      this.save(member); this.valid(member);
       return value;
     } finally {
       this.active.delete(lock);
@@ -306,31 +388,35 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
     for (const old of this.sessions().filter(value => value.memberId === member.id && value.direction === direction)) { old.retired = true; this.saveSession(old); }
     if (direction === 'publisher') { delete member.publication; this.save(member); this.changed(); }
     // Confirm old forwarding is closed before replacing this direction.
-    await this.cleanup();
+    await this.cleanup({ memberId: member.id, direction });
     member = this.valid(this.latest(member.id));
     if (this.sessions().some(value => value.memberId === member.id && value.direction === direction)) return fail('cleanup_pending', 409);
     if (direction === 'receiver' && !publications.length) return { empty: true };
     const ice = await this.ice(member.id);
     member = this.valid(this.latest(member.id));
-    const session: MediaSession = { id: crypto.randomUUID(), memberId: member.id, direction, generation: ++member.generations[direction], mids: [], retired: false, operationId: requestId, phase: 'allocating', deadline: Date.now() + 30000 };
+    const session: MediaSession = { id: crypto.randomUUID(), appId: this.env.REALTIME_SFU_APP_ID, memberId: member.id, direction, generation: ++member.generations[direction], mids: [], retired: false, operationId: requestId, phase: 'allocating', deadline: Date.now() + 30000 };
     // A persistent reservation precedes external I/O; leave/alarm can fence it.
     if (this.sessions().some(value => value.memberId === member.id && value.direction === direction)) return fail('operation_busy', 409);
-    this.save(member); this.saveSession(session); await this.schedule(); this.active.add(session.id);
+    this.save(member); this.saveSession(session); this.active.add(session.id);
     try {
+      await this.schedule();
       const created = await this.provider.sfu('sessions/new', 'POST');
       if (typeof created.sessionId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(created.sessionId)) return fail('upstream_unavailable', 502);
       session.providerId = created.sessionId; session.retired = this.current(session.id)?.retired ?? true; this.saveSession(session);
       this.assertSession(member.id, session.id);
-      session.phase = 'mutating'; session.uncertain = true; this.saveSession(session);
+      session.phase = 'mutating'; session.uncertain = true; session.allocationStartedAt = Date.now(); session.expectedTracks = direction === 'publisher' ? 1 : publications.length; this.saveSession(session);
       const tracks = direction === 'publisher' ? [{ location: 'local', mid: input.mid, trackName: `mic-${session.id}` }]
         : publications.map(value => ({ location: 'remote', sessionId: value.publication.sessionId, trackName: value.publication.trackName }));
       const result = await this.provider.sfu(`sessions/${session.providerId}/tracks/new`, 'POST', { tracks, ...(offer ? { sessionDescription: offer } : {}) });
       // Retain every returned mid before validating partial success.
-      const items = Array.isArray(result.tracks) ? result.tracks.map(record) : [];
-      session.mids = items.flatMap(item => typeof item.mid === 'string' ? [item.mid] : []);
-      session.uncertain = false; session.retired = this.current(session.id)?.retired ?? true; this.saveSession(session);
+      const items = Array.isArray(result.tracks) ? result.tracks.map(item => item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : {}) : [];
+      session.mids = [...new Set(items.flatMap(item => typeof item.mid === 'string' && item.mid.length > 0 ? [item.mid] : []))];
+      // A missing or malformed item may hide a successful upstream allocation.
+      // Save valid mids for cleanup without treating an incomplete list as final.
+      session.uncertain = items.length !== session.expectedTracks || session.mids.length !== session.expectedTracks;
+      session.retired = this.current(session.id)?.retired ?? true; this.saveSession(session);
       this.assertSession(member.id, session.id);
-      if (result.errorCode || items.length !== tracks.length || items.some(item => item.errorCode || typeof item.mid !== 'string')) return fail('upstream_unavailable', 502);
+      if (result.errorCode || session.uncertain || items.some(item => item.errorCode)) return fail('upstream_unavailable', 502);
       const sdp = description(result.sessionDescription, direction === 'publisher' ? 'answer' : 'offer');
       if (direction === 'receiver' && result.requiresImmediateRenegotiation !== true) return fail('upstream_unavailable', 502);
       if (direction === 'receiver' && publications.some(value => this.latest(value.memberId).publication?.version !== value.publication.version)) return fail('publication_changed', 409);
@@ -344,35 +430,110 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
       if (this.current(session.id)?.retired) this.ctx.waitUntil(this.cleanup());
     }
   }
-  private async cleanup() {
-    for (const session of this.sessions().filter(value => value.retired && !this.active.has(value.id))) {
-      this.active.add(session.id);
-      try {
-        await this.provider.close(session);
-        // An uncertain tracks/new can finish after timeout: keep querying/closing
-        // on every alarm, rather than claiming an empty GET cancelled that request.
-        if (!session.uncertain) this.ctx.storage.sql.exec('DELETE FROM voice_sessions WHERE id=?', session.id);
-        else this.cleanupWarning(session, 'outcome_unknown');
-      } catch (error) { this.cleanupWarning(session, error instanceof VoiceError ? error.code : 'cleanup_failed'); }
-      finally { this.active.delete(session.id); }
+  private cleanupBudget(): number {
+    const now = Date.now();
+    const mandatory = this.members().filter(member => !member.leaving).map(member => Math.min(this.expiry(member), member.quotaUntil ?? now + 10000));
+    return Math.min(now + 10000, ...mandatory);
+  }
+  private async cleanSession(id: string, budget: number) {
+    let session = this.current(id);
+    if (!session?.retired || this.active.has(id) || (session.cleanup?.nextAttemptAt || 0) > Date.now() || this.cleanupSlots >= 2 || budget - Date.now() < 50) return;
+    this.active.add(id); this.cleanupSlots++;
+    try {
+      // At most one inspect + one close in this pass, with one shared deadline.
+      for (let step = 0; step < 2 && budget - Date.now() >= 50; step++) {
+        session = this.current(id);
+        if (!session) break;
+        session.cleanup = { ...session.cleanup, attempts: session.cleanup?.attempts || 0, nextAttemptAt: budget + 1000 };
+        this.saveSession(session); await this.schedule();
+        const result = await this.provider.closeStep(session, Math.max(1, budget - Date.now()));
+        const current = this.current(id);
+        if (!current) break;
+        current.cleanupMids = result.pending; current.closedMids = result.closed;
+        if (result.done) {
+          // Preserve the billing boundary even if another cleanup stalls or the
+          // object restarts before the quota RPC completes.
+          this.ctx.storage.transactionSync(() => {
+            this.ctx.storage.sql.exec('DELETE FROM voice_sessions WHERE id=?', id);
+            this.recordMediaClosure(current.memberId);
+          });
+          cleanupComplete(id, 'sfu.close', result.reason, current.cleanup?.attempts);
+          break;
+        }
+        this.saveSession(current);
+        if (result.failure || result.reason === 'outcome_unknown') throw result.failure || new VoiceError('outcome_unknown', 503);
+        current.cleanup!.nextAttemptAt = Date.now() + 1; this.saveSession(current);
+      }
+    } catch (error) {
+      const current = this.current(id);
+      if (current) {
+        current.cleanup = retryAfter(current.cleanup, current.uncertain ? 'uncertain' : 'media', error, 'sfu.close', id);
+        this.saveSession(current);
+      }
+    } finally { this.active.delete(id); this.cleanupSlots--; }
+  }
+  private async settleMember(id: string, budget: number) {
+    let member = this.latest(id);
+    if (budget - Date.now() < 50 || !member.leaving || member.tombstoneUntil || (member.settlementRetry?.nextAttemptAt || 0) > Date.now()
+      || this.sessions().some(session => session.memberId === id) || this.pendingQuota.has(id)
+      || this.active.has(`turn:${id}`) || this.active.has(`settle:${id}`)) return;
+    const lock = `settle:${id}`; this.active.add(lock);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      member.mediaClosedAt ??= Date.now();
+      member.settlementRetry = { ...member.settlementRetry, attempts: member.settlementRetry?.attempts || 0, nextAttemptAt: Date.now() + 60000 };
+      this.save(member); await this.schedule();
+      const request = this.env.VOICE_QUOTAS.getByName('voice-minutes-v1').release(id, this.ctx.id.toString(), member.mediaClosedAt, member.legacySettlementReview === true);
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new VoiceError('voice_quota_unavailable', 503)), Math.max(1, Math.min(5000, budget - Date.now())));
+      });
+      // A late RPC may still finish. release() is idempotent and every retry uses
+      // the same persisted closure time, so it cannot double-charge or refund.
+      await Promise.race([request, timeout]);
+      member = this.latest(id); member.tombstoneUntil = Date.now() + 600000; delete member.settlementRetry; this.save(member);
+      cleanupComplete(id, 'quota.release', member.legacySettlementReview ? 'legacy_settlement_review' : 'settled');
+    } catch (error) {
+      member = this.latest(id); member.settlementRetry = retryAfter(member.settlementRetry, 'quota', error, 'quota.release', id); this.save(member);
+    } finally { if (timer !== undefined) clearTimeout(timer); this.active.delete(lock); }
+  }
+  private async cleanTurn(task: TurnCleanup, budget: number) {
+    const lock = `revoke:${task.id}`;
+    if (this.active.has(lock)) return;
+    if (task.expiresAt <= Date.now()) {
+      this.ctx.storage.sql.exec('DELETE FROM voice_turn_cleanup WHERE id=?', task.id);
+      cleanupComplete(task.id, 'turn.revoke', 'expired', task.retry?.attempts); return;
     }
-    for (const member of this.members().filter(value => value.leaving && !value.tombstoneUntil)) {
-      if (this.sessions().some(session => session.memberId === member.id) || this.active.has(`turn:${member.id}`) || this.pendingQuota.has(member.id)) continue;
-      this.active.add(`turn:${member.id}`);
-      try {
-        for (const username of member.turnUsers) await this.provider.revoke(username);
-        // Refund unused seconds only after upstream forwarding is confirmed shut.
-        await this.env.VOICE_QUOTAS.getByName('voice-minutes-v1').release(member.id, this.ctx.id.toString());
-        const latest = this.latest(member.id); latest.tombstoneUntil = Date.now() + 600000; latest.turnUsers = []; delete latest.ice; this.save(latest);
-      } catch { /* Retry credentials alongside media cleanup. */ }
-      finally { this.active.delete(`turn:${member.id}`); }
+    // Legacy credentials have no reliable key ownership. Their one-hour expiry
+    // bound ends cleanup without trying a possibly rotated key.
+    if (!task.keyId || (task.retry?.nextAttemptAt || 0) > Date.now() || this.cleanupSlots >= 2 || budget - Date.now() < 50) return;
+    this.active.add(lock); this.cleanupSlots++;
+    try {
+      task.retry = { ...task.retry, attempts: task.retry?.attempts || 0, nextAttemptAt: budget + 1000 };
+      this.saveTurn(task); await this.schedule();
+      await this.provider.revoke(task.username, task.keyId, Math.max(1, Math.min(budget, task.expiresAt) - Date.now()));
+      this.ctx.storage.sql.exec('DELETE FROM voice_turn_cleanup WHERE id=?', task.id);
+      cleanupComplete(task.id, 'turn.revoke', 'revoked', task.retry.attempts);
+    } catch (error) {
+      task.retry = retryAfter(task.retry, 'turn', error, 'turn.revoke', task.id); this.saveTurn(task);
+    } finally { this.active.delete(lock); this.cleanupSlots--; }
+  }
+  private async cleanup(scope?: { memberId: string; direction: MediaSession['direction'] }) {
+    for (const member of this.members()) if (member.leaving) this.recordMediaClosure(member.id);
+    const budget = this.cleanupBudget();
+    const due = this.sessions().filter(session => session.retired && !this.active.has(session.id)
+      && (session.cleanup?.nextAttemptAt || 0) <= Date.now()
+      && (!scope || session.memberId === scope.memberId && session.direction === scope.direction))
+      .sort((a, b) => (a.cleanup?.nextAttemptAt || 0) - (b.cleanup?.nextAttemptAt || 0)).slice(0, Math.max(0, 2 - this.cleanupSlots));
+    await Promise.all(due.map(session => this.cleanSession(session.id, budget)));
+    if (!scope) {
+      await Promise.all(this.members().filter(member => member.leaving && !member.tombstoneUntil).map(member => this.settleMember(member.id, budget)));
+      const tasks = this.turnTasks().filter(task => task.expiresAt <= Date.now() || task.keyId && (task.retry?.nextAttemptAt || 0) <= Date.now())
+        .sort((a, b) => (a.retry?.nextAttemptAt || 0) - (b.retry?.nextAttemptAt || 0));
+      // Expired entries need no I/O and must not wait behind slow revocations.
+      for (const task of tasks.filter(task => task.expiresAt <= Date.now())) await this.cleanTurn(task, budget);
+      await Promise.all(tasks.filter(task => task.expiresAt > Date.now()).slice(0, Math.max(0, 2 - this.cleanupSlots)).map(task => this.cleanTurn(task, budget)));
     }
     await this.schedule();
-  }
-  private cleanupWarning(session: MediaSession, code: string) {
-    session.cleanupAttempts = (session.cleanupAttempts || 0) + 1; this.saveSession(session);
-    // Exponential log sampling; never log SDP, tokens or upstream response text.
-    if ((session.cleanupAttempts & (session.cleanupAttempts - 1)) === 0) console.warn(JSON.stringify({ event: 'voice_cleanup_retry', direction: session.direction, code, attempts: session.cleanupAttempts }));
   }
   async alarm() {
     const now = Date.now();
@@ -383,16 +544,16 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
       if (member.tombstoneUntil && member.tombstoneUntil <= now) { this.ctx.storage.sql.exec('DELETE FROM voice_members WHERE id=?', member.id); continue; }
       if (!member.leaving && (this.expiry(member) <= now || !['on', 'drain'].includes(this.env.VOICE_MODE || '') || (member.user.id.startsWith('guest:') && this.env.VOICE_REQUIRE_PASS !== 'false'))) { this.retireMember(member); changed = true; }
     }
-    for (const member of this.members().filter(member => !member.leaving && (!member.quotaUntil || member.quotaUntil - Date.now() <= 20000))) {
-      try { await this.quota(member); }
-      catch { /* quota() retires the member; cleanup and its alarm keep retrying. */ }
-    }
     for (const session of this.sessions()) if (!session.retired && session.deadline <= now) {
       session.retired = true; this.saveSession(session);
       const member = this.latest(session.memberId);
       if (member.publication?.version === session.id) { delete member.publication; this.save(member); changed = true; }
     }
     if (changed) this.changed();
+    await Promise.all(this.members().filter(member => !member.leaving && (!member.quotaUntil || member.quotaUntil - Date.now() <= 20000)).map(async member => {
+      try { await this.quota(member); }
+      catch { /* quota() retires the member; persisted cleanup retries remain. */ }
+    }));
     await this.cleanup();
   }
 }

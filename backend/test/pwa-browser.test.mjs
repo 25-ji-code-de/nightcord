@@ -58,7 +58,7 @@ test('PWA installs its shell, exposes accessible settings and reloads offline on
   await page.getByRole('button', { name: '检查更新', exact: true }).click();
   assert.match(await page.locator('#pwa-status').textContent(), /当前处于离线状态/);
   await page.setViewportSize({ width: 375, height: 812 });
-  assert.equal(await page.locator('.settings-sidebar').isVisible(), false);
+  await page.locator('.settings-sidebar').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('#settings-pwa').isVisible(), true);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   assert.equal(await page.locator('#pwa-update').evaluate(button => button.getBoundingClientRect().height >= 44), true);

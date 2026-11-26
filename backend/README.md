@@ -96,6 +96,29 @@ The frontend is built with `node scripts/build-pages.mjs` from the repository
 root. Configure Pages to run that command with output directory `dist`.
 Its build publishes browser assets only; do not upload the repository root.
 
+### Automatic backend deployment
+
+`.github/workflows/deploy-backend.yml` deploys `nightcord-chat` after the complete
+`CI` workflow passes for a push to `main`. It compares the tested commit with the
+last successful `production-backend` deployment. Changes to backend source,
+migrations, dependencies, Wrangler/TypeScript configuration or the deployment
+workflow trigger a deployment; frontend-only, test-only and documentation-only
+changes skip it. The first run deploys to establish a baseline. Using the last
+successful deployment also catches changes left unpublished by a failed run.
+
+Set the GitHub Actions secret `CLOUDFLARE_API_TOKEN` on the repository or the
+`production-backend` environment. Use a dedicated Cloudflare token with Workers
+Scripts Edit, D1 Edit and Account Settings Read for the account in `wrangler.jsonc`,
+plus Workers Routes Edit and Zone Read for the `nightcord.de5.net` zone. Runtime
+secrets stay in Cloudflare; do not copy `.dev.vars` or Wrangler OAuth credentials
+into GitHub. The account ID already comes from the checked-in configuration.
+
+Deployments run one at a time, apply pending D1 migrations before publishing,
+tag the Worker version with the tested commit SHA, and check `/health` afterward.
+An obsolete commit or a pull request cannot deploy. To retry a failed deployment,
+run **Deploy backend** manually on `main`; the same CI and change checks apply.
+Frontend publication continues through the existing Cloudflare Pages integration.
+
 ## API and storage
 
 - `GET /health`: health check.

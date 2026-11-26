@@ -41,6 +41,7 @@ test('managed rooms: create, join, send, replies, invitations, removal, mobile a
   async function pageFor(name, width = 1280) {
     const context = await browser.newContext({ viewport: { width, height: width < 600 ? 844 : 900 },
       isMobile: width < 600, hasTouch: width < 600, serviceWorkers: 'block', reducedMotion: 'reduce' });
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
     await context.route('**/*', route => {
       const url = route.request().url();
       if (url.startsWith(origin) || url.startsWith(base)) return route.continue();

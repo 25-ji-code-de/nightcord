@@ -51,7 +51,7 @@ test('PWA installs its shell, exposes accessible settings and reloads offline on
   await page.getByRole('button', { name: '安装应用', exact: true }).click();
   assert.match(await page.locator('#pwa-status').textContent(), /安装已启动/);
   await context.setOffline(true);
-  assert.equal(await page.locator('.pwa-offline').isVisible(), true);
+  await page.locator('.pwa-offline').waitFor({ state: 'visible' });
   await page.reload();
   await page.locator('#navigation-settings').click();
   await page.getByRole('tab', { name: '应用与推送通知', exact: true }).click();

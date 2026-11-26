@@ -18,6 +18,8 @@
   // iPadOS can identify as desktop Safari; touch-capable MacIntel is an iPad.
   const isIOSDevice = /iPhone|iPad|iPod/i.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  // System text sizing follows the device, independently of the layout preference.
+  document.documentElement.toggleAttribute('data-ios-device', isIOSDevice);
   const normalizeIOSLayout = value => value === 'on' || value === 'off' ? value : isIOSDevice ? 'on' : 'off';
   const read = (storageKey = key, validate = normalize) => {
     try { return validate(localStorage.getItem(storageKey)); }

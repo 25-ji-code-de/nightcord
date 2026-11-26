@@ -58,6 +58,10 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
       return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, overflow: node.scrollWidth > node.clientWidth + 1 };
     });
     const radius = selector => page.locator(selector).evaluate(node => getComputedStyle(node).borderTopRightRadius);
+    const typography = () => page.evaluate(() => Object.fromEntries([
+      '.message-text', '.message-user', '.message-time', '#messageInput', '#name-input',
+      '.settings-header h1', '.settings-description', '.settings-toggle-title',
+    ].map(selector => [selector, parseFloat(getComputedStyle(document.querySelector(selector)).fontSize)])));
     await page.goto(origin);
     await setup();
     await page.waitForFunction(() => document.querySelector('#messages').textContent.includes('先把这一段写完'));
@@ -144,6 +148,15 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
       assert.equal(dialog.overflow, false);
       assert.equal(await page.locator('.navigation-scrim').isVisible(), false);
       assert.equal(await toggle.isChecked(), true);
+      const iosType = await typography();
+      assert.ok(iosType['.message-text'] >= 15.5 && iosType['.message-text'] <= 16.5, 'default mobile body stays close to 16px');
+      assert.ok(iosType['.message-user'] < iosType['.message-text'], 'authors remain secondary to message content');
+      assert.ok(iosType['.message-time'] >= 12 && iosType['.message-time'] < iosType['.message-user'], 'timestamps stay readable and subordinate');
+      assert.ok(iosType['#messageInput'] >= 16 && iosType['#name-input'] >= 16, 'chat and sign-in inputs avoid focus zoom');
+      assert.doesNotMatch(await page.locator('meta[name="viewport"]').getAttribute('content'), /user-scalable\s*=\s*no|maximum-scale/);
+      await toggle.uncheck();
+      assert.deepEqual(await typography(), iosType, 'turning iOS layout off must not shrink phone typography');
+      await toggle.check();
       await toggle.scrollIntoViewIfNeeded();
       const toggleBounds = await bounds('#ios-layout-toggle');
       const footerBounds = await bounds('.settings-footer');
@@ -173,8 +186,29 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
     // At large text sizes the label can exceed the scroller height; its end must remain reachable.
     await toggle.evaluate(node => node.scrollIntoView({ block: 'end' }));
     assert.ok((await bounds('#ios-layout-toggle')).bottom <= largeTextFooter.top + 1);
+    const largeType = await typography();
+    assert.ok(largeType['.message-text'] >= 30, 'larger system text still enlarges message content');
+    await toggle.uncheck();
+    assert.deepEqual(await typography(), largeType, 'larger text works with iOS layout disabled too');
+    await toggle.check();
     if (process.env.NIGHTCORD_IOS_SCREENSHOTS) await page.screenshot({ path: resolve(root, '.qa-artifacts/ios-layout/settings-large-text.png') });
     await closeSettings();
+    await page.evaluate(() => { document.documentElement.style.removeProperty('font-size'); });
+
+    // Long names and mixed CJK/Latin text must wrap without pushing time or content offscreen.
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = '34px';
+      document.querySelector('.message-user').textContent = '很长的昵称LongNameWithoutSpaces1234567890';
+      document.querySelector('.message-text').textContent = '中文 English https://example.com/' + 'long-path-'.repeat(12);
+    });
+    for (const mode of ['off', 'on']) {
+      await page.evaluate(mode => { document.documentElement.dataset.iosLayout = mode; }, mode);
+      for (const selector of ['.message-header', '.message-content', '.message-text']) {
+        const rect = await page.locator(selector).first().evaluate(node => ({ width: node.clientWidth, scroll: node.scrollWidth }));
+        assert.ok(rect.scroll <= rect.width + 1, `${mode}: enlarged ${selector} wraps at 320px`);
+      }
+    }
     await page.evaluate(() => { document.documentElement.style.removeProperty('font-size'); });
 
     // Safari rubber band/toolbar movement must not translate or resize the app.
@@ -245,6 +279,7 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
       }, profile);
       await devicePage.goto(origin);
       assert.equal(await devicePage.locator('html').getAttribute('data-ios-layout'), profile.expected, profile.name);
+      assert.equal(await devicePage.locator('html').evaluate(node => node.hasAttribute('data-ios-device')), profile.expected === 'on', `${profile.name}: native text sizing follows the device`);
       await devicePage.evaluate(() => new UIManager(new EventBus()).setupChatRoom(() => {}, () => {}));
       await devicePage.locator('.sidebar-toggle').click();
       await devicePage.locator('#navigation-settings').click();

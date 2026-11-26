@@ -1,17 +1,13 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-/* HIG-inspired layout and typography; iOS defaults on, explicit preferences win.
+/* HIG-inspired layout; readable mobile typography is shared by both modes.
  * https://developer.apple.com/design/human-interface-guidelines/typography */
 :root[data-ios-layout="on"] {
   --nc-ios-font: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  font-size: 17px;
-  /* Safari uses the user's preferred Dynamic Type body size. */
-  font: -apple-system-body;
   font-family: var(--nc-ios-font);
 }
 :root[data-ios-layout="on"] :is(body, .settings-dialog) { font-family: var(--nc-ios-font); }
-:root[data-ios-layout="on"] .settings-dialog { font-size: 1rem; line-height: 1.5; }
 :root[data-ios-layout="on"] .settings-header { align-items: center; padding: 16px 20px; }
-:root[data-ios-layout="on"] .settings-header h1 { font-size: 1.294rem; font-weight: 600; letter-spacing: -.02em; }
+:root[data-ios-layout="on"] .settings-header h1 { font-weight: 600; letter-spacing: -.02em; }
 :root[data-ios-layout="on"] .settings-eyebrow { display: none; }
 :root[data-ios-layout="on"] .settings-close {
   margin: 0 -4px 0 0;
@@ -20,20 +16,63 @@
 }
 :root[data-ios-layout="on"] .settings-close svg { width: 18px; height: 18px; }
 :root[data-ios-layout="on"] .settings-content { padding: 20px; }
-:root[data-ios-layout="on"] .palette-fieldset legend { color: rgb(var(--nc-text-muted)); font-size: .882rem; font-weight: 500; }
+:root[data-ios-layout="on"] .palette-fieldset legend { color: rgb(var(--nc-text-muted)); font-weight: 500; }
 :root[data-ios-layout="on"] .palette-options { gap: 12px; }
-:root[data-ios-layout="on"] .palette-option-heading { font-size: .882rem; }
-:root[data-ios-layout="on"] .settings-description { font-size: .882rem; line-height: 1.5; }
 :root[data-ios-layout="on"] .settings-preferences { margin-top: 24px; border-radius: 16px; background: rgb(var(--nc-line) / .045); }
 :root[data-ios-layout="on"] .settings-toggle { gap: 12px; min-height: 44px; margin: 0; padding: 14px 16px; }
 :root[data-ios-layout="on"] .settings-toggle + .settings-toggle { border-top: 1px solid rgb(var(--nc-line) / .1); }
-:root[data-ios-layout="on"] .settings-toggle-title { font-size: 1rem; font-weight: 500; }
+:root[data-ios-layout="on"] .settings-toggle-title { font-weight: 500; }
 :root[data-ios-layout="on"] .settings-footer { padding: 12px 20px; }
-:root[data-ios-layout="on"] .settings-footer p { font-size: .765rem; }
 
 /* Compact layouts include iPhone landscape widths. The header stays outside
  * the message scroller, including when the keyboard reduces available height. */
 @media (max-width: 768px), (max-width: 1024px) and (pointer: coarse) {
+  :root {
+    /* Default mobile scale: body 16, author/labels 15, secondary 14, caption 13.
+     * Keep it independent of the layout switch and of device pixel density. */
+    --nc-phone-unit: 1rem;
+    --nc-phone-body: var(--nc-phone-unit);
+    --nc-phone-label: calc(var(--nc-phone-unit) * .9375);
+    --nc-phone-secondary: calc(var(--nc-phone-unit) * .875);
+    --nc-phone-caption: calc(var(--nc-phone-unit) * .8125);
+    --nc-phone-title: calc(var(--nc-phone-unit) * 1.25);
+    font-size: 100%;
+    /* Prevent Safari's automatic text inflation, including after rotation.
+     * This does not disable pinch zoom, page zoom or Dynamic Type. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  @supports (font: -apple-system-body) {
+    :root[data-ios-device] {
+      /* Normalize Apple's default 17px body to our dense chat's 16px base.
+       * Larger system text still scales every role, even with iOS mode off. */
+      font: -apple-system-body;
+      --nc-phone-unit: calc(1rem * 16 / 17);
+    }
+  }
+  :root :is(body, .settings-dialog) {
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: var(--nc-phone-body);
+    line-height: 1.5;
+  }
+  :root :is(.message-text, .dm-message-content, .tool-message-preview) {
+    font-size: var(--nc-phone-body);
+    line-height: 1.5;
+  }
+  :root :is(.message-text, .dm-message-content) .sekai-text-node { line-height: inherit; }
+  :root :is(.chat-header, .tools-header h1, .dm-list-header h1, .rooms-header h1, .settings-toggle-title) { font-size: var(--nc-phone-body); }
+  :root :is(.message-user, .channel, .voice-user-name, .sidebar-profile-name, .palette-fieldset legend, .palette-option-heading) { font-size: var(--nc-phone-label); }
+  :root :is(.settings-description, .tools-description, .subtitle) { font-size: var(--nc-phone-secondary); line-height: 1.5; }
+  :root :is(.message-time, .section-label, .settings-footer p, .palette-option-copy small, .tool-message-meta time) { font-size: var(--nc-phone-caption); }
+  :root .settings-header h1 { font-size: var(--nc-phone-title); }
+  :root .message-header { flex-wrap: wrap; gap: 2px 8px; }
+  :root .message-user { min-width: 0; overflow-wrap: anywhere; }
+  :root .message-time { white-space: nowrap; }
+  /* All editable fields need at least 16px to avoid iPhone focus zoom. */
+  :root :is(.input, input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="button"], [type="submit"]), textarea, select) { font-size: max(16px, var(--nc-phone-body)); }
+  /* These two DM fields also have component-level !important declarations. */
+  :root :is(.dm-search, .dm-input) { font-size: max(16px, var(--nc-phone-body)) !important; }
+
   :root[data-ios-layout="on"] {
     --nc-ios-safe-top: env(safe-area-inset-top, 0px);
     --nc-ios-safe-right: env(safe-area-inset-right, 0px);
@@ -60,7 +99,6 @@
     min-height: 48px;
     flex: 0 0 48px;
     padding-inline: 16px;
-    font-size: 1rem;
   }
   :root[data-ios-layout="on"] :is(.sidebar-toggle, .tools-menu) {
     display: inline-flex;
@@ -73,8 +111,6 @@
     padding: 0;
   }
   :root[data-ios-layout="on"] .window-buttons { display: none; }
-  :root[data-ios-layout="on"] .message-text { font-size: 1rem; line-height: 1.5; }
-  :root[data-ios-layout="on"] .message-user { font-size: .882rem; }
   :root[data-ios-layout="on"] .input-area {
     flex-shrink: 0;
     /* Only the pill's bottom padding enters the safe area; buttons stay above it. */
@@ -87,7 +123,7 @@
     border-radius: 24px;
     box-shadow: inset 0 0 0 1px rgb(var(--nc-line) / .1);
   }
-  :root[data-ios-layout="on"] .input { min-width: 0; font-size: max(16px, 1rem); max-height: min(140px, 25dvh); }
+  :root[data-ios-layout="on"] .input { min-width: 0; max-height: min(140px, 25dvh); }
 
   :root[data-ios-layout="on"] .sidebar {
     position: fixed;
@@ -148,7 +184,6 @@
     transform: none;
   }
   :root[data-ios-layout="on"] .file-upload-progress.hidden { transform: translateY(8px); visibility: hidden; }
-  :root[data-ios-layout="on"] :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]), textarea, select) { font-size: max(16px, 1rem); }
   :root[data-ios-layout="on"] .tools-body { padding-bottom: var(--nc-ios-safe-bottom); }
 
   @media (prefers-reduced-motion: reduce) {

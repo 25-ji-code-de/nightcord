@@ -18,8 +18,8 @@ class ChatAlerts {
       bus.on('session:updated', () => { if (this.scope !== this.preferences.key()) this.reset(); }),
       bus.on('room:changed', () => this.reset()),
       bus.on('room:synced', () => this.synced()), bus.on('room:ready', () => this.synced()),
-      bus.on('user:joined', data => this.member(data.user?.id, data.username, true)),
-      bus.on('user:quit', data => this.member(data.userId, data.username, false))
+      bus.on('user:joined', data => this.member(data.user?.id, data.username, true, data.silent)),
+      bus.on('user:quit', data => this.member(data.userId, data.username, false, data.silent))
     ];
     this.attention = () => {
       if (this.viewing()) {
@@ -46,7 +46,7 @@ class ChatAlerts {
   }
   reasons(message, lookup) {
     return this.classifier.classify(message, this.ui.currentUser,
-      lookup || (ts => this.ui.messages.find(item => Number(item.timestamp) === ts)));
+      lookup || (ts => this.ui.messages.find(item => Number(item.replyKey || item.timestamp) === ts)));
   }
   paused(prefs = this.preferences.read()) { return prefs.pausedUntil > Date.now(); }
   reset() {
@@ -118,10 +118,16 @@ class ChatAlerts {
       return played;
     });
   }
-  member(id, name, online) {
+  member(id, name, online, silent = false) {
     if (!id || id === this.ui.currentUser?.id || !this.ready) return;
     const previous = this.presence.get(id) === true;
     const pending = this.transitions.get(id);
+    if (silent) {
+      if (pending) clearTimeout(pending.timer);
+      this.transitions.delete(id);
+      this.presence.set(id, online);
+      return;
+    }
     if (pending?.online === online) return;
     if (pending) { clearTimeout(pending.timer); this.transitions.delete(id); }
     if (previous === online) return;

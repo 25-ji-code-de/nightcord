@@ -73,7 +73,7 @@ test('appearance settings independently apply palettes and member styles, preser
         return [rect.x, rect.y, rect.width, rect.height, style.fontFamily, style.borderRadius];
       }));
     const before = await geometry();
-    assert.equal(await page.locator('.navigation-links > button').count(), 9);
+    assert.equal(await page.locator('.navigation-links > button').count(), 10);
     assert.equal(await page.locator('#navigation-chat svg').evaluate(node => node.getBoundingClientRect().width), 28);
     const beforeMessages = await page.locator('#messages').textContent();
     await page.locator('#messageInput').fill('Unsent appearance draft');

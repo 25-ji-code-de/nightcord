@@ -98,7 +98,7 @@ test('one drain owns in-flight deliveries and an old acknowledgement cannot eras
     }
   `).replace('await this.env.DM_INBOXES.getByName(row.owner_id).apply(JSON.parse(row.snapshot));\n        this.ctx.storage.sql.exec',
     'await this.testApply(row);\n        this.ctx.storage.sql.exec')
-    .replace('await this.ctx.storage.transaction(() => this.schedule());', '$&\n await this.testFinish();');
+    .replace(/(var DirectRoom = class[\s\S]*?)(await this.ctx.storage.transaction\(\(\) => this.schedule\(\)\);)/, '$1$2\n await this.testFinish();');
   const f = await fixture(t, {}, undefined, script); await f.initialize();
   await send(f, 'alice', 'Request'); await f.room.handle(profiles.bob, 'accept', {});
   const storage = await f.storage('DirectRoom', keyFor());

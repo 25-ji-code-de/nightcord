@@ -169,7 +169,7 @@ class RosterView {
    * @param {string} username - 用户名
    */
   addUserToRoster(username, profile) {
-    this.ui.storage?.rememberProfile(profile);
+    if (!this.ui.managedChat) this.ui.storage?.rememberProfile(profile);
     if (profile?.authenticated && profile.id?.startsWith('sekai:')) this.ui.roomMembers.set(profile.id, profile);
     // Avoid adding duplicate entries for the same username. Server may emit
     // a user:joined after we have locally renamed the user, so skip if
@@ -236,6 +236,15 @@ class RosterView {
     this.ui.roster.forEach(u => {
       allUsers.set(u.profile?.id || `name:${u.name}`, { ...u, status: 'online' });
     });
+
+    if (this.ui.managedChat) {
+      for (const profile of this.ui.roomMembers.values()) {
+        if (!allUsers.has(profile.id)) allUsers.set(profile.id, { ...this.ui.generateAvatar(profile.displayName), profile, status: 'offline' });
+      }
+      // Managed membership is authoritative. Old messages must not reinsert
+      // hidden or removed members into the mention picker's member lists.
+      return Array.from(allUsers.values());
+    }
 
     // Historical names alone cannot identify a recipient. They also include AI
     // speakers and aliases from before identity IDs were stored with messages.

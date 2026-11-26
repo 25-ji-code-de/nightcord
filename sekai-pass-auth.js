@@ -77,6 +77,7 @@
 
     /** 开始 OAuth 授权流程。 */
     async login() {
+      if (typeof RoomDestination !== 'undefined') RoomDestination.save();
       // OAuth returns to a fixed callback URL without the room query string.
       // Keep this tab's destination separate from the SDK's PKCE state.
       try {

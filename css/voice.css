@@ -14,9 +14,9 @@
   color: rgb(var(--sekai-fg-muted));
   font-size: var(--sekai-text-sm);
 }
-.voice-toolbar[hidden], .voice-toolbar [hidden] { display: none; }
+.chat-header-actions > [hidden], .voice-toolbar [hidden] { display: none; }
 .voice-toolbar button, .voice-panel select { font: inherit; }
-.voice-trigger, .voice-quick-mic, .voice-close {
+.chat-header-action, .voice-trigger, .voice-quick-mic, .voice-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -32,7 +32,7 @@
   transition: color var(--sekai-dur-fast), background var(--sekai-dur-fast);
 }
 .voice-trigger { gap: var(--sekai-space-xs); transition: color var(--sekai-dur-fast); }
-.voice-trigger:hover, .voice-trigger[aria-expanded="true"], .voice-quick-mic:hover, .voice-close:hover {
+.chat-header-action:hover, .voice-trigger:hover, .voice-trigger[aria-expanded="true"], .voice-quick-mic:hover, .voice-close:hover {
   color: rgb(var(--sekai-fg));
 }
 .voice-quick-mic:hover, .voice-close:hover { background: var(--sekai-tint-hover); }
@@ -50,7 +50,7 @@
 .voice-quick-mic::before { content: ''; position: absolute; left: -2px; height: 16px; border-left: var(--sekai-hairline); }
 .voice-toolbar [aria-pressed="false"] .voice-mic-on,
 .voice-toolbar [aria-pressed="true"] .voice-mic-off { display: none; }
-.voice-toolbar :is(button, select, input, summary):focus-visible { outline: 2px solid rgb(var(--sekai-accent-hover)); outline-offset: -2px; }
+.chat-header-action:focus-visible, .voice-toolbar :is(button, select, input, summary):focus-visible { outline: 2px solid rgb(var(--sekai-accent-hover)); outline-offset: -2px; }
 
 /* A conference terminal with its own plastic housing, rubber keys and glass.
    Screen menus change content; lamps and physical controls stay in place. */

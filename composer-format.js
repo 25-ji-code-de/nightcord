@@ -27,6 +27,10 @@ window.bindComposerFormat = function (ui, limit) {
     focus?.focus({ preventScroll: true });
   }
 
+  for (const event of ['room:changed', 'chat:cleared', 'session:unavailable']) ui.eventBus?.on(event, () => {
+    close(); form.reset(); draft = null; editor = null;
+  });
+
   function showHome() {
     editor = null;
     form.hidden = back.hidden = true;

@@ -4,14 +4,21 @@
 class ChatRoomView {
   constructor(ui) { this.ui = ui; }
 
+  updateHeading() {
+    const roomname = this.ui.currentRoom;
+    if (!roomname) return;
+    const displayName = this.ui.managedChat?.manager.room?.name || this.ui.officialRooms?.find(room => room.id === roomname)?.name
+      || (roomname === 'nightcord-default' ? '作业' : roomname === 'nightcord-test' ? '测试' : roomname);
+    this.ui.elements.roomName.textContent = displayName;
+    const heading = document.querySelector('#current-channel-name');
+    if (heading) heading.textContent = displayName;
+  }
+
   setCurrentRoom(roomname) {
     // 下方会从缓存重建模型，未确认预览不跨房间/重新加载保留。
     this.ui.localNakoMessages.clear();
     this.ui.currentRoom = roomname;
-    const displayName = roomname === 'nightcord-default' ? '作业' : roomname === 'nightcord-test' ? '测试' : roomname;
-    this.ui.elements.roomName.textContent = displayName;
-    const heading = document.querySelector('#current-channel-name');
-    if (heading) heading.textContent = displayName;
+    this.updateHeading();
     // 切换到新房间时，尝试从本地存储加载消息并渲染（若随后有 room:ready 会被覆盖为合并后的消息）
     try {
       const local = (this.ui.storage ? this.ui.storage.loadMessages(this.ui.currentRoom || 'nightcord-default') : this.ui.loadLocalMessages(this.ui.currentRoom || 'nightcord-default'));

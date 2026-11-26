@@ -272,6 +272,7 @@ class IdentityController {
       // 加入房间
       this.app.joinRoom(roomname || 'nightcord-default');
     } catch (error) {
+      if (typeof RoomDestination !== 'undefined') RoomDestination.clear();
       // 把 SDK / 适配层抛出的原始异常翻译成带错误码的可读描述。
       // describeAuthError 始终保留 sourceCode 与 originalMessage，控制台不丢信息。
       const descriptor = window.describeAuthError(error);

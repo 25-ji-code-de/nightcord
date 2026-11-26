@@ -55,6 +55,7 @@ class NightcordManager {
     this.currentUser = null;
     this.aiConfig = config.aiConfig || { getAllDisplayNames: () => [] };
     this.fetch = config.fetch || ((...args) => globalThis.fetch(...args));
+    this.visibilityState = { visibility: null, pending: null, available: false, reason: 'disconnected', error: '' };
     
     const createTransport = config.createTransport || (options => new WebSocketManager({
       ...options,
@@ -134,6 +135,7 @@ class NightcordManager {
   joinRoom(roomname) {
     // Normalize the room name
     this.roomname = roomname.replace(/[^a-zA-Z0-9_-]/g, "").replace(/_/g, "-").toLowerCase();
+    this.resetVisibility();
     this.lastSeenTimestamp = 0;
     this.wroteWelcomeMessages = false;
     this.roster.clear();
@@ -151,6 +153,37 @@ class NightcordManager {
 
   refreshAuthentication() {
     return this.wsManager.refreshAuthentication();
+  }
+
+  publishVisibility(change) {
+    Object.assign(this.visibilityState, change);
+    this.eventBus.emit('room:visibility', { ...this.visibilityState });
+  }
+
+  resetVisibility(reason = 'connecting') {
+    if (this._visibilityTimer) clearTimeout(this._visibilityTimer);
+    this._visibilityTimer = null;
+    this._visibilityRequestId = null;
+    this._visibilitySynced = false;
+    this.publishVisibility({ visibility: null, pending: null, available: false, reason, error: '' });
+  }
+
+  setVisibility(visibility) {
+    if (!['online', 'offline', 'hidden'].includes(visibility) || !this.visibilityState.available
+        || this.visibilityState.pending || !this.wsManager.isConnected()) return false;
+    const requestId = `visibility-${this._visibilitySequence = (this._visibilitySequence || 0) + 1}`;
+    this._visibilityRequestId = requestId;
+    this.publishVisibility({ pending: visibility, error: '' });
+    if (!this.wsManager.send({ type: 'room:visibility', visibility, requestId })) {
+      this._visibilityRequestId = null;
+      this.publishVisibility({ pending: null, error: '暂时无法发送设置，请等待连接恢复后重试。' });
+      return false;
+    }
+    this._visibilityTimer = setTimeout(() => {
+      this._visibilityTimer = null;
+      this.publishVisibility({ pending: null, available: false, error: '未收到保存确认，请重新连接后核对显示状态。' });
+    }, 10000);
+    return true;
   }
 
   /**
@@ -186,6 +219,7 @@ class NightcordManager {
    * @fires connection:close
    */
   handleConnectionClose() {
+    this.resetVisibility('disconnected');
     this.eventBus.emit('connection:close', { roomname: this.roomname });
   }
 
@@ -205,6 +239,7 @@ class NightcordManager {
    * @fires roster:clear
    */
   handleReconnect() {
+    this.resetVisibility();
     this.roster.clear();
     this.eventBus.emit('roster:clear');
   }
@@ -220,6 +255,19 @@ class NightcordManager {
    * @fires message:received
    */
   handleMessage(data) {
+    if (data.type === 'room:visibility') {
+      if (data.error) {
+        if (data.requestId !== this._visibilityRequestId) return;
+      } else if (data.userId !== this.currentUser?.id || !['online', 'offline', 'hidden'].includes(data.visibility)) return;
+      // Other tabs update the confirmed value but cannot acknowledge this tab's pending request.
+      if (data.requestId && data.requestId === this._visibilityRequestId) {
+        if (this._visibilityTimer) clearTimeout(this._visibilityTimer);
+        this._visibilityTimer = null;
+        this._visibilityRequestId = null;
+        this.publishVisibility({ pending: null, error: data.error || '', ...(data.error ? {} : { visibility: data.visibility, available: this._visibilitySynced }) });
+      } else if (!data.error) this.publishVisibility({ visibility: data.visibility });
+      return;
+    }
     if (data.type === 'room:members') {
       this.eventBus.emit('room:members', { users: data.users });
       return;
@@ -229,10 +277,18 @@ class NightcordManager {
       return;
     }
     if (data.type === 'session') {
+      if (this.currentUser && this.currentUser.id !== data.user.id) {
+        const synced = this._visibilitySynced;
+        this.resetVisibility();
+        this._visibilitySynced = synced;
+      }
       this.currentUser = data.user;
       this.username = data.user.displayName;
       this.wsManager.username = this.username;
-      this.eventBus.emit('session:updated', { user: data.user });
+      this.eventBus.emit('session:updated', { user: data.user, visibility: data.visibility });
+      this.publishVisibility({ visibility: ['online', 'offline', 'hidden'].includes(data.visibility) ? data.visibility : null,
+        available: this._visibilitySynced && ['online', 'offline', 'hidden'].includes(data.visibility),
+        reason: ['online', 'offline', 'hidden'].includes(data.visibility) ? '' : 'unsupported' });
     } else if (data.type === 'profile') {
       if (this.roster.has(data.user.id)) this.roster.set(data.user.id, data.user);
       this.eventBus.emit('user:profile', { user: data.user });
@@ -240,11 +296,13 @@ class NightcordManager {
       this.eventBus.emit('message:error', { error: data.error });
     } else if (data.joined) {
       this.roster.set(data.user?.id || data.joined, data.user || { displayName: data.joined });
-      this.eventBus.emit('user:joined', { username: data.joined, user: data.user });
+      this.eventBus.emit('user:joined', { username: data.joined, user: data.user, silent: data.silent === true });
     } else if (data.quit) {
       this.roster.delete(data.userId || data.quit);
-      this.eventBus.emit('user:quit', { username: data.quit, userId: data.userId });
+      this.eventBus.emit('user:quit', { username: data.quit, userId: data.userId, silent: data.silent === true });
     } else if (data.ready) {
+      this._visibilitySynced = true;
+      this.publishVisibility({ available: this.visibilityState.visibility !== null });
       this.eventBus.emit('room:synced', { roomname: this.roomname });
       if (!this.wroteWelcomeMessages) {
         this.wroteWelcomeMessages = true;
@@ -292,6 +350,7 @@ class NightcordManager {
    * @fires room:left
    */
   leave() {
+    this.resetVisibility('disconnected');
     this.wsManager.disconnect();
     this.roster.clear();
     this.wroteWelcomeMessages = false;

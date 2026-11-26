@@ -40,6 +40,15 @@ An absent or unrecognized mode defaults to off. The checked-in configuration is
 on. See [private messaging](../docs/DIRECT_MESSAGES.md) for the API, limits,
 storage behavior and local verification.
 
+## Managed rooms
+
+Managed rooms use the `MANAGED_ROOMS` SQLite Durable Object binding and the
+`ROOM_DIRECTORY` D1 database. The repository includes `v5-managed-rooms` and
+`migrations/0001_rooms.sql`; preserve existing migrations and namespaces.
+`ROOMS_MODE`, `ROOMS_CREATE`, and `ROOMS_DISCOVERY` control availability, while
+`ROOMS_OFFICIAL` defines public channels, including the default “作业” channel.
+See [room behavior, configuration and validation](../docs/ROOMS_IMPLEMENTATION.md).
+
 ## Development and deployment
 
 ```sh
@@ -149,6 +158,20 @@ Its build publishes browser assets only; do not upload the repository root.
   monotonic across restarts and hibernation.
 - WebSockets use the Hibernation API; connection metadata lives in attachments.
   Idle connections do not require a continuously active DO or heartbeat timer.
+- Each room persists a `room_visibility` preference by verified account or cookie
+  guest ID: `online` (default), `offline`, or `hidden`. The private `session` frame
+  returns the saved preference. Authenticated sockets send
+  `{type:"room:visibility",visibility,requestId}` to change their own preference;
+  replies echo `requestId`, and other connections for the same identity receive
+  the new value without it. Failures return `error` and `code`. Changes use a
+  separate account control limit and require a current authentication lease.
+  Hidden identities are omitted from `room:members`; offline and hidden identities
+  emit no online/profile/departure broadcasts on reconnect, auth refresh or close.
+  Switching preferences updates existing rosters with silent joined/quit frames
+  plus a fresh member snapshot. Guests still have no offline member record.
+  Messages, history and active voice participants remain visible. The table is
+  created on first use without a namespace migration; deploy the backend before
+  the frontend, and refresh old clients to support silent transitions correctly.
 - Limits are shared across rooms: five initial actions, then one per five
   seconds. Joining uses the IP limit; verified sessions use their account limit.
   Guest messages use both IP and stable guest-ID limits; reconnects and changing

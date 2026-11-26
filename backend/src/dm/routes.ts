@@ -28,11 +28,17 @@ export async function dmRoute(request: Request, env: ChatEnv, origin: string): P
       available(env, true);
       const peerId = account(input.peerId);
       const id = await roomKey(user.id, peerId);
+      let peer;
+      if (input.sourceType === 'managed') {
+        if (typeof input.sourceRoom !== 'string' || !/^r_[a-f0-9]{32}$/.test(input.sourceRoom)) return fail('invalid_room');
+        peer = await env.MANAGED_ROOMS.getByName(input.sourceRoom).directPeer(user.id, peerId);
+      } else {
       if (typeof input.sourceRoom !== 'string' || !/^([a-z0-9-]{1,32}|[0-9a-f]{64})$/.test(input.sourceRoom)) return fail('invalid_room');
       let sourceId: DurableObjectId;
       try { sourceId = input.sourceRoom.length === 64 ? env.ROOMS.idFromString(input.sourceRoom) : env.ROOMS.idFromName(input.sourceRoom); }
       catch { return fail('not_found', 404); }
-      const peer = await env.ROOMS.get(sourceId).directPeer(user.id, peerId);
+      peer = await env.ROOMS.get(sourceId).directPeer(user.id, peerId);
+      }
       if (!peer) return fail('peer_unavailable', 404);
       unwrap(await inbox.handle(user, 'reserve', { peerId }));
       const initialized = unwrap(await env.DM_ROOMS.getByName(id).handle(user, 'initialize', {}, { id, peer }));

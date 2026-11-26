@@ -8,6 +8,8 @@ import { AUTH_LEASE_MS, guestProfile, ISSUER, profileFromUserInfo, type Profile 
 import { allowedOrigin, corsHeaders, guestSession, verifyGuest, type ChatEnv, type GuestIdentity } from './guest';
 import { isMobileRequest } from './device';
 import { configuration, readJson, record, VoiceError } from './voice/protocol';
+import { roomsRoute } from './rooms/routes';
+export { ManagedRoom } from './rooms/room';
 import { dmRoute } from './dm/routes';
 import { pushRoute } from './push';
 export { VoiceRoom } from './voice/room';
@@ -33,7 +35,9 @@ interface Session {
 }
 type StoredMessage = { name: string; message: string; timestamp: number; profile: string };
 type ChatMessage = { name: string; message: string; timestamp: number; user: Profile };
-type Presence = { joined: string; user: Profile } | { quit: string; userId: string } | { type: 'profile'; user: Profile };
+type Visibility = 'online' | 'offline' | 'hidden';
+type Presence = { joined: string; user: Profile; silent?: boolean } | { quit: string; userId: string; silent?: boolean }
+  | { type: 'profile'; user: Profile } | { type: 'room:members'; users: Profile[] };
 
 function response(body: string, status = 200): Response {
   return new Response(body, {
@@ -51,6 +55,7 @@ export default {
     const origin = allowedOrigin(request, env);
     if (!origin) return response('Origin is not allowed', 403);
     if (url.pathname.startsWith('/api/push/')) return pushRoute(request, env, origin);
+    if (url.pathname === '/api/rooms' || url.pathname.startsWith('/api/rooms/') || url.pathname === '/api/me/rooms') return roomsRoute(request, env, origin);
     if (url.pathname.startsWith('/api/dm/')) return dmRoute(request, env, origin);
     const voiceRoute = /^\/api\/room\/([a-z0-9-]{1,32}|[0-9a-f]{64})\/voice\/([a-z/]+)$/.exec(url.pathname);
     if (voiceRoute) {
@@ -113,6 +118,9 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     )`);
     const hasMembers = this.ctx.storage.sql.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'room_members'").toArray().length;
     this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room_members (id TEXT PRIMARY KEY, profile TEXT NOT NULL)');
+    this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS room_visibility (
+      id TEXT PRIMARY KEY, visibility TEXT NOT NULL CHECK (visibility IN ('online', 'offline', 'hidden'))
+    )`);
     if (!hasMembers) {
       // Retain the latest verified identity from rooms that predate the member list.
       this.ctx.storage.sql.exec(`INSERT OR IGNORE INTO room_members (id, profile)
@@ -147,6 +155,7 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     const frame = data as Record<string, unknown>;
     const initial = ws.deserializeAttachment() as Session;
     if (initial.closed) return;
+    if (frame.type === 'room:visibility') return this.setVisibility(ws, initial, frame);
     if (frame.type === 'voice:ticket') {
       const requestId = typeof frame.requestId === 'string' && /^[a-zA-Z0-9_-]{16,80}$/.test(frame.requestId) ? frame.requestId : null;
       if (!requestId) return;
@@ -213,7 +222,8 @@ export class ChatRoom extends DurableObject<ChatEnv> {
           this.ctx.storage.sql.exec('INSERT INTO room_members (id, profile) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET profile = excluded.profile', user.id, JSON.stringify({ ...user, isMobile: false }));
         }
         const guestExpiresAt = user.authenticated ? 0 : initial.guest!.expiresAt;
-        ws.send(JSON.stringify({ type: 'session', user, authExpiresAt, guestExpiresAt }));
+        const visibility = this.visibility(user.id);
+        ws.send(JSON.stringify({ type: 'session', user, authExpiresAt, guestExpiresAt, visibility }));
         const sameIdentity = this.ctx.getWebSockets().filter(other => {
           if (other === ws) return false;
           const member = other.deserializeAttachment() as Session;
@@ -224,12 +234,13 @@ export class ChatRoom extends DurableObject<ChatEnv> {
             const member = other.deserializeAttachment() as Session;
             const otherUser = { ...user, isMobile: member.user?.isMobile === true };
             other.serializeAttachment({ ...member, user: otherUser });
-            other.send(JSON.stringify({ type: 'session', user: otherUser, authExpiresAt: 0, guestExpiresAt: member.guest?.expiresAt || 0 }));
+            other.send(JSON.stringify({ type: 'session', user: otherUser, authExpiresAt: 0, guestExpiresAt: member.guest?.expiresAt || 0, visibility }));
           }
         }
         const presenceUser = this.presenceProfile(user);
         if (initial.user) {
-          this.broadcast(initial.user.id === user.id ? { type: 'profile', user: presenceUser } : { joined: user.displayName, user: presenceUser });
+          if (visibility === 'online') this.broadcast(initial.user.id === user.id ? { type: 'profile', user: presenceUser } : { joined: user.displayName, user: presenceUser });
+          else if (visibility === 'offline' && user.authenticated) this.broadcast({ type: 'room:members', users: this.visibleMembers() });
           return;
         }
         const history = this.ctx.storage.sql.exec<StoredMessage>(
@@ -239,13 +250,14 @@ export class ChatRoom extends DurableObject<ChatEnv> {
         const seen = new Set<string>();
         for (const other of this.ctx.getWebSockets()) {
           const member = other.deserializeAttachment() as Session;
-          if (other !== ws && member.user && !member.closed && !seen.has(member.user.id)) {
+          if (other !== ws && member.user && !member.closed && !seen.has(member.user.id) && this.visibility(member.user.id) === 'online') {
             seen.add(member.user.id);
             ws.send(JSON.stringify({ joined: member.user.displayName, user: this.presenceProfile(member.user) }));
           }
         }
-        this.broadcast(sameIdentity.length ? { type: 'profile', user: presenceUser } : { joined: user.displayName, user: presenceUser });
-        const users = this.ctx.storage.sql.exec<{ profile: string }>('SELECT profile FROM room_members ORDER BY rowid').toArray().map(row => JSON.parse(row.profile) as Profile);
+        if (visibility === 'online') this.broadcast(sameIdentity.length ? { type: 'profile', user: presenceUser } : { joined: user.displayName, user: presenceUser });
+        const users = this.visibleMembers();
+        if (visibility === 'offline' && user.authenticated) this.broadcast({ type: 'room:members', users });
         ws.send(JSON.stringify({ type: 'room:members', users }));
         if (configuration(this.env, initial.roomName || '').enabled || this.env.VOICE_MODE === 'drain') {
           try {
@@ -296,6 +308,57 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     this.removeSession(ws);
     ws.close(4002, 'Guest credential required');
   }
+  private visibility(id: string): Visibility {
+    return this.ctx.storage.sql.exec<{ visibility: Visibility }>('SELECT visibility FROM room_visibility WHERE id = ?', id).toArray()[0]?.visibility || 'online';
+  }
+  private visibleMembers(): Profile[] {
+    return this.ctx.storage.sql.exec<{ profile: string }>(`SELECT m.profile FROM room_members m
+      LEFT JOIN room_visibility v ON v.id = m.id WHERE v.visibility IS NULL OR v.visibility != 'hidden'
+      ORDER BY m.rowid`).toArray().map(row => JSON.parse(row.profile) as Profile);
+  }
+  private async setVisibility(ws: WebSocket, initial: Session, frame: Record<string, unknown>): Promise<void> {
+    const requestId = typeof frame.requestId === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(frame.requestId) ? frame.requestId : undefined;
+    const fail = (error: string, code: string) => ws.send(JSON.stringify({ type: 'room:visibility', requestId, error, code }));
+    const user = initial.user;
+    if (!user || (user.authenticated ? initial.authExpiresAt : initial.guest?.expiresAt || 0) <= Date.now()) {
+      fail('连接身份已过期，请重新连接后再试。', 'auth_required'); return;
+    }
+    if (!requestId || !['online', 'offline', 'hidden'].includes(frame.visibility as string)) {
+      fail('请选择有效的显示状态。', 'invalid_visibility'); return;
+    }
+    if (initial.busy) { fail('正在处理其他操作，请稍后再试。', 'busy'); return; }
+    ws.serializeAttachment({ ...initial, busy: true });
+    try {
+      if (!await this.env.LIMITERS.getByName(`room-visibility:${user.id}`).check()) {
+        fail('切换过于频繁，请稍后再试。', 'rate_limited'); return;
+      }
+      const current = ws.deserializeAttachment() as Session;
+      if (current.closed) return;
+      if (current.user?.id !== user.id || (user.authenticated ? current.authExpiresAt : current.guest?.expiresAt || 0) <= Date.now()) {
+        fail('连接身份已过期，请重新连接后再试。', 'auth_required'); return;
+      }
+      const visibility = frame.visibility as Visibility, previous = this.visibility(user.id);
+      // Scope comes from the verified identity and this room, never a supplied user ID.
+      this.ctx.storage.sql.exec(`INSERT INTO room_visibility (id, visibility) VALUES (?, ?)
+        ON CONFLICT(id) DO UPDATE SET visibility = excluded.visibility`, user.id, visibility);
+      for (const other of this.ctx.getWebSockets()) {
+        const session = other.deserializeAttachment() as Session;
+        if (session.closed || session.user?.id !== user.id) continue;
+        try { other.send(JSON.stringify({ type: 'room:visibility', userId: user.id, visibility, ...(other === ws ? { requestId } : {}) })); }
+        catch { this.removeSession(other); }
+      }
+      if (previous !== visibility) {
+        // Update lists without announcing a fabricated join/leave or ringing alerts.
+        if (previous === 'online') this.broadcast({ quit: user.displayName, userId: user.id, silent: true });
+        if (visibility === 'online') this.broadcast({ joined: user.displayName, user: this.presenceProfile(user), silent: true });
+        this.broadcast({ type: 'room:members', users: this.visibleMembers() });
+      }
+    } catch {
+      fail('保存失败，请稍后重试。', 'visibility_unavailable');
+    } finally {
+      ws.serializeAttachment({ ...ws.deserializeAttachment(), busy: false });
+    }
+  }
   private presenceProfile(user: Profile): Profile {
     return { ...user, isMobile: this.ctx.getWebSockets().some(other => {
       const member = other.deserializeAttachment() as Session;
@@ -308,6 +371,7 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     ws.serializeAttachment({ ...session, closed: true });
     if (session.voiceUsed && session.connectionId) this.ctx.waitUntil(this.env.VOICE_ROOMS.getByName(`voice:${this.ctx.id}`).disconnect(session.connectionId).catch(() => {}));
     if (!session.user) return;
+    if (this.visibility(session.user.id) !== 'online') return;
     const anotherConnection = this.ctx.getWebSockets().find((other) => {
       const member = other.deserializeAttachment() as Session;
       return other !== ws && !member.closed && member.user?.id === session.user?.id;

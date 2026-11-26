@@ -236,7 +236,7 @@
   .navigation-tooltip { display: none; }
   .sidebar-account-action { width: 44px; }
 }
-@media (max-height: 470px) {
+@media (max-height: 540px) {
   .navigation-rail { overflow-y: auto; scrollbar-width: none; }
   .navigation-links { gap: 2px; padding-bottom: 8px; }
   .navigation-tooltip { display: none; }

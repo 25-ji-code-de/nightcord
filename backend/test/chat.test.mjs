@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import test, { beforeEach, afterEach } from 'node:test';
 import { createRuntime } from './runtime.mjs';
@@ -211,6 +212,123 @@ test('existing rooms backfill the latest verified profiles once and retain membe
   await runtime.unsafeEvictDurableObject('nightcord-chat', 'ChatRoom', { id });
   const later = await connect(room, 'Later', undefined, { ip: 'backfill-later' });
   assert.deepEqual((await later.waitFor(frame => frame.type === 'room:members')).users, members);
+});
+
+test('visibility changes recheck authentication after waiting for the limiter', { skip: !!process.env.CHAT_BASE_URL }, async () => {
+  await runtime.dispose();
+  let script = await readFile('dist/chat.js', 'utf8');
+  const pattern = /var ChatRoom = class extends \w+ \{/;
+  assert.match(script, pattern);
+  script = script.replace(pattern, match => match + `
+    testExpiresSoon() {
+      for (const ws of this.ctx.getWebSockets()) {
+        const s = ws.deserializeAttachment(); s.authExpiresAt = Date.now() + 100; ws.serializeAttachment(s);
+      }
+    }
+  `);
+  assert.ok(script.includes('  check() {'));
+  script = script.replace('  check() {', '  async check() { await new Promise(resolve => setTimeout(resolve, 350));');
+  runtime = createRuntime(state, { script, inspectDurableObjects: true });
+  base = String(await runtime.ready).replace(/\/$/, '');
+  const peer = await connect('visibility-expiry', '', { accessToken: 'local-test-token' });
+  const ns = await runtime.getDurableObjectNamespace('ROOMS'), [id] = await runtime.listDurableObjectIds('ROOMS');
+  await ns.get(ns.idFromString(id)).testExpiresSoon();
+  peer.send({ type: 'room:visibility', visibility: 'hidden', requestId: 'expires-in-flight' });
+  const result = await peer.waitFor(frame => frame.requestId === 'expires-in-flight');
+  assert.equal(result.code, 'auth_required');
+  const storage = await runtime.unsafeGetDurableObjectStorage('nightcord-chat', 'ChatRoom', { id });
+  assert.equal((await storage.exec('SELECT * FROM room_visibility')).length, 0);
+});
+
+test('room visibility synchronizes tabs, filters live and offline lists, and preserves messaging and room isolation', { skip: !!process.env.CHAT_BASE_URL, timeout: 30_000 }, async () => {
+  const room = `visibility-${crypto.randomUUID().slice(0, 12)}`;
+  const observer = await connect(room, 'Observer', null, { ip: 'visibility-observer' });
+  const account = await connect(room, '', { accessToken: 'local-test-token' }, { ip: 'visibility-account' });
+  const tab = await connect(room, '', { accessToken: 'local-test-token' }, { ip: 'visibility-tab' });
+  const id = account.messages.find(v => v.type === 'session').user.id;
+  assert.equal(account.messages.find(v => v.type === 'session').visibility, 'online');
+  const set = async (peer, visibility, requestId) => {
+    peer.send({ type: 'room:visibility', visibility, requestId, userId: 'guest:forged-target' });
+    return peer.waitFor(v => v.type === 'room:visibility' && v.requestId === requestId);
+  };
+  assert.equal((await set(account, 'offline', 'offline-1')).visibility, 'offline');
+  await tab.waitFor(v => v.type === 'room:visibility' && v.visibility === 'offline');
+  await observer.waitFor(v => v.quit && v.userId === id && v.silent);
+  const offline = await observer.waitFor(v => v.type === 'room:members' && v.users.some(u => u.id === id));
+  assert.equal(offline.users.find(u => u.id === id).isMobile, false);
+  const mark = observer.messages.length;
+  assert.equal((await set(tab, 'hidden', 'hidden-1')).visibility, 'hidden');
+  await observer.waitFor(v => observer.messages.indexOf(v) >= mark && v.type === 'room:members' && !v.users.some(u => u.id === id));
+  account.send({ message: 'Still chatting while hidden' });
+  assert.equal((await observer.waitFor(v => v.message === 'Still chatting while hidden')).user.id, id);
+  tab.send({ type: 'auth', accessToken: 'local-test-token' });
+  await tab.waitFor(v => v.type === 'session' && v.visibility === 'hidden');
+  assert.ok(!observer.messages.slice(mark).some(v => v.joined || v.quit || v.type === 'profile' || v.type === 'room:visibility'));
+  const newcomer = await connect(room, 'Newcomer', null, { ip: 'visibility-newcomer' });
+  assert.ok(!newcomer.messages.some(v => v.joined && v.user.id === id));
+  assert.ok(!newcomer.messages.find(v => v.type === 'room:members').users.some(u => u.id === id));
+  const otherRoom = await connect('visibility-other-room', '', { accessToken: 'local-test-token' }, { ip: 'visibility-other' });
+  assert.equal(otherRoom.messages.find(v => v.type === 'session').visibility, 'online');
+  assert.ok(otherRoom.messages.some(v => v.joined && v.user.id === id));
+  const hiddenMark = observer.messages.length;
+  account.socket.close(); tab.socket.close();
+  await Promise.all([once(account.socket, 'close'), once(tab.socket, 'close')]);
+  const reconnected = await connect(room, '', { accessToken: 'local-test-token' }, { ip: 'visibility-reconnected' });
+  assert.equal(reconnected.messages.find(v => v.type === 'session').visibility, 'hidden');
+  assert.ok(!observer.messages.slice(hiddenMark).some(v => v.userId === id || v.user?.id === id));
+  assert.equal((await set(reconnected, 'online', 'online-1')).visibility, 'online');
+  await observer.waitFor(v => v.joined && v.user.id === id && v.silent);
+  reconnected.socket.close(); await once(reconnected.socket, 'close');
+  await observer.waitFor(v => v.quit && v.userId === id && !v.silent);
+});
+
+test('guest visibility persists by cookie, does not affect another guest, and rejects invalid changes', { skip: !!process.env.CHAT_BASE_URL, timeout: 30_000 }, async () => {
+  const room = 'visibility-guests';
+  const guest = await connect(room, 'Guest', null, { ip: 'visibility-guest' });
+  const id = guest.messages.find(v => v.type === 'session').user.id;
+  guest.send({ type: 'room:visibility', visibility: 'invisible', requestId: 'bad' });
+  assert.equal((await guest.waitFor(v => v.requestId === 'bad')).code, 'invalid_visibility');
+  guest.send({ type: 'room:visibility', visibility: 'hidden', requestId: 'hide-guest' });
+  await guest.waitFor(v => v.requestId === 'hide-guest' && v.visibility === 'hidden');
+  guest.socket.close(); await once(guest.socket, 'close');
+  const renamed = await connect(room, 'Renamed', null, { cookie: guest.cookie, ip: 'visibility-renamed' });
+  assert.equal(renamed.messages.find(v => v.type === 'session').visibility, 'hidden');
+  assert.equal(renamed.messages.find(v => v.type === 'session').user.id, id);
+  const stranger = await connect(room, 'Renamed', null, { ip: 'visibility-stranger' });
+  assert.equal(stranger.messages.find(v => v.type === 'session').visibility, 'online');
+  assert.ok(!stranger.messages.some(v => v.joined && v.user.id === id));
+  const otherRoom = await connect('visibility-guest-other', 'Renamed', null, { cookie: guest.cookie, ip: 'visibility-guest-other' });
+  assert.equal(otherRoom.messages.find(v => v.type === 'session').visibility, 'online');
+});
+
+test('visibility survives Durable Object eviction and rejects unauthenticated or revoked clients', { skip: !!process.env.CHAT_BASE_URL, timeout: 30_000 }, async () => {
+  await runtime.dispose();
+  runtime = createRuntime(state, { inspectDurableObjects: true });
+  base = String(await runtime.ready).replace(/\/$/, '');
+  const room = 'visibility-persist';
+  const account = await connect(room, '', { accessToken: 'local-test-token' }, { ip: 'visibility-persist-account' });
+  account.send({ type: 'room:visibility', visibility: 'offline', requestId: 'persist' });
+  await account.waitFor(v => v.requestId === 'persist' && v.visibility === 'offline');
+  account.socket.close(); await once(account.socket, 'close');
+  const [id] = await runtime.listDurableObjectIds('ROOMS');
+  await runtime.unsafeEvictDurableObject('nightcord-chat', 'ChatRoom', { id });
+  const observer = await connect(room, 'Observer', null, { ip: 'visibility-persist-observer' });
+  const reconnected = await connect(room, '', { accessToken: 'local-test-token' }, { ip: 'visibility-persist-return' });
+  assert.equal(reconnected.messages.find(v => v.type === 'session').visibility, 'offline');
+  assert.ok(!observer.messages.some(v => v.joined && v.user.id === 'sekai:stable-subject'));
+  assert.ok(observer.messages.find(v => v.type === 'room:members').users.some(u => u.id === 'sekai:stable-subject'));
+  const url = new URL(`/api/room/${room}/websocket`, base); url.protocol = 'ws:';
+  const socket = new WebSocket(url, { headers: { Origin: origin } }); sockets.push(socket);
+  await once(socket, 'open');
+  const reply = once(socket, 'message');
+  socket.send(JSON.stringify({ type: 'room:visibility', userId: 'sekai:stable-subject', visibility: 'hidden', requestId: 'forged' }));
+  assert.equal(JSON.parse(String((await reply)[0])).code, 'auth_required');
+  state.revoked = true;
+  reconnected.send({ type: 'auth', accessToken: 'local-test-token' });
+  await reconnected.waitFor(v => v.code === 'auth_invalid');
+  const storage = await runtime.unsafeGetDurableObjectStorage('nightcord-chat', 'ChatRoom', { id });
+  const stored = await storage.exec('SELECT visibility FROM room_visibility WHERE id = ?', 'sekai:stable-subject');
+  assert.match(JSON.stringify(stored), /offline/);
 });
 
 test('invalid bearer token cannot receive history or claim an authenticated session', { timeout: 20_000 }, async () => {

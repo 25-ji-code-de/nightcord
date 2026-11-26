@@ -151,6 +151,23 @@ test('following debounces online/offline and ignores refreshes, duplicates and s
   h.alerts.destroy();
 });
 
+test('visibility changes cancel pending presence alerts without announcing a fabricated join or leave', async () => {
+  const h = harness(); h.bus.emit('room:synced');
+  h.alerts.preferences.save(p => { p.presence = 'all'; p.onlineNotice = true; p.offlineNotice = true; });
+  h.bus.emit('user:joined', { user: peer, username: peer.displayName });
+  await h.advance(500);
+  h.bus.emit('user:quit', { userId: peer.id, username: peer.displayName, silent: true });
+  await h.advance(20000);
+  assert.equal(h.notices.length, 0); assert.equal(h.plays.length, 0);
+  h.bus.emit('user:joined', { user: peer, username: peer.displayName, silent: true });
+  await h.advance(3000);
+  assert.equal(h.notices.length, 0);
+  h.bus.emit('user:quit', { userId: peer.id, username: peer.displayName });
+  await h.advance(15000);
+  assert.equal(h.notices.length, 1, 'a later real departure still notifies');
+  h.alerts.destroy();
+});
+
 test('canceling follows, switching identity/rooms and destroying fence delayed work', async () => {
   for (const action of ['cancel', 'identity', 'room', 'destroy']) {
     const h = harness(); h.bus.emit('room:synced');

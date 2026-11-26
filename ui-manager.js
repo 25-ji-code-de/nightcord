@@ -191,6 +191,7 @@ class UIManager {
         stickerButton: this.elements.stickerButton,
         atButton: document.querySelector('#mentionBtn'),
         getAllUsers: () => this.getAllUsers(),
+        allowAI: () => !this.managedChat,
         formatMention: mention => this.mentions?.format(mention) || null,
         renderAvatar: (element, profile) => this.profileUI.avatar(element, profile),
         onError: message => this.showError(message),

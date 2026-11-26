@@ -51,7 +51,14 @@
     "js/services/ai-conversation.js",
     "js/ui/voice-sounds.js",
     "js/services/direct-messages.js",
-    "js/ui/direct-messages.js"
+    "js/ui/direct-messages.js",
+    "js/app/room-destination.js",
+    "js/network/managed-room-session.js",
+    "js/services/rooms.js",
+    "js/ui/room-admin.js",
+    "js/ui/room-settings.js",
+    "js/ui/managed-chat.js",
+    "js/ui/rooms.js"
   ],
   "nightcord-mgr.js": [
     "js/network/chat-session.js"

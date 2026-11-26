@@ -26,8 +26,8 @@
     get mentionView() { return this._mentionView ||= new AutocompleteMentions(this); }
     get pickerView() { return this._pickerView ||= new AutocompletePicker(this); }
 
-    constructor({ input, list, atButton, stickerButton, pickerButtons = {}, getAllUsers, getStickers, getEmojis, formatMention, renderAvatar, onError } = {}) {
-      this.input = input;
+    constructor({ allowAI = () => true, input, list, atButton, stickerButton, pickerButtons = {}, getAllUsers, getStickers, getEmojis, formatMention, renderAvatar, onError } = {}) {
+      this.input = input; this.allowAI = allowAI;
       this.list = list;
       this.atButton = atButton;
       this.stickerButton = stickerButton;

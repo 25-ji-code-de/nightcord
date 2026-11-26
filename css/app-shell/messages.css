@@ -21,10 +21,27 @@
   z-index: 10;
 }
 
-.message:hover .message-reply-btn {
+.message:hover .message-reply-btn,
+.message:focus-within .message-reply-btn {
   opacity: 1;
   transform: translateY(0) scale(1);
   pointer-events: auto;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .message:has(.message-reply-btn) { padding-right: 52px; }
+  .message .message-reply-btn {
+    top: 0;
+    right: 4px;
+    width: 44px;
+    height: 44px;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+  }
 }
 
 .message-reply-btn:hover {

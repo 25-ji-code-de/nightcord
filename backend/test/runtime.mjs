@@ -15,7 +15,9 @@ export function createRuntime(state = {}, options = {}) {
         CHAT_ALLOWED_ORIGINS: options.origin || 'https://nightcord.de5.net',
         ...options.bindings,
       },
+      d1Databases: { ROOM_DIRECTORY: 'room-directory' },
       durableObjects: {
+        MANAGED_ROOMS: { className: 'ManagedRoom', useSQLite: true },
         ROOMS: { className: 'ChatRoom', useSQLite: true },
         DM_ROOMS: { className: 'DirectRoom', useSQLite: true },
         DM_INBOXES: { className: 'UserInbox', useSQLite: true },

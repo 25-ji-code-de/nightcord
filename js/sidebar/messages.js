@@ -15,7 +15,7 @@ return class SidebarMessages {
     const user = this.sidebar.ui.currentUser;
     if (!user) return [];
     const seen = new Set();
-    const messages = new Map(this.messages().map(message => [Number(message.timestamp), message]));
+    const messages = new Map(this.messages().map(message => [Number(message.replyKey || message.timestamp), message]));
     return this.messages().filter(message => {
       const key = messageKey(message);
       if (!message.profile?.id || message.profile.id === user.id || message.sender || seen.has(key)

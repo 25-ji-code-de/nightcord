@@ -237,6 +237,8 @@ class UploadView {
   }
 
   async handleFileUpload(file, uploadType) {
+    if (this.ui.managedChat) { this.ui.setConnectionStatus('用户房间暂不支持上传附件。'); return; }
+    const room = this.ui.currentRoom;
     const { uploadProgress, uploadFilename, uploadPercent, uploadFill, chatInput } = this.ui.elements;
 
     // 验证文件大小：上传服务会按 direct / multipart / compat 选择端口。
@@ -279,10 +281,12 @@ class UploadView {
       const fileUrl = this.ui.fileUploadService.getFileUrl(id, kind);
       const fileMsg = await this.ui._generateFileMessage(uploadType, fileUrl, file, result);
 
+      if (this.ui.managedChat || this.ui.currentRoom !== room) return;
       this._replacePlaceholderInInput(chatInput, placeholder, fileMsg, placeholderInserted);
       uploadProgress.classList.add('hidden');
 
     } catch (error) {
+      if (this.ui.managedChat || this.ui.currentRoom !== room) return;
       console.error('文件上传失败:', error);
       uploadProgress.classList.add('hidden');
       this.ui.addChatMessage('系统', `文件上传失败: ${error.message}`, Date.now(), this.ui.systemIcon, 'bg-red-600');

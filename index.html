@@ -52,6 +52,7 @@ Copyright (C) 2025 The 25-ji-code-de Team
   <link rel="stylesheet" href="/css/direct-messages.css">
   <link rel="stylesheet" href="/css/task-station.css">
   <link rel="stylesheet" href="/css/ios-layout.css">
+  <link rel="stylesheet" href="/css/rooms.css">
 </head>
 
 <body>
@@ -107,6 +108,10 @@ Copyright (C) 2025 The 25-ji-code-de Team
           <button type="button" class="navigation-item" id="navigation-chat" aria-label="聊天" aria-current="page" aria-controls="messages">
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="house"><path d="M14.9 3.7a1.55 1.55 0 0 1 2.2 0L28 14.6q.6.6.6 1.5v11.7q0 1.2-1.2 1.2h-6.7q-1.2 0-1.2-1.2v-6.4q0-.8-.8-.8h-5.4q-.8 0-.8.8v6.4q0 1.2-1.2 1.2H4.6q-1.2 0-1.2-1.2V16.1q0-.9.6-1.5Z"/></svg>
             <span class="navigation-tooltip" aria-hidden="true">聊天</span>
+          </button>
+          <button type="button" class="navigation-item" id="navigation-rooms" aria-label="房间大厅" aria-controls="managed-rooms">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4" y="4" width="9" height="9" rx="1.5"/><rect x="19" y="4" width="9" height="9" rx="1.5"/><rect x="4" y="19" width="9" height="9" rx="1.5"/><path d="M19 19h9v9h-9z"/></svg>
+            <span class="navigation-tooltip" aria-hidden="true">房间大厅</span>
           </button>
           <button type="button" class="navigation-item" id="navigation-search" aria-label="搜索" aria-controls="sidebar-tools">
             <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" data-navigation-icon="search"><circle cx="13.5" cy="13.5" r="11.2"/><path d="m21.65 21.65 7.05 7.05"/></svg>
@@ -710,7 +715,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <p class="settings-description pwa-status" id="pwa-status" role="status" aria-live="polite"></p>
       </section>
     </div>
-    <footer class="settings-footer"><p id="palette-status" role="status">选择后立即生效，自动保存在此浏览器。</p></footer>
+    <footer class="settings-footer"><p id="palette-status" role="status">设置自动保存；房间显示状态以服务器确认为准。</p></footer>
   </dialog>
   </template>
   <script src="/purify.js"></script>
@@ -787,6 +792,13 @@ document.addEventListener('DOMContentLoaded', () => {
   <script src="/js/ui/voice-sounds.js"></script>
   <script src="/js/services/direct-messages.js"></script>
   <script src="/js/ui/direct-messages.js"></script>
+  <script src="/js/app/room-destination.js"></script>
+  <script src="/js/network/managed-room-session.js"></script>
+  <script src="/js/services/rooms.js"></script>
+  <script src="/js/ui/room-admin.js"></script>
+  <script src="/js/ui/room-settings.js"></script>
+  <script src="/js/ui/managed-chat.js"></script>
+  <script src="/js/ui/rooms.js"></script>
   <script src="/nightcord.js"></script>
   <script src="/boot.js"></script>
   <script src="/pangu.js"></script>

@@ -103,6 +103,14 @@ console.log('当前成员:', members);
 
 服务器在房间初始化时发送 `{ type: 'room:members', users: Profile[] }`，通过同名事件传给 UI。该名单仅包含曾进入当前房间、由服务器验证过的 SEKAI Pass 成员，并按房间持久保存；UI 从中排除在线和语音成员后显示离线名单。访客不会进入离线名单。旧房间会从已保存的聊天记录中补录最新的已验证资料。
 
+#### `setVisibility(visibility)`
+
+设置当前身份在当前房间的成员列表显示方式，返回是否已发送请求；保存结果由 `room:visibility` 事件确认。值为 `online`（正常显示）、`offline`（显示为离线）或 `hidden`（从在线、离线列表隐藏）。其他房间不受影响，刷新或重连不会重置，服务器向当前身份在同一房间的所有连接同步。
+
+WebSocket 命令为 `{type:'room:visibility', visibility, requestId}`，只作用于已验证的连接身份，不接受指定其他用户。成功帧为 `{type:'room:visibility', userId, visibility, requestId?}`，`requestId` 只返回给发起连接；失败帧带 `error`、`code` 和相同的 `requestId`。`session` 帧带当前 `visibility`，仅供该连接读取。前端事件包含 `{visibility, pending, available, error}`，断线或旧服务器不支持时禁用控制，未收到确认不视为已保存。
+
+服务器省略离线 / 隐藏身份的在线、离线和资料广播，并从 `room:members` 快照过滤隐藏身份。切换时使用 `silent:true` 的 `joined` / `quit` 更新现有列表，取消待发上下线提醒，再广播更新后的 `room:members`。普通断线仍按原规则提醒。访客不保留离线记录；消息内容、历史提及和主动加入的语音成员信息仍可见。
+
 #### `getRoomInfo()`
 
 获取当前房间信息。

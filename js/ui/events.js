@@ -3,6 +3,9 @@
 /** ChatUIEvents: events component; ui supplies shared presentation context. */
 class ChatUIEvents {
   constructor(ui) { this.ui = ui; }
+  onPublic(event, callback) {
+    this.ui.eventBus.on(event, data => { if (!this.ui.managedChat) callback(data); });
+  }
 
   /**
    * 决定一条消息该触发哪一种提醒。
@@ -27,7 +30,7 @@ class ChatUIEvents {
     this.ui.setupMobileMenu();
 
     // Subscribe to chat room events
-    this.ui.eventBus.on('message:received', (data) => {
+    this.onPublic('message:received', (data) => {
       // 只存储非系统消息
       if (data.name === '系统') return;
 
@@ -56,22 +59,31 @@ class ChatUIEvents {
       }
       this.ui.alerts?.receive(data);
     });
-    this.ui.eventBus.on('message:error', (data) => this.ui.showError(data.error));
-    this.ui.eventBus.on('message:sent', () => this.ui.clearChatInput());
-    this.ui.eventBus.on('message:notice', ({ message }) => this.ui.addSystemMessage(message));
-    this.ui.eventBus.on('user:joined', (data) => this.ui.addUserToRoster(data.username, data.user));
-    this.ui.eventBus.on('user:quit', (data) => this.ui.removeUserFromRoster(data.username, data.userId));
+    this.onPublic('message:error', (data) => this.ui.showError(data.error));
+    this.onPublic('message:sent', () => this.ui.clearChatInput());
+    this.onPublic('message:notice', ({ message }) => this.ui.addSystemMessage(message));
+    this.onPublic('user:joined', (data) => this.ui.addUserToRoster(data.username, data.user));
+    this.onPublic('user:quit', (data) => this.ui.removeUserFromRoster(data.username, data.userId));
     this.ui.eventBus.on('session:updated', (data) => {
       const previousId = this.ui.currentUser?.id;
       if (previousId !== data.user.id) this.ui.clearNotices();
       this.ui.currentUser = data.user;
       this.ui.updateNavigationProfile();
-      this.ui.addUserToRoster(data.user.displayName, data.user);
+      if (this.ui.managedChat) return;
+      if (!data.visibility || data.visibility === 'online') this.ui.addUserToRoster(data.user.displayName, data.user);
+      else {
+        if (data.visibility === 'hidden') this.ui.roomMembers.delete(data.user.id);
+        this.ui.removeUserFromRoster(data.user.displayName, data.user.id);
+      }
       if (previousId !== data.user.id && this.ui.messages.length && this.ui.elements?.chatlog) this.ui.renderMessages();
     });
-    this.ui.eventBus.on('user:profile', (data) => this.ui.addUserToRoster(data.user.displayName, data.user));
-    this.ui.eventBus.on('user:rename', (data) => this.ui.handleUserRename(data.oldUsername, data.newUsername));
-    this.ui.eventBus.on('room:members', ({ users }) => {
+    this.onPublic('user:profile', (data) => this.ui.addUserToRoster(data.user.displayName, data.user));
+    this.onPublic('room:visibility', state => {
+      this.ui.roomVisibility = state;
+      this.ui.alerts?.view.refreshVisibility();
+    });
+    this.onPublic('user:rename', (data) => this.ui.handleUserRename(data.oldUsername, data.newUsername));
+    this.onPublic('room:members', ({ users }) => {
       this.ui.roomMembers = new Map((users || []).filter(user => user.authenticated && user.id?.startsWith('sekai:')).map(user => [user.id, user]));
       this.ui.renderVoiceUsers();
     });
@@ -93,23 +105,23 @@ class ChatUIEvents {
     this.ui.eventBus.on('voice:activity', ids => {
       for (const row of this.ui.elements.voiceRoster.children) row.classList.toggle('is-speaking', ids.includes(row.dataset.memberId));
     });
-    this.ui.eventBus.on('roster:clear', () => {
+    this.onPublic('roster:clear', () => {
       this.ui.clearRoster();
       this.ui.mentionsReady = false;
       this.ui.clearNotices();
     });
-    this.ui.eventBus.on('room:left', () => {
+    this.onPublic('room:left', () => {
       this.ui.mentionsReady = false;
       this.ui.clearNotices();
       this.ui.setConnectionStatus('已断开连接');
     });
-    this.ui.eventBus.on('room:joining', () => this.ui.setConnectionStatus('正在连接…'));
+    this.onPublic('room:joining', () => this.ui.setConnectionStatus('正在连接…'));
     for (const event of ['room:changed', 'session:unavailable']) {
       this.ui.eventBus.on(event, () => this.ui.clearNotices());
     }
-    this.ui.eventBus.on('connection:error', () => this.ui.setConnectionStatus('连接失败，正在重试…'));
-    this.ui.eventBus.on('connection:close', () => this.ui.setConnectionStatus('连接中断，正在重试…'));
-    this.ui.eventBus.on('room:ready', (data) => {
+    this.onPublic('connection:error', () => this.ui.setConnectionStatus('连接失败，正在重试…'));
+    this.onPublic('connection:close', () => this.ui.setConnectionStatus('连接中断，正在重试…'));
+    this.onPublic('room:ready', (data) => {
       this.ui.setConnectionStatus('');
       // room:synced also runs after reconnects, when the welcome is already shown.
       this.ui.mentionsReady = true;
@@ -151,7 +163,7 @@ class ChatUIEvents {
       this.ui.renderMessages();
     });
     this.ui.eventBus.on('error', (data) => this.ui.showError(data.message));
-    this.ui.eventBus.on('room:synced', () => { this.ui.mentionsReady = true; this.ui.setConnectionStatus(''); });
+    this.onPublic('room:synced', () => { this.ui.mentionsReady = true; this.ui.setConnectionStatus(''); });
 
     // Nako AI 事件监听
     this.setupNakoEventListeners();
@@ -163,17 +175,17 @@ class ChatUIEvents {
    */
   setupNakoEventListeners() {
     // Nako 开始回复
-    this.ui.eventBus.on('nako:stream:start', (data) => {
+    this.onPublic('nako:stream:start', (data) => {
       this.ui.startStreamingMessage(data.messageId, data.user);
     });
 
     // Nako 流式片段
-    this.ui.eventBus.on('nako:stream:chunk', (data) => {
+    this.onPublic('nako:stream:chunk', (data) => {
       this.ui.appendStreamingContent(data.messageId, data.chunk);
     });
 
     // Nako 完成回复
-    this.ui.eventBus.on('nako:stream:end', (data) => {
+    this.onPublic('nako:stream:end', (data) => {
       // 去掉开头和结尾的换行符
       const cleanContent = data.fullContent.trim();
       const reasoning = data.reasoning || ''; // 思考过程
@@ -185,7 +197,7 @@ class ChatUIEvents {
     });
 
     // Nako 错误
-    this.ui.eventBus.on('nako:error', (data) => {
+    this.onPublic('nako:error', (data) => {
       this.ui.showError(`Nako: ${data.error}`);
 
       // 移除流式消息
@@ -196,7 +208,7 @@ class ChatUIEvents {
     });
 
     // Nako 取消
-    this.ui.eventBus.on('nako:cancelled', (data) => {
+    this.onPublic('nako:cancelled', (data) => {
       // 移除流式消息
       if (data.messageId) {
         const msgDiv = this.ui.elements.chatlog.querySelector(`[data-message-id="${data.messageId}"]`);

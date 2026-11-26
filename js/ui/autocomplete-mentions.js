@@ -23,7 +23,7 @@ class AutocompleteMentions {
     });
     allUsers.unshift(
       { name: 'everyone', type: 'all', id: '', avatar: '', color: '', label: '所有人' },
-      ...(window.AIConfig?.AI_PERSONAS || []).map(ai => ({
+      ...(this.autocomplete.allowAI?.() === false ? [] : window.AIConfig?.AI_PERSONAS || []).map(ai => ({
         name: ai.displayName, type: 'ai', id: ai.persona, avatar: '', color: '', label: 'AI'
       }))
     );

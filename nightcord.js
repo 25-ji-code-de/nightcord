@@ -46,6 +46,10 @@ class Nightcord {
       aiConfig: window.AIConfig
     });
     this.ui = new UIManager(this.eventBus);
+    this.eventBus.on('room:visibility:set', ({ visibility }) => {
+      if (this.ui.managedChat) void this.rooms.setVisibility(visibility);
+      else this.chatRoom.setVisibility(visibility);
+    });
     this.commands = new MessageCommands({
       eventBus: this.eventBus,
       send: message => this.chatRoom.sendMessage(message),
@@ -63,6 +67,8 @@ class Nightcord {
     this.directMessageView = new DirectMessageView(this.ui, this.directMessages);
     this.ui.directMessages = this.directMessages;
     this.ui.directMessageView = this.directMessageView;
+    this.rooms = new RoomManager({ eventBus: this.eventBus, hostname: config.hostname, getAccessToken: () => this.identity.getAccessToken() });
+    this.roomsView = new RoomsView(this.ui, this.rooms, { enter: () => this.chatRoom.leave(), official: id => this.joinRoom(id || 'nightcord-default') });
     this.voice = new VoiceManager({ eventBus: this.eventBus, chatRoom: this.chatRoom });
     this.voiceUI = new VoiceUI(this.voice, this.eventBus);
 
@@ -127,6 +133,7 @@ class Nightcord {
    * @param {string} roomname - 房间名称
    */
   joinRoom(roomname) {
+    if (this.ui.managedChat) this.roomsView.close();
     this.state.phase = 'chatting';
     // this.ui.hideRoomChooser();
 
@@ -211,6 +218,7 @@ class Nightcord {
    */
   destroy() {
     this.directMessageView.destroy();
+    this.roomsView.destroy(); this.rooms.destroy();
     this.directMessages.destroy();
     this.identity.destroy();
     this.voiceSounds.destroy();

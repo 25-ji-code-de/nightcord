@@ -8,8 +8,8 @@ import { fixture, offer } from './voice-fixture.mjs';
 async function auditFixture(options = {}) {
   let script = await readFile('dist/chat.js', 'utf8');
   if (options.quotaDelayMs) {
-    const release = /  release\(id, roomId, closedAt = Date\.now\(\), legacyReview = false\) \{/;
-    assert.match(script, release);
+    const release = /  release\(id, roomId\d*, closedAt = Date\.now\(\), legacyReview = false\) \{/;
+    assert.ok(release.test(script), 'compiled quota release method must exist before injecting latency');
     script = script.replace(release, match => match.replace('  release(', '  async release(')
       + `await new Promise(resolve => setTimeout(resolve, ${options.quotaDelayMs}));`);
   }

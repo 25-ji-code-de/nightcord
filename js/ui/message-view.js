@@ -71,6 +71,7 @@ class ChatMessageView {
    * @private
    */
   saveMessageToStorage(msgObj) {
+    if (this.ui.managedChat) return;
     try {
       const room = this.ui.currentRoom || 'nightcord-default';
       let localMsgs = this.ui.storage
@@ -116,6 +117,12 @@ class ChatMessageView {
       this.ui.messageIndex.set(Number(msg.timestamp), msgDiv);
       this.ui.messageMeta.set(msg.timestamp, meta);
       this.ui.messageMeta.set(Number(msg.timestamp), meta);
+    }
+
+    if (msg.seq) msgDiv.dataset.seq = msg.seq;
+    if (msg.replyKey) {
+      this.ui.messageIndex.set(msg.replyKey, msgDiv);
+      this.ui.messageMeta.set(msg.replyKey, { user: msg.user, text: msg.text });
     }
 
     // 检查是否被提及
@@ -178,11 +185,24 @@ class ChatMessageView {
       contentDiv.appendChild(p);
     }
 
+    if (msg.sticker) {
+      const image = document.createElement('img'); image.className = 'dm-sticker';
+      image.alt = '贴纸'; image.referrerPolicy = 'no-referrer'; image.src = msg.sticker;
+      contentDiv.appendChild(image);
+    }
+    if (msg.delivery) {
+      const status = document.createElement('span'); status.className = 'message-time';
+      status.textContent = msg.delivery; status.setAttribute('role', 'status'); contentDiv.appendChild(status);
+      if (msg.retry) {
+        const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'rooms-button';
+        retry.textContent = '重试发送'; retry.addEventListener('click', msg.retry); contentDiv.appendChild(retry);
+      }
+    }
     msgDiv.appendChild(avatarSpan);
     msgDiv.appendChild(contentDiv);
 
     // 回复按钮（只给非系统消息添加）
-    if (msg.user !== '系统' && msg.timestamp) {
+    if (msg.user !== '系统' && msg.timestamp && !msg.delivery) {
       const replyBtn = this.ui.createReplyButton(msg);
       msgDiv.appendChild(replyBtn);
     }

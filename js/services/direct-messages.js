@@ -260,8 +260,8 @@ class DirectMessageManager {
     if (this.expiresAt - Date.now() > 60000) return;
     return this.renew();
   }
-  async create(peerId, sourceRoom) {
-    const value = await this.call('/conversations', { peerId, sourceRoom });
+  async create(peerId, sourceRoom, sourceType) {
+    const value = await this.call('/conversations', { peerId, sourceRoom, ...(sourceType ? { sourceType } : {}) });
     this.put(value.conversation, value.revision); this.update();
     return value.conversation;
   }

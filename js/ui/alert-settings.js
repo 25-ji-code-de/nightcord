@@ -144,6 +144,7 @@ class AlertSettingsView {
     this.kind(mentions, 'everyone', '全体提及', '有人提及聊天室中的所有人');
 
     const presence = this.page('presence', '成员动态与关注');
+    this.mountVisibility(presence);
     this.choices(presence, 'presence', '提醒范围', [['off', '关闭'], ['followed', '关注的人'], ['all', '所有人']]);
     this.kind(presence, 'online', '成员上线', '在上线 2 秒后发出通知', 'h3');
     this.kind(presence, 'offline', '成员下线', '在离开 15 秒后提醒，忽略短暂掉线', 'h3');
@@ -153,6 +154,48 @@ class AlertSettingsView {
     this.activity = this.node('div', '', 'alert-activity'); activity.append(this.activity);
     for (const fields of [messageFields, presence]) fields.append(this.node('p', '锁屏或关闭网页后暂不发送通知。', 'alert-hint alert-footnote'));
     this.refresh();
+  }
+  mountVisibility(parent) {
+    const section = this.node('section', '', 'room-visibility');
+    this.heading(section, '我的显示状态', '控制其他成员在房间成员列表中所看到的状态。');
+    this.visibilityChoices = this.node('fieldset', '', 'alert-choice');
+    this.visibilityChoices.append(this.node('legend', '在本房间的显示方式'));
+    const choices = this.node('div', '', 'alert-segments');
+    for (const [value, label] of [['online', '正常显示'], ['offline', '显示为离线'], ['hidden', '从列表隐藏']]) {
+      const option = this.node('label', '', 'alert-option'), input = this.node('input');
+      input.type = 'radio'; input.name = 'nightcord-room-visibility'; input.value = value;
+      input.setAttribute('aria-describedby', 'room-visibility-description');
+      input.addEventListener('change', () => {
+        if (input.checked) this.alerts.ui.eventBus.emit('room:visibility:set', { visibility: value });
+      });
+      option.append(input, this.node('span', label)); choices.append(option);
+    }
+    this.visibilityDescription = this.node('p', '', 'alert-hint'); this.visibilityDescription.id = 'room-visibility-description';
+    this.visibilityStatus = this.node('p', '', 'settings-description'); this.visibilityStatus.setAttribute('role', 'status');
+    this.visibilityChoices.append(choices);
+    this.visibilityNote = this.node('p', '', 'alert-hint');
+    section.append(this.visibilityChoices, this.visibilityDescription, this.visibilityNote, this.visibilityStatus);
+    parent.append(section);
+  }
+  refreshVisibility() {
+    if (!this.visibilityChoices) return;
+    const state = this.alerts.ui.roomVisibility || {};
+    this.visibilityNote.textContent = this.alerts.ui.managedChat
+      ? '隐藏后仍可收发消息，消息中的身份仍可见。房主仍可在成员管理中管理你的成员资格。'
+      : '隐藏后仍可收发消息。消息中的身份仍可见，参加语音时仍会显示在语音列表。';
+    this.visibilityChoices.disabled = !state.available || !!state.pending;
+    this.visibilityChoices.setAttribute('aria-busy', String(!!state.pending));
+    for (const input of this.visibilityChoices.querySelectorAll('input')) input.checked = input.value === (state.pending || state.visibility);
+    this.visibilityDescription.textContent = state.visibility === 'hidden' ? '不会出现在本房间的在线或离线成员列表中。'
+      : state.visibility === 'offline' ? this.alerts.ui.currentUser?.authenticated
+        ? '保持在线，但在房间成员列表中显示为离线。'
+        : '不会出现在在线列表中。由于系统不保留访客的离线记录，因此访客将从成员列表中暂时移除。'
+      : '用户在线时会出现在在线列表中；已登录的成员离开后，则会转入离线列表。';
+    this.visibilityStatus.textContent = state.error || (state.pending ? '正在保存…' : state.available
+      ? '已与服务器同步，仅对当前身份和这个房间生效。'
+      : state.reason === 'unsupported' ? '当前房间服务尚未启用显示状态设置，请更新服务后重新进入房间。'
+        : state.reason === 'connecting' ? '正在同步房间显示状态…'
+          : '房间连接已断开，重新进入房间后即可设置。');
   }
   preview(kind, label) {
     const button = this.node('button', '', 'alert-preview'); button.type = 'button';
@@ -181,6 +224,7 @@ class AlertSettingsView {
       panel.fields.hidden = !scope;
       panel.context.textContent = scope ? `仅对当前身份在「${this.alerts.ui.elements.roomName?.textContent || this.alerts.ui.currentRoom}」中的提醒生效，自动保存。`
         : '进入聊天室后即可设置提醒。';
+      if (key === 'presence' && scope) panel.context.textContent = `当前房间：「${this.alerts.ui.elements.roomName?.textContent || this.alerts.ui.currentRoom}」。显示状态与提醒分别设置，其他房间不受影响。`;
       panel.state.textContent = this.alerts.paused(prefs) ? '提醒已暂停，可在“声音与免打扰”中恢复。'
         : !prefs.sound ? '提醒声音已关闭，可在“声音与免打扰”中开启。'
           : !prefs.volume ? '提醒音量为 0，可在“声音与免打扰”中调整。' : '';
@@ -213,6 +257,7 @@ class AlertSettingsView {
       }); row.append(remove); this.followed.append(row);
     }
     this.refreshActivity();
+    this.refreshVisibility();
   }
   refreshActivity() {
     if (!this.activity) return;

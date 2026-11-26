@@ -59,7 +59,7 @@ class ReplyView {
     if (!user?.id) return false;
     // Message rendering is batched; ownership must also work before its next frame.
     return this.replyTargets(text).some(timestamp => {
-      const target = this.ui.messages.find(message => Number(message.timestamp) === timestamp);
+      const target = this.ui.messages.find(message => Number(message.replyKey || message.timestamp) === timestamp);
       return target?.profile?.id === user.id;
     });
   }
@@ -121,10 +121,10 @@ class ReplyView {
    */
   insertReplyReference(msg) {
     const input = this.ui.elements.chatInput;
-    if (!input) return;
+    if (!input || input.disabled) return;
 
     // SEKAI v2 Reply：payload = timestamp only
-    const reference = `<$SEKAI:Reply::${msg.timestamp}> `;
+    const reference = `<$SEKAI:Reply::${msg.replyKey || msg.timestamp}> `;
 
     // 插入到当前光标位置
     const start = input.selectionStart || 0;

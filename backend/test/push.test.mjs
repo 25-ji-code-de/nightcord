@@ -70,10 +70,13 @@ test('push requires origin, authentication, configuration and browser service en
 
 test('an alarm write failure rolls back the inbox and push task, then redelivery recovers', async t => {
   const bundle = await readFile('dist/chat.js', 'utf8');
-  const script = bundle.replace(/var UserInbox = class extends (\w+) \{/,
-    'var UserInbox = class extends $1 { testFailAlarm() { this.failNextAlarm = true; } async testApply(snapshot) { try { await this.apply(snapshot); return "ok"; } catch (error) { return error.message; } }')
-    .replace('await this.ctx.storage.setAlarm(next);',
-      'if (this.failNextAlarm) { this.failNextAlarm = false; throw new Error("test alarm failure"); } else await this.ctx.storage.setAlarm(next);');
+  const script = bundle.replace(/var UserInbox = class extends \w+ \{[\s\S]*?\n\};/, inbox => {
+    const alarm = 'await this.ctx.storage.setAlarm(next);';
+    assert.ok(inbox.includes(alarm));
+    return inbox.replace(/var UserInbox = class extends (\w+) \{/,
+      'var UserInbox = class extends $1 { testFailAlarm() { this.failNextAlarm = true; } async testApply(snapshot) { try { await this.apply(snapshot); return "ok"; } catch (error) { return error.message; } }')
+      .replace(alarm, 'if (this.failNextAlarm) { this.failNextAlarm = false; throw new Error("test alarm failure"); } else ' + alarm);
+  });
   assert.notEqual(script, bundle);
   const f = await setup(t, true, { script });
   await f.api('subscribe', { subscription: device().subscription });

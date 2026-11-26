@@ -241,9 +241,9 @@ class DirectMessageView {
     this.open(); this.status.textContent = '正在打开会话…';
     const current = this.currentView();
     const conversation = [...this.manager.conversations.values()].find(item => item.peer.id === peer.id)
-      || await this.attempt(() => this.manager.create(peer.id, this.ui.currentRoom));
+      || await this.attempt(() => this.manager.create(peer.id, this.ui.currentRoom, this.ui.managedChat ? 'managed' : undefined));
     if (!current()) return;
-    if (conversation) this.select(conversation.id);
+    if (conversation) { this.filter = conversation.hidden ? 'hidden' : 'all'; this.select(conversation.id); }
     this.render();
   }
   select(id) {

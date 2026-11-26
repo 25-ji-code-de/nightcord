@@ -73,7 +73,8 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
     async function assertChannelRoom(page) {
       const channel = page.locator('#navigation-channel');
       assert.equal(await channel.locator('.channel-icon svg').count(), 1, 'room initialization preserves the channel icon');
-      const expected = await page.evaluate(() => nightcord.ui.currentRoom === 'nightcord-default' ? '作业' : nightcord.ui.currentRoom === 'nightcord-test' ? '测试' : nightcord.ui.currentRoom);
+      const expected = await page.evaluate(() => nightcord.ui.officialRooms?.find(room => room.id === nightcord.ui.currentRoom)?.name
+        || (nightcord.ui.currentRoom === 'nightcord-default' ? '作业' : nightcord.ui.currentRoom === 'nightcord-test' ? '测试' : nightcord.ui.currentRoom));
       assert.equal((await channel.locator('.channel-name').textContent()).trim(), expected);
       assert.equal(await page.locator('#current-channel-name').textContent(), expected);
     }
@@ -96,12 +97,14 @@ test('browser identity, profiles, persistence, tabs, login/logout and blocked co
       const account = document.querySelector('.sidebar-account').getBoundingClientRect();
       const profile = document.querySelector('#navigation-profile').getBoundingClientRect();
       const settings = document.querySelector('#navigation-settings').getBoundingClientRect();
-      return { railRight: rail.right, accountLeft: account.left, accountBottom: account.bottom, profileLeft: profile.left, settingsTop: settings.top, accountTop: account.top };
+      const help = document.querySelector('#navigation-help').getBoundingClientRect();
+      return { railRight: rail.right, accountLeft: account.left, accountBottom: account.bottom, profileLeft: profile.left, settingsTop: settings.top, settingsBottom: settings.bottom, helpBottom: help.bottom, accountTop: account.top };
     });
     assert.equal(sidebarLayout.accountLeft, sidebarLayout.railRight);
     assert.equal(sidebarLayout.accountBottom, 900);
     assert.ok(sidebarLayout.profileLeft >= sidebarLayout.accountLeft);
-    assert.ok(sidebarLayout.settingsTop < sidebarLayout.accountTop / 2, 'settings stays with the upper icon stack');
+    assert.equal(sidebarLayout.settingsTop - sidebarLayout.helpBottom, 6, 'settings follows help in the navigation stack');
+    assert.ok(sidebarLayout.settingsBottom < sidebarLayout.accountTop, 'the navigation stack remains above the account strip');
     assert.equal(await guest.locator('#navigation-username').textContent(), 'Shared name');
     // The new rail preserves the draft while the desktop member panel is hidden.
     await guest.locator('#messageInput').fill('Unsent navigation draft');

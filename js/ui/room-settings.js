@@ -7,6 +7,11 @@ class RoomSettingsView {
     ['link', '链接加入', '不在大厅展示，已登录用户可通过房间链接加入。'],
     ['listed', '公开展示', '展示在大厅公开列表中，已登录用户可直接加入。']
   ]; }
+  visibilityPolicies() { return [
+    ['online', '不允许隐藏状态', '成员只能正常显示，在线时出现在在线列表中。'],
+    ['offline', '允许显示为离线', '成员可选择正常显示或显示为离线，不能从成员列表隐藏。'],
+    ['hidden', '允许完全隐藏', '成员可选择正常显示、显示为离线或从成员列表隐藏。']
+  ]; }
   details() {
     const v = this.view, m = v.manager, room = m.room, a = this.admin;
     if (!room || !m.role) return;
@@ -19,7 +24,7 @@ class RoomSettingsView {
     copy.append(badges, v.element('h3', '', room.name), v.element('p', '', room.description || '暂无房间简介。'));
     summary.append(emblem, copy); root.append(summary);
     const mode = this.modes().find(item => item[0] === this.mode(room)), facts = v.element('dl', 'room-facts');
-    for (const [label, value] of [['加入方式', mode[1]], ['当前身份', m.role === 'owner' ? '房主' : '成员'], ['房间状态', room.status === 'archived' ? '已归档 · 仅可阅读' : '正常']]) {
+    for (const [label, value] of [['加入方式', mode[1]], ['成员显示规则', this.visibilityPolicies().find(item => item[0] === (room.visibilityPolicy || 'hidden'))[1]], ['当前身份', m.role === 'owner' ? '房主' : '成员'], ['房间状态', room.status === 'archived' ? '已归档 · 仅可阅读' : '正常']]) {
       const row = v.element('div'); row.append(v.element('dt', '', label), v.element('dd', '', value)); facts.append(row);
     }
     root.append(facts);
@@ -36,7 +41,7 @@ class RoomSettingsView {
     link(m.role === 'owner' ? '成员管理' : '查看成员', m.role === 'owner' ? '查看成员资料、管理加入权限与房主身份' : '查看成员资料，提及成员或发送私信', 'members', () => this.members());
     if (m.role === 'owner') {
       link('邀请管理', room.status === 'archived' ? '房间已归档，全部邀请已失效' : '生成邀请链接，查看使用情况或撤销邀请', 'invite', () => this.invites());
-      link('房间设置', '编辑房间资料、调整加入方式与归档房间', 'settings', () => this.form());
+      link('房间设置', '编辑房间资料、加入方式、成员显示规则与归档房间', 'settings', () => this.form());
     } else {
       const leave = a.section(root, '退出房间', '退出后将无法查看消息，重新加入需满足房间的加入条件。');
       leave.append(v.button('退出房间', () => a.confirm({ title: '退出「' + room.name + '」？', description: '您将失去此房间的访问权限。', label: '退出房间', danger: true,
@@ -66,7 +71,16 @@ class RoomSettingsView {
       input.checked = value === (create ? 'invite' : this.mode(room)); input.setAttribute('aria-label', title); options.push(input);
       const text = v.element('span'); text.append(v.element('strong', '', title), v.element('span', '', detail)); label.append(input, text); policies.append(label);
     }
-    const values = () => ({ name: name.value.trim(), description: description.value, mode: options.find(input => input.checked).value });
+    const visibilityFields = v.element('fieldset', 'room-policy'); visibilityFields.append(v.element('legend', '', '成员显示规则')); fields.append(visibilityFields);
+    const visibilityOptions = [];
+    for (const [value, title, detail] of this.visibilityPolicies()) {
+      const label = v.element('label', 'room-policy-option'), input = v.element('input'); input.type = 'radio'; input.name = 'room-visibility-policy'; input.value = value;
+      input.checked = value === (room.visibilityPolicy || 'hidden'); input.setAttribute('aria-label', title); visibilityOptions.push(input);
+      const text = v.element('span'); text.append(v.element('strong', '', title), v.element('span', '', detail)); label.append(input, text); visibilityFields.append(label);
+    }
+    visibilityFields.append(v.element('p', 'room-field-hint', '规则同样适用于房主。收紧规则后，不符合新规则的成员会暂停收发，确认新状态后才能继续；不会自动改为在线。'));
+    const values = () => ({ name: name.value.trim(), description: description.value, mode: options.find(input => input.checked).value,
+      visibilityPolicy: visibilityOptions.find(input => input.checked).value });
     let saved = JSON.stringify(values()), attempted;
     const requestId = crypto.randomUUID(); a.dirty = () => JSON.stringify(values()) !== saved;
     const footer = v.element('div', 'room-savebar'), note = v.element('span', 'room-save-note', create ? '创建后可邀请成员加入。' : '尚未修改');
@@ -84,7 +98,7 @@ class RoomSettingsView {
       if (!form.reportValidity() || save.disabled) return;
       void a.run(save, async current => {
         fields.disabled = true; cancel.disabled = true;
-        const value = values(), payload = { name: value.name, description: value.description, discoverability: value.mode === 'listed' ? 'listed' : 'unlisted', joinPolicy: value.mode === 'invite' ? 'invite' : 'open' };
+        const value = values(), payload = { name: value.name, description: value.description, discoverability: value.mode === 'listed' ? 'listed' : 'unlisted', joinPolicy: value.mode === 'invite' ? 'invite' : 'open', visibilityPolicy: value.visibilityPolicy };
         try {
           if (create) {
             attempted ||= { ...payload, requestId };

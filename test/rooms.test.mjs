@@ -109,3 +109,23 @@ test('a stale member fetch cannot reinsert an identity removed by a visibility s
   finish({ members: [{ id: 'sekai:hidden', status: 'active' }] }); await pending;
   assert.equal(m.members.length, 0); m.destroy();
 });
+
+test('room policy blocks disallowed choices and requires explicit consent before resuming', async () => {
+  const m = fixture(); await m.configPromise;
+  const own = { user: { id: 'sekai:a' }, role: 'member', room: { id: 'r_one', visibilityPolicy: 'offline', revision: 2 }, visibility: 'hidden' };
+  m.receive({ ...own, type: 'room:visibility-required' });
+  assert.equal(m.ready, false); assert.equal(m.visibilityState.visibility, 'hidden');
+  assert.equal(await m.setVisibility('hidden'), false);
+  assert.equal(await m.setVisibility('online'), false, 'an old client change is not consent');
+  assert.equal(await m.setVisibility('offline', 'hidden'), false, 'a stale policy cannot authorize a change');
+  m.request = async (type, input) => {
+    assert.equal(input.confirmPolicy, 'offline'); assert.equal(input.visibility, 'offline');
+    m.receive({ ...own, type: 'ready', visibility: 'offline', messages: [], members: [], online: [] });
+  };
+  assert.equal(await m.setVisibility('offline', 'offline'), true);
+  assert.equal(m.ready, true); assert.equal(m.visibilityState.required, false);
+  assert.equal(await m.setVisibility('hidden'), false);
+  m.receive({ type: 'changed', room: { ...own.room, visibilityPolicy: 'online', revision: 3 } });
+  assert.equal(await m.setVisibility('offline'), false);
+  m.destroy();
+});

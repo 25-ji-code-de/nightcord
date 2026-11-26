@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-import type { Member, State } from './protocol';
+import { visibilityAllowed, type Member, type State, type Visibility } from './protocol';
 import type { Profile } from '../identity';
-export type Visibility = 'online' | 'offline' | 'hidden';
 export class RoomStore {
   constructor(public storage: DurableObjectStorage) {}
   get sql() { return this.storage.sql; }
@@ -22,12 +21,13 @@ export class RoomStore {
   visibility(id: string): Visibility {
     return this.sql.exec<{ visibility: Visibility }>('SELECT visibility FROM room_visibility WHERE account_id=?', id).toArray()[0]?.visibility || 'online';
   }
+  visibilityAllowed(id: string) { return visibilityAllowed(this.state().visibilityPolicy, this.visibility(id)); }
   visibleMembers(): (Profile & { status: string })[] {
     return this.sql.exec<Member>(`SELECT m.* FROM members m LEFT JOIN room_visibility v ON v.account_id=m.account_id
       WHERE m.status='active' AND (v.visibility IS NULL OR v.visibility!='hidden') ORDER BY m.account_id`).toArray()
       .map(m => ({ ...JSON.parse(m.profile), status: m.status }));
   }
-  state(): State { return JSON.parse(this.sql.exec<{ data: string }>('SELECT data FROM room_meta WHERE id=1').one().data); }
+  state(): State { return { visibilityPolicy: 'hidden', ...JSON.parse(this.sql.exec<{ data: string }>('SELECT data FROM room_meta WHERE id=1').one().data) }; }
   save(s: State) { this.sql.exec('INSERT INTO room_meta VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data', JSON.stringify(s)); }
   member(id: string) { return this.sql.exec<Member>('SELECT * FROM members WHERE account_id=?', id).toArray()[0]; }
   require(id: string) { const m = this.member(id); return m?.status === 'active' ? m : undefined; }

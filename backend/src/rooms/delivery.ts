@@ -2,7 +2,7 @@
 import type { ChatEnv } from '../guest';
 import { apply } from './directory';
 import { RoomStore } from './schema';
-export type Session = { user: import('../identity').Profile | null; expiresAt: number; closed?: boolean; busy?: boolean; readAt?: number; authAt?: number };
+export type Session = { user: import('../identity').Profile | null; expiresAt: number; closed?: boolean; busy?: boolean; readAt?: number; authAt?: number; visibilityBlocked?: boolean };
 type Pending = { destination: string; version: number; payload: string; attempts: number; due: number };
 export class RoomDelivery {
   private work: Promise<void> | null = null;

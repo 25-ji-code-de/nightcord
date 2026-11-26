@@ -19,7 +19,7 @@ export async function create(env: ChatEnv, actor: Profile, input: Record<string,
     positive(env.ROOMS_MAX_TOTAL, 100), actor.id, positive(env.ROOMS_MAX_OWNED, 3)).run();
   const row = await db.prepare('SELECT * FROM room_creations WHERE account_id=? AND request_id=?').bind(actor.id, requestId).first<Creation>();
   if (!row) return fail('creation_quota', 429);
-  if (row.payload_hash !== digest) return fail('request_id_conflict', 409);
+  if (row.payload_hash !== digest && JSON.stringify(settings(JSON.parse(row.payload))) !== payload) return fail('request_id_conflict', 409);
   return initialize(env, actor, row);
 }
 export async function initialize(env: ChatEnv, actor: Profile, row: Creation) {

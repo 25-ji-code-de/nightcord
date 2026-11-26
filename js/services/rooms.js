@@ -29,12 +29,17 @@ class RoomManager {
     this.visibilityGeneration = (this.visibilityGeneration || 0) + 1;
     this.visibilityState = { visibility: null, pending: null, available: false, reason, error: '' };
   }
-  async setVisibility(visibility) {
-    if (!this.ready || !this.visibilityState.available || this.visibilityState.pending || !['online', 'offline', 'hidden'].includes(visibility)) return false;
+  allowedVisibility() {
+    return this.room?.visibilityPolicy === 'online' ? ['online'] : this.room?.visibilityPolicy === 'offline' ? ['online', 'offline'] : ['online', 'offline', 'hidden'];
+  }
+  async setVisibility(visibility, confirmPolicy) {
+    const required = this.visibilityState.required;
+    if ((!this.ready && !required) || !this.visibilityState.available || this.visibilityState.pending || !this.allowedVisibility().includes(visibility)
+      || required && confirmPolicy !== this.room?.visibilityPolicy) return false;
     const gen = this.visibilityGeneration;
     Object.assign(this.visibilityState, { pending: visibility, error: '' }); this.update();
     try {
-      await this.request('room:visibility', { visibility });
+      await this.request('room:visibility', { visibility, ...(required ? { confirmPolicy } : {}) });
       return gen === this.visibilityGeneration;
     } catch (error) {
       if (gen === this.visibilityGeneration) Object.assign(this.visibilityState, { error: error.message,
@@ -62,6 +67,8 @@ class RoomManager {
       room_full: '房间成员已满。', daily_limit: '房间今日发送额度已用完。', room_capacity: '房间存储已满，历史仍可查看。',
       transfer_required: '请先将房主转让给其他成员。', room_archived: '房间已归档。', invalid_message: '请输入 1–256 字符。',
       owner_required: '此操作需要房主权限。', invite_limit: '有效邀请已达上限，请撤销旧邀请。',
+      invalid_visibility_policy: '请选择有效的成员显示规则。', visibility_not_allowed: '房间规则不允许使用此显示状态。',
+      visibility_confirmation_required: '房间显示规则已变更，请确认允许的状态后继续。',
       invalid_visibility: '请选择有效的显示状态。', invalid_frame: '当前房间服务暂不支持此操作，请更新服务后重试。' })[code] || '操作未完成，请稍后重试。';
   }
   async call(path, data, method = data === undefined ? 'GET' : 'POST', auth = true) {
@@ -122,12 +129,17 @@ class RoomManager {
   receive(data) {
     const presenceChanged = data.online && JSON.stringify(data.online) !== JSON.stringify(this.online);
     if (data.online) this.online = data.online;
-    if (data.type === 'ready') {
+    if (data.type === 'ready' || data.type === 'room:visibility-required') {
       if (this.user && data.user.id !== this.user.id) { this.reset(); return; }
-      this.user = data.user; this.room = data.room; this.role = data.role; this.ready = true; this.status = '';
+      const required = data.type === 'room:visibility-required';
+      this.user = data.user; this.room = data.room; this.role = data.role; this.ready = !required; this.status = required ? '请确认房间显示规则' : '';
       const supported = ['online', 'offline', 'hidden'].includes(data.visibility);
-      Object.assign(this.visibilityState, { visibility: supported ? data.visibility : null, available: supported,
-        reason: supported ? '' : 'unsupported', error: '' });
+      Object.assign(this.visibilityState, { visibility: supported ? data.visibility : null, available: supported, required,
+        reason: required ? 'policy' : supported ? '' : 'unsupported', error: '' });
+      if (required) {
+        this.messages.clear(); this.pending.clear(); this.members = []; this.online = []; this.memberRevision++;
+        this.loaded = false; this.syncedSeq = 0;
+      }
       if (data.messages) {
         const initial = !this.loaded;
         if (initial) { this.syncedSeq = data.messages.length ? data.messages[0].seq - 1 : 0; this.loaded = true; this.moreBefore = (data.messages[0]?.seq || 0) > 1; }

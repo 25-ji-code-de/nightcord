@@ -103,6 +103,16 @@
 .managed-chat [data-voice-toolbar], .managed-chat #attachmentBtn { display: none !important; }
 .managed-chat-history { display: flex; justify-content: center; gap: 8px; padding: 8px 16px; }
 .managed-chat-history[hidden] { display: none; }
+.managed-chat-policy { display: grid; gap: 16px; min-height: 0; overflow-y: auto; flex: 1; align-content: start; padding: 24px; color: rgb(var(--nc-text)); background: rgb(var(--nc-canvas)); }
+.managed-chat-policy[hidden] { display: none; }
+.managed-chat-policy:not([hidden]) ~ .messages { display: none; }
+.managed-chat-policy > * { width: 100%; max-width: 600px; margin: 0 auto; box-sizing: border-box; }
+.managed-chat-policy h3 { font-size: 18px; }
+.managed-chat-policy p { line-height: 1.7; }
+.managed-chat-policy select { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid rgb(var(--nc-divider)); border-radius: var(--sekai-radius-control); background: rgb(var(--nc-composer)); color: inherit; font: inherit; font-size: 16px; }
+.managed-chat-policy button { min-height: 44px; cursor: pointer; }
+.managed-chat-policy :disabled { opacity: .5; cursor: default; }
+.managed-chat-policy :focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: 2px; }
 
 /* Administration follows the settings page's sections and the roster's rows. */
 .room-header-context { color: rgb(var(--nc-text-muted)); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

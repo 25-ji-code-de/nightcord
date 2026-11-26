@@ -172,9 +172,11 @@ class AlertSettingsView {
     }
     this.visibilityDescription = this.node('p', '', 'alert-hint'); this.visibilityDescription.id = 'room-visibility-description';
     this.visibilityStatus = this.node('p', '', 'settings-description'); this.visibilityStatus.setAttribute('role', 'status');
+    this.visibilityPolicy = this.node('p', '', 'alert-hint'); this.visibilityPolicy.id = 'room-visibility-policy';
+    this.visibilityChoices.setAttribute('aria-describedby', this.visibilityPolicy.id);
     this.visibilityChoices.append(choices);
     this.visibilityNote = this.node('p', '', 'alert-hint');
-    section.append(this.visibilityChoices, this.visibilityDescription, this.visibilityNote, this.visibilityStatus);
+    section.append(this.visibilityChoices, this.visibilityPolicy, this.visibilityDescription, this.visibilityNote, this.visibilityStatus);
     parent.append(section);
   }
   refreshVisibility() {
@@ -185,7 +187,13 @@ class AlertSettingsView {
       : '隐藏后仍可收发消息。消息中的身份仍可见，参加语音时仍会显示在语音列表。';
     this.visibilityChoices.disabled = !state.available || !!state.pending;
     this.visibilityChoices.setAttribute('aria-busy', String(!!state.pending));
-    for (const input of this.visibilityChoices.querySelectorAll('input')) input.checked = input.value === (state.pending || state.visibility);
+    for (const input of this.visibilityChoices.querySelectorAll('input')) {
+      input.checked = input.value === (state.pending || state.visibility);
+      input.disabled = !!state.allowed && !state.allowed.includes(input.value);
+    }
+    this.visibilityPolicy.textContent = !this.alerts.ui.managedChat ? '' : state.allowed?.length === 1
+      ? '房间规则：不允许隐藏状态，仅可正常显示。' : state.allowed?.length === 2
+        ? '房间规则：允许显示为离线，不允许从列表隐藏。' : '房间规则：允许完全隐藏。';
     this.visibilityDescription.textContent = state.visibility === 'hidden' ? '不会出现在本房间的在线或离线成员列表中。'
       : state.visibility === 'offline' ? this.alerts.ui.currentUser?.authenticated
         ? '保持在线，但在房间成员列表中显示为离线。'
@@ -193,6 +201,7 @@ class AlertSettingsView {
       : '用户在线时会出现在在线列表中；已登录的成员离开后，则会转入离线列表。';
     this.visibilityStatus.textContent = state.error || (state.pending ? '正在保存…' : state.available
       ? '已与服务器同步，仅对当前身份和这个房间生效。'
+      : state.required ? '房间显示规则已变更。请关闭设置，在聊天区确认新状态或暂时离开。'
       : state.reason === 'unsupported' ? '当前房间服务尚未启用显示状态设置，请更新服务后重新进入房间。'
         : state.reason === 'connecting' ? '正在同步房间显示状态…'
           : '房间连接已断开，重新进入房间后即可设置。');

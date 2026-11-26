@@ -146,6 +146,70 @@ test('managed visibility persists per room, synchronizes tabs and filters roster
   const newcomer = await f.connect(id, 'alice'); assert.ok(newcomer.ready.online.includes(profiles.bob.id));
 });
 
+test('visibility policies validate owner authority, retain legacy defaults and remain isolated per room', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.api('alice', 'rooms', { ...creation(), visibilityPolicy: 'bad' })).data.code, 'invalid_visibility_policy');
+  const input = creation(), id = await f.create(input), room = f.room(id);
+  assert.equal((await room.handle(profiles.alice, 'get', {})).data.room.visibilityPolicy, 'hidden');
+  await room.handle(profiles.bob, 'join', {});
+  assert.equal((await room.handle(profiles.bob, 'update', { visibilityPolicy: 'online' })).data.code, 'owner_required');
+  assert.equal((await room.handle(profiles.alice, 'update', { visibilityPolicy: null })).data.code, 'invalid_visibility_policy');
+  assert.equal((await room.handle(profiles.alice, 'update', { visibilityPolicy: ['online'] })).data.code, 'invalid_visibility_policy');
+  assert.equal((await room.handle(profiles.alice, 'update', { visibilityPolicy: 'offline' })).data.room.visibilityPolicy, 'offline');
+  const bob = await f.connect(id, 'bob');
+  assert.equal((await bob.command('room:visibility', { visibility: 'hidden' })).code, 'visibility_not_allowed');
+  assert.equal((await bob.command('room:visibility', { visibility: 'offline' })).visibility, 'offline');
+  const other = await f.create({ ...creation('Other'), visibilityPolicy: 'online' });
+  assert.equal((await f.room(other).handle(profiles.alice, 'get', {})).data.room.visibilityPolicy, 'online');
+  assert.equal((await room.handle(profiles.alice, 'get', {})).data.room.visibilityPolicy, 'offline');
+  // Pre-policy metadata and creation ledgers still read/retry as fully permissive.
+  const storage = await f.storage(id);
+  await storage.exec("UPDATE room_meta SET data=json_remove(data,'$.visibilityPolicy')");
+  assert.equal((await room.handle(profiles.alice, 'get', {})).data.room.visibilityPolicy, 'hidden');
+  const legacy = JSON.stringify({ name: input.name, description: input.description, discoverability: input.discoverability, joinPolicy: input.joinPolicy });
+  await f.db.prepare('UPDATE room_creations SET payload=?,payload_hash=? WHERE room_id=?').bind(legacy, 'old-hash', id).run();
+  assert.equal((await f.api('alice', 'rooms', input)).data.room.id, id);
+});
+
+test('tightened visibility suspends all tabs without exposing identity and requires current-policy consent', async t => {
+  const f = await fixture(t), id = await f.create(), room = f.room(id);
+  await room.handle(profiles.bob, 'join', {});
+  const alice = await f.connect(id, 'alice'), bob = await f.connect(id, 'bob'), tab = await f.connect(id, 'bob');
+  assert.equal((await bob.command('room:visibility', { visibility: 'hidden' })).visibility, 'hidden');
+  await room.handle(profiles.alice, 'update', { visibilityPolicy: 'offline' });
+  await until(() => [bob, tab].every(peer => peer.frames.some(v => v.type === 'room:visibility-required')));
+  const gate = bob.frames.find(v => v.type === 'room:visibility-required');
+  assert.equal(gate.visibility, 'hidden'); assert.equal(gate.messages, undefined);
+  assert.equal(gate.room.visibilityPolicy, 'offline');
+  assert.ok(!(await f.api('alice', 'rooms/' + id + '/members?view=roster')).data.members.some(m => m.id === profiles.bob.id));
+  assert.equal((await f.api('bob', 'rooms/' + id + '/members')).data.code, 'visibility_confirmation_required');
+  for (const type of ['send', 'history', 'members']) {
+    assert.equal((await bob.command(type, { clientMessageId: crypto.randomUUID(), text: 'blocked' })).code, 'visibility_confirmation_required');
+  }
+  const mark = bob.frames.length;
+  await alice.command('send', { clientMessageId: crypto.randomUUID(), text: 'Only accepted participants receive this' });
+  await bob.command('history');
+  assert.ok(!bob.frames.slice(mark).some(v => v.type === 'message' || v.type === 'presence'));
+  const returned = await f.connect(id, 'bob');
+  assert.equal(returned.ready.type, 'room:visibility-required'); assert.equal(returned.ready.visibility, 'hidden');
+  assert.equal((await returned.command('room:visibility', { visibility: 'offline' })).code, 'visibility_confirmation_required');
+  await room.handle(profiles.alice, 'update', { visibilityPolicy: 'online' });
+  assert.equal((await tab.command('room:visibility', { visibility: 'online', confirmPolicy: 'offline' })).code, 'visibility_confirmation_required');
+  const accepted = await bob.command('room:visibility', { visibility: 'online', confirmPolicy: 'online' });
+  assert.equal(accepted.visibility, 'online');
+  await until(() => [bob, tab, returned].every(peer => peer.frames.some(v => v.type === 'ready' && v.visibility === 'online' && v.room.visibilityPolicy === 'online')));
+  assert.equal((await bob.command('send', { clientMessageId: crypto.randomUUID(), text: 'Accepted' })).type, 'ack');
+  // The owner follows the same rule and can still manage the room while paused.
+  await room.handle(profiles.alice, 'update', { visibilityPolicy: 'hidden' });
+  assert.equal((await alice.command('room:visibility', { visibility: 'hidden' })).visibility, 'hidden');
+  await room.handle(profiles.alice, 'update', { visibilityPolicy: 'offline' });
+  assert.equal((await alice.command('history')).code, 'visibility_confirmation_required');
+  assert.ok((await room.handle(profiles.alice, 'members', {})).data.members.some(m => m.id === profiles.alice.id));
+  await room.handle(profiles.alice, 'update', { visibilityPolicy: 'hidden' });
+  await until(() => alice.frames.some(v => v.type === 'ready' && v.visibility === 'hidden'));
+  assert.ok(!(await f.connect(id, 'alice')).ready.online.includes(profiles.alice.id));
+});
+
 test('D1 failure retains durable outbox and hidden confirmation waits for repair; old snapshots cannot resurrect refs',async t=>{
   const f=await fixture(t), id=await f.create(), room=f.room(id), storage=await f.storage(id);
   await room.handle(profiles.bob,'join',{});
@@ -202,7 +266,7 @@ test('disk restart recovers pending publication, creation acknowledgement and me
   assert.equal((await a.command('send',payload)).message.seq,1);
   assert.equal((await a.command('room:visibility', { visibility: 'hidden' })).visibility, 'hidden');
   await f.db.exec('ALTER TABLE room_directory RENAME TO unavailable_directory');
-  assert.equal((await f.room(id).handle(profiles.alice,'update',{discoverability:'unlisted'})).status,202);
+  assert.equal((await f.room(id).handle(profiles.alice,'update',{discoverability:'unlisted',visibilityPolicy:'offline'})).status,202);
   await f.db.prepare("UPDATE room_creations SET state='pending'").run();
   a.ws.terminate(); await f.runtime.dispose();
   f=await fixture(t,{},undefined,path,false);
@@ -210,8 +274,11 @@ test('disk restart recovers pending publication, creation acknowledgement and me
   const storage=await f.storage(id); await storage.exec('UPDATE outbox SET due=0');
   assert.equal((await f.api('alice','rooms',input)).data.room.id,id);
   assert.equal((await f.api(null,'rooms')).data.rooms.length,0);
-  const b=await f.connect(id,'alice'); assert.equal(b.ready.messages[0].text,payload.text);
-  assert.equal(b.ready.visibility, 'hidden'); assert.deepEqual(b.ready.online, []); assert.deepEqual(b.ready.members, []);
+  const b=await f.connect(id,'alice');
+  assert.equal(b.ready.type, 'room:visibility-required'); assert.equal(b.ready.room.visibilityPolicy, 'offline');
+  assert.equal(b.ready.visibility, 'hidden'); assert.equal(b.ready.messages, undefined);
+  assert.equal((await b.command('room:visibility', { visibility: 'offline', confirmPolicy: 'offline' })).visibility, 'offline');
+  assert.equal(b.frames.find(frame => frame.type === 'ready').messages[0].text, payload.text);
   assert.equal((await b.command('send',payload)).message.seq,1);
   b.ws.terminate(); await f.runtime.dispose(); await rm(path,{recursive:true,force:true});
 });

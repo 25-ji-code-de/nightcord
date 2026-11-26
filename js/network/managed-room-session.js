@@ -21,7 +21,7 @@ class ManagedRoomProtocol {
     this.timer = setTimeout(() => ws.close(1013, 'Authentication timeout'), 12000);
   }
   message(data, ws) {
-    if (data.type === 'ready') {
+    if (data.type === 'ready' || data.type === 'room:visibility-required') {
       this.authWork = null; this.attempt = 0; this.connection.ready = true; this.expiresAt = data.authExpiresAt;
       clearTimeout(this.timer); clearTimeout(this.leaseTimer);
       this.timer = setTimeout(() => this.refreshAuthentication(), Math.max(1000, this.expiresAt - Date.now() - 60000));

@@ -11,6 +11,9 @@ class ManagedChatView {
     this.sync = view.button('同步消息', () => void view.attempt(() => this.manager.sync()));
     this.history.append(this.older, this.sync);
     this.ui.elements.chatlog.before(this.history);
+    this.policy = view.element('section', 'managed-chat-policy'); this.policy.hidden = true;
+    this.policy.setAttribute('aria-label', '确认房间显示规则');
+    this.ui.elements.chatlog.before(this.policy);
   }
   activate(id) {
     const ui = this.ui;
@@ -50,7 +53,7 @@ class ManagedChatView {
     ui.elements.chatInput.disabled = false; ui.elements.chatInput.placeholder = '发送消息';
     for (const id of ['mentionBtn', 'formatBtn', 'stickerBtn']) document.getElementById(id).disabled = false;
     ui.elements.main.classList.remove('managed-chat');
-    this.info.hidden = true; this.history.hidden = true;
+    this.info.hidden = true; this.history.hidden = true; this.policy.hidden = true; this.policySignature = null;
     ui.roomView.updateHeading(); ui.setConnectionStatus('');
     ui.eventBus.emit('room:changed', { roomname: ui.currentRoom });
   }
@@ -95,7 +98,8 @@ class ManagedChatView {
   update() {
     if (this.ui.managedChat !== this) return;
     const m = this.manager, ui = this.ui;
-    ui.roomVisibility = { ...m.visibilityState, available: m.ready && m.visibilityState.available };
+    ui.roomVisibility = { ...m.visibilityState, allowed: m.allowedVisibility(), available: m.ready && m.visibilityState.available };
+    this.updatePolicy();
     ui.alerts?.view.refreshVisibility();
     ui.roomView.updateHeading();
     ui.elements.chatInput.disabled = !this.writable();
@@ -145,5 +149,36 @@ class ManagedChatView {
     }
     this.wasReady = m.ready;
   }
-  destroy() { this.deactivate(); this.info.remove(); this.history.remove(); }
+  updatePolicy() {
+    const v = this.view, m = this.manager, state = m.visibilityState;
+    this.policy.hidden = !state.required;
+    if (!state.required) { this.policySignature = null; return; }
+    const signature = JSON.stringify([m.room.id, m.room.visibilityPolicy]);
+    if (signature !== this.policySignature) {
+      this.policySignature = signature;
+      const title = v.element('h3', '', '房间显示规则已变更');
+      const rule = m.room.visibilityPolicy === 'online' ? '本房间现在只允许正常显示。' : '本房间现在允许正常显示或显示为离线，不允许从列表隐藏。';
+      const copy = v.element('p', '', rule + ' 你的原状态尚未改变，消息收发已暂停。请选择允许的状态并确认后继续。');
+      const label = v.element('label', 'room-field'), select = v.element('select'); select.setAttribute('aria-label', '继续聊天时的显示状态');
+      const placeholder = v.element('option', '', '请选择显示状态'); placeholder.value = ''; placeholder.disabled = true; placeholder.selected = true; select.append(placeholder);
+      for (const value of m.allowedVisibility()) {
+        const option = v.element('option', '', value === 'online' ? '正常显示' : '显示为离线'); option.value = value; select.append(option);
+      }
+      label.append(v.element('span', '', '继续聊天时的显示状态'), select);
+      const buttons = v.element('div', 'room-confirm-actions');
+      this.policyConfirm = v.button('确认新状态并继续', () => {
+        if (this.policySignature === signature && select.value) void m.setVisibility(select.value, m.room.visibilityPolicy);
+      }, 'rooms-button rooms-primary');
+      this.policySelect = select; select.addEventListener('change', () => this.updatePolicy());
+      const leave = v.button('暂时离开', () => { v.close(); void v.lobby(true); });
+      buttons.append(this.policyConfirm, leave);
+      this.policyStatus = v.element('p', 'room-feedback'); this.policyStatus.setAttribute('role', 'status');
+      this.policy.replaceChildren(title, copy, label, buttons, v.element('p', 'room-field-hint', '暂时离开会断开聊天，保留房间成员资格。'), this.policyStatus);
+    }
+    this.policySelect.disabled = !!state.pending || !state.available;
+    this.policyConfirm.disabled = !this.policySelect.value || !!state.pending || !state.available;
+    this.policyConfirm.setAttribute('aria-busy', String(!!state.pending));
+    this.policyStatus.textContent = state.error || (state.pending ? '正在确认…' : '');
+  }
+  destroy() { this.deactivate(); this.info.remove(); this.history.remove(); this.policy.remove(); }
 }

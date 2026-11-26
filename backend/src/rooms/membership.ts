@@ -20,7 +20,10 @@ function invitation(store: RoomStore, s: State, actor: Profile, digest: string):
 }
 export function memberPage(store: RoomStore, actor: Profile, input: Record<string, unknown>) {
   requireMember(store, actor);
-  if (input.view === 'roster' || store.state().ownerId !== actor.id) return { members: store.visibleMembers(), cursor: null };
+  if (input.view === 'roster' || store.state().ownerId !== actor.id) {
+    if (!store.visibilityAllowed(actor.id)) return fail('visibility_confirmation_required', 409);
+    return { members: store.visibleMembers(), cursor: null };
+  }
   const cursor = typeof input.cursor === 'string' ? input.cursor : '';
   if (cursor.length > 134) return fail('invalid_cursor');
   const owner = store.state().ownerId === actor.id;

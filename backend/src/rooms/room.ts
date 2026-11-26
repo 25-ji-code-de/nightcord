@@ -2,7 +2,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { allowedOrigin, type ChatEnv } from '../guest';
 import type { Profile } from '../identity';
-import { authenticate, available, fail, hash, identifier, object, reply, settings, summary, type State } from './protocol';
+import { authenticate, available, fail, hash, identifier, object, reply, settings, summary, visibilityAllowed, type State, type Visibility } from './protocol';
 import { RoomStore } from './schema';
 import { manage, memberPage, requireMember } from './membership';
 import { history, send } from './messages';
@@ -50,6 +50,7 @@ export class ManagedRoom extends DurableObject<ChatEnv> {
         if (this.pending()) await this.delivery.schedule();
       });
       this.revokeConnections();
+      if (action === 'update') this.syncVisibilityAccess();
       this.broadcast({ type: 'presence', online: this.online() });
       if (!['get', 'preview', 'members', 'invites'].includes(action)) {
         this.broadcast({ type: 'changed', room: summary(this.store.state()) });
@@ -92,11 +93,31 @@ export class ManagedRoom extends DurableObject<ChatEnv> {
       .filter(s => !s.closed && s.user && s.expiresAt > Date.now() && this.store.require(s.user.id)
         && this.store.visibility(s.user.id) === 'online').map(s => s.user!.id))];
   }
+  private sessionFrame(ws: WebSocket, input: Record<string, unknown> = {}, includeHistory = true) {
+    const s = ws.deserializeAttachment() as Session, user = s.user!;
+    const state = this.store.state(), blocked = !this.store.visibilityAllowed(user.id);
+    s.visibilityBlocked = blocked; ws.serializeAttachment(s);
+    const own = { room: summary(state), role: state.ownerId === user.id ? 'owner' : 'member', user,
+      visibility: this.store.visibility(user.id), authExpiresAt: s.expiresAt };
+    if (blocked) return { ...own, type: 'room:visibility-required' };
+    return { ...own, type: 'ready', online: this.online(), latestSeq: state.lastSeq,
+      ...(includeHistory ? { ...history(this.store, user, input), ...memberPage(this.store, user, { view: 'roster' }) } : {}) };
+  }
+  private syncVisibilityAccess() {
+    for (const ws of this.ctx.getWebSockets()) {
+      const s = ws.deserializeAttachment() as Session;
+      if (s.closed || !s.user || s.expiresAt <= Date.now() || !this.store.require(s.user.id)) continue;
+      // Keep the saved preference. Disallowed identities receive only a private consent frame.
+      if (!this.store.visibilityAllowed(s.user.id) || s.visibilityBlocked) {
+        try { ws.send(JSON.stringify(this.sessionFrame(ws))); } catch { this.close(ws); }
+      }
+    }
+  }
   private broadcast(value: unknown) {
     const encoded = JSON.stringify(value);
     for (const ws of this.ctx.getWebSockets()) {
       const s = ws.deserializeAttachment() as Session;
-      if (s.closed || !s.user || s.expiresAt <= Date.now() || !this.store.require(s.user.id)) continue;
+      if (s.closed || !s.user || s.expiresAt <= Date.now() || !this.store.require(s.user.id) || !this.store.visibilityAllowed(s.user.id)) continue;
       try { ws.send(encoded); } catch { this.close(ws); }
     }
   }
@@ -121,22 +142,25 @@ export class ManagedRoom extends DurableObject<ChatEnv> {
         const renewal = !!s.user;
         s.user = identity.user; s.expiresAt = identity.expiresAt; ws.serializeAttachment(s);
         await this.ctx.storage.transaction(() => this.delivery.schedule());
+        s = ws.deserializeAttachment() as Session;
+        if (s.closed || s.expiresAt <= Date.now()) return fail('login_required', 401);
         requireMember(this.store, identity.user);
-        const state = this.store.state();
         if (!renewal) this.broadcast({ type: 'presence', online: this.online() });
-        return { type: 'ready', room: summary(state), role: state.ownerId === s.user.id ? 'owner' : 'member', user: s.user,
-          visibility: this.store.visibility(s.user.id), authExpiresAt: s.expiresAt, online: this.online(), latestSeq: state.lastSeq,
-          ...(renewal ? {} : history(this.store, s.user, input)), ...(renewal ? {} : memberPage(this.store, s.user, { view: 'roster' })) };
+        return this.sessionFrame(ws, input, !renewal || !!s.visibilityBlocked);
       }
       if (!s.user) return fail('login_required', 401);
       requireMember(this.store, s.user);
       if (input.type === 'room:visibility') {
-        if (!['online', 'offline', 'hidden'].includes(String(input.visibility))) return fail('invalid_visibility');
+        if (typeof input.visibility !== 'string' || !['online', 'offline', 'hidden'].includes(input.visibility)) return fail('invalid_visibility');
         if (!await this.env.LIMITERS.getByName('room-visibility:' + s.user.id).check()) return fail('rate_limited', 429);
         s = ws.deserializeAttachment() as Session;
         if (s.closed || !s.user || s.expiresAt <= Date.now()) return fail('login_required', 401);
         requireMember(this.store, s.user);
+        const policy = this.store.state().visibilityPolicy;
+        if (!visibilityAllowed(policy, input.visibility as Visibility)) return fail('visibility_not_allowed', 403);
+        if (!this.store.visibilityAllowed(s.user.id) && input.confirmPolicy !== policy) return fail('visibility_confirmation_required', 409);
         this.store.sql.exec('INSERT INTO room_visibility VALUES(?,?) ON CONFLICT(account_id) DO UPDATE SET visibility=excluded.visibility', s.user.id, String(input.visibility));
+        this.syncVisibilityAccess();
         const value = { type: 'room:visibility', userId: s.user.id, visibility: input.visibility };
         for (const other of this.ctx.getWebSockets()) {
           const peer = other.deserializeAttachment() as Session;
@@ -147,6 +171,7 @@ export class ManagedRoom extends DurableObject<ChatEnv> {
         this.broadcast({ type: 'presence', online: this.online(), members: this.store.visibleMembers(), silent: true });
         return value;
       }
+      if (!this.store.visibilityAllowed(s.user.id)) return fail('visibility_confirmation_required', 409);
       if (input.type === 'send') {
         const saved = send(this.store, this.env, s.user, input);
         if (!saved.duplicate) this.broadcast({ type: 'message', message: saved.message });

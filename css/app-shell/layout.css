@@ -1,6 +1,8 @@
 
 body {
   margin: 0;
+  /* Use the app's pressed states instead of the browser's tap overlay. */
+  -webkit-tap-highlight-color: transparent;
   font-family: "Segoe UI", "Noto Sans JP", sans-serif;
   background: #50476a;
   color: #fff;

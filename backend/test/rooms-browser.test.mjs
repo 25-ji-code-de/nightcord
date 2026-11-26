@@ -285,6 +285,7 @@ test('managed rooms: create, join, send, replies, invitations, removal, mobile a
   await bob.locator('#messages .message').getByText('只有房间成员可见', {exact:true}).waitFor();
   assert.equal(await bob.locator('#messages script').count(), 0);
   await bob.locator('#messageInput').fill('收到 ');
+  await bob.locator('#messages .message[data-seq="1"] .message-text').tap();
   await bob.locator('#messages .message[data-seq="1"] .message-reply-btn').click();
   assert.match(await bob.locator('#messageInput').inputValue(), /Reply::1/);
   await bob.locator('#messageInput').press('End');

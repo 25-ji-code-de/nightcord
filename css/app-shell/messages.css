@@ -21,27 +21,56 @@
   z-index: 10;
 }
 
-.message:hover .message-reply-btn,
-.message:focus-within .message-reply-btn {
+.message:focus-within .message-reply-btn,
+.message.is-reply-selected .message-reply-btn,
+.message.is-reply-swiping .message-reply-btn {
   opacity: 1;
   transform: translateY(0) scale(1);
   pointer-events: auto;
 }
 
-@media (hover: none), (pointer: coarse) {
-  .message:has(.message-reply-btn) { padding-right: 52px; }
-  .message .message-reply-btn {
-    top: 0;
-    right: 4px;
-    width: 44px;
-    height: 44px;
+@media (hover: hover) and (pointer: fine) {
+  .message:hover .message-reply-btn {
     opacity: 1;
-    transform: none;
+    transform: translateY(0) scale(1);
     pointer-events: auto;
-    background: transparent;
-    border-color: transparent;
-    box-shadow: none;
   }
+}
+
+/* Keep the original floating control, with a larger invisible touch target. */
+@media (pointer: coarse) {
+  .message-reply-btn::before { content: ''; position: absolute; inset: -6px; }
+}
+
+.message-swipe-hint {
+  position: absolute;
+  top: -12px;
+  right: 56px;
+  display: flex;
+  align-items: center;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 4px;
+  background: rgb(var(--nc-sidebar));
+  color: rgb(var(--nc-text));
+  box-shadow: 0 2px 4px rgb(0 0 0 / .3);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
+.message-swipe-hint::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: rgb(var(--nc-accent));
+  transform: scaleX(var(--reply-swipe-progress, 0));
+  transform-origin: left;
+}
+@media (prefers-reduced-motion: reduce) {
+  .message-reply-btn { transition: none; }
 }
 
 .message-reply-btn:hover {

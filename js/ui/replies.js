@@ -69,6 +69,7 @@ class ReplyView {
    * @private
    */
   setupReplyJumpListener() {
+    this.setupTouchReplies();
     document.addEventListener('reply-jump', (event) => {
       const { timestamp } = event.detail;
       const messageEl = this.ui.messageIndex.get(timestamp);
@@ -89,6 +90,98 @@ class ReplyView {
     });
   }
 
+  /** Delegate touch gestures so appended/rebuilt history needs no extra listeners. */
+  setupTouchReplies() {
+    const log = this.ui.elements.chatlog;
+    if (!log || this.touchRepliesBound) return;
+    this.touchRepliesBound = true;
+    const interactive = 'a, button, input, textarea, select, label, summary, [role="button"], [role="slider"], [tabindex], [contenteditable]:not([contenteditable="false"]), img, video, audio, iframe, pre, .sekai-reply';
+    const threshold = 64;
+    let gesture = null, blockedClick = null;
+    const selection = () => !!window.getSelection()?.toString();
+    const clearSelected = () => {
+      log.querySelector('.is-reply-selected')?.classList.remove('is-reply-selected');
+    };
+    const reset = () => {
+      if (!gesture) return;
+      gesture.row.classList.remove('is-reply-swiping');
+      gesture.hint?.remove();
+      gesture = null;
+    };
+    const eligible = row => row?.isConnected && log.contains(row) && log.getClientRects().length
+      && !this.ui.elements.chatInput?.disabled;
+    document.addEventListener('touchstart', event => {
+      // A second finger cancels rather than stealing pinch zoom.
+      if (event.touches.length !== 1) { reset(); clearSelected(); return; }
+      reset(); blockedClick = null;
+      const row = event.target.closest('.message');
+      const selected = log.querySelector('.is-reply-selected');
+      if (selected !== row) clearSelected();
+      const button = row?.querySelector('.message-reply-btn');
+      if (!button || !eligible(row) || event.target.closest(interactive) || selection()) return;
+      const touch = event.touches[0];
+      // Leave edge navigation and long-press text selection to the browser.
+      if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return;
+      gesture = { row, button, id: touch.identifier, x: touch.clientX, y: touch.clientY,
+        started: performance.now(), room: this.ui.currentRoom, swiping: false };
+    }, { passive: true });
+    log.addEventListener('touchmove', event => {
+      if (!gesture) return;
+      const touch = [...event.touches].find(touch => touch.identifier === gesture.id);
+      if (!touch || event.touches.length !== 1 || selection() || !eligible(gesture.row)) { reset(); return; }
+      const dx = touch.clientX - gesture.x, dy = Math.abs(touch.clientY - gesture.y);
+      if (!gesture.swiping) {
+        if (performance.now() - gesture.started > 450) { reset(); return; }
+        if (Math.max(Math.abs(dx), dy) < 12) return;
+        if (dx < 12 || dx < dy * 1.5) { reset(); return; }
+        clearSelected();
+        gesture.swiping = true;
+        gesture.row.classList.add('is-reply-swiping');
+        gesture.hint = document.createElement('span');
+        gesture.hint.className = 'message-swipe-hint';
+        gesture.hint.setAttribute('aria-hidden', 'true');
+        gesture.row.append(gesture.hint);
+      }
+      // Only claim a deliberate horizontal gesture; native scrolling stays available elsewhere.
+      if (!event.cancelable) { reset(); return; }
+      event.preventDefault();
+      gesture.ready = dx >= threshold && dy < 40;
+      gesture.hint.textContent = gesture.ready ? '松开回复' : '右滑回复';
+      gesture.hint.style.setProperty('--reply-swipe-progress', String(Math.max(0, Math.min(1, dx / threshold))));
+    }, { passive: false });
+    log.addEventListener('touchend', event => {
+      if (!gesture) return;
+      const touch = [...event.changedTouches].find(touch => touch.identifier === gesture.id);
+      if (!touch) return;
+      const current = gesture;
+      const dx = touch.clientX - current.x, dy = Math.abs(touch.clientY - current.y);
+      reset();
+      if (!eligible(current.row) || current.room !== this.ui.currentRoom || selection()) return;
+      if (current.swiping) {
+        // Consume the compatibility click, including after a cancelled short swipe.
+        if (event.cancelable) event.preventDefault();
+        blockedClick = { row: current.row, until: performance.now() + 750 };
+        if (current.ready && dx >= threshold && dy < 40) current.button.click();
+      } else if (Math.abs(dx) < 12 && dy < 12 && performance.now() - current.started < 450) {
+        current.row.classList.toggle('is-reply-selected');
+      }
+    }, { passive: false });
+    log.addEventListener('click', event => {
+      if (event.detail && blockedClick && performance.now() < blockedClick.until && blockedClick.row.contains(event.target)) {
+        event.preventDefault(); event.stopImmediatePropagation(); blockedClick = null;
+      }
+    }, true);
+    log.addEventListener('touchcancel', reset, { passive: true });
+    log.addEventListener('contextmenu', reset);
+    log.addEventListener('scroll', () => { reset(); clearSelected(); }, { passive: true });
+    log.addEventListener('keydown', event => { if (event.key === 'Escape') { reset(); clearSelected(); } });
+    document.addEventListener('selectionchange', () => { if (selection()) { reset(); clearSelected(); } });
+    document.addEventListener('pointerdown', event => {
+      if (!event.target.closest('.message.is-reply-selected')) clearSelected();
+    }, { passive: true });
+    window.addEventListener('blur', () => { reset(); clearSelected(); });
+  }
+
   /**
    * 创建回复按钮
    * @param {Object} msg - 消息对象
@@ -107,6 +200,7 @@ class ReplyView {
 
     btn.onclick = (e) => {
       e.stopPropagation();
+      btn.closest('.message')?.classList.remove('is-reply-selected');
       this.insertReplyReference(msg);
     };
 

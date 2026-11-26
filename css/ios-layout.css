@@ -27,8 +27,8 @@
 /* Compact layouts include iPhone landscape widths. The header stays outside
  * the message scroller, including when the keyboard reduces available height. */
 @media (max-width: 768px), (max-width: 1024px) and (pointer: coarse) {
-  :root {
-    /* Default mobile scale: body 16, author/labels 15, secondary 14, caption 13.
+  :root[data-ios-device] {
+    /* Default iOS scale: body 16, author/labels 15, secondary 14, caption 13.
      * Keep it independent of the layout switch and of device pixel density. */
     --nc-phone-unit: 1rem;
     --nc-phone-body: var(--nc-phone-unit);
@@ -50,28 +50,28 @@
       --nc-phone-unit: calc(1rem * 16 / 17);
     }
   }
-  :root :is(body, .settings-dialog) {
+  :root[data-ios-device] :is(body, .settings-dialog) {
     font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     font-size: var(--nc-phone-body);
     line-height: 1.5;
   }
-  :root :is(.message-text, .dm-message-content, .tool-message-preview) {
+  :root[data-ios-device] :is(.message-text, .dm-message-content, .tool-message-preview) {
     font-size: var(--nc-phone-body);
     line-height: 1.5;
   }
-  :root :is(.message-text, .dm-message-content) .sekai-text-node { line-height: inherit; }
-  :root :is(.chat-header, .tools-header h1, .dm-list-header h1, .rooms-header h1, .settings-toggle-title) { font-size: var(--nc-phone-body); }
-  :root :is(.message-user, .channel, .voice-user-name, .sidebar-profile-name, .palette-fieldset legend, .palette-option-heading) { font-size: var(--nc-phone-label); }
-  :root :is(.settings-description, .tools-description, .subtitle) { font-size: var(--nc-phone-secondary); line-height: 1.5; }
-  :root :is(.message-time, .section-label, .settings-footer p, .palette-option-copy small, .tool-message-meta time) { font-size: var(--nc-phone-caption); }
-  :root .settings-header h1 { font-size: var(--nc-phone-title); }
-  :root .message-header { flex-wrap: wrap; gap: 2px 8px; }
-  :root .message-user { min-width: 0; overflow-wrap: anywhere; }
-  :root .message-time { white-space: nowrap; }
+  :root[data-ios-device] :is(.message-text, .dm-message-content) .sekai-text-node { line-height: inherit; }
+  :root[data-ios-device] :is(.chat-header, .tools-header h1, .dm-list-header h1, .rooms-header h1, .settings-toggle-title) { font-size: var(--nc-phone-body); }
+  :root[data-ios-device] :is(.message-user, .channel, .voice-user-name, .sidebar-profile-name, .palette-fieldset legend, .palette-option-heading) { font-size: var(--nc-phone-label); }
+  :root[data-ios-device] :is(.settings-description, .tools-description, .subtitle) { font-size: var(--nc-phone-secondary); line-height: 1.5; }
+  :root[data-ios-device] :is(.message-time, .section-label, .settings-footer p, .palette-option-copy small, .tool-message-meta time) { font-size: var(--nc-phone-caption); }
+  :root[data-ios-device] .settings-header h1 { font-size: var(--nc-phone-title); }
+  :root[data-ios-device] .message-header { flex-wrap: wrap; gap: 2px 8px; }
+  :root[data-ios-device] .message-user { min-width: 0; overflow-wrap: anywhere; }
+  :root[data-ios-device] .message-time { white-space: nowrap; }
   /* All editable fields need at least 16px to avoid iPhone focus zoom. */
-  :root :is(.input, input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="button"], [type="submit"]), textarea, select) { font-size: max(16px, var(--nc-phone-body)); }
+  :root[data-ios-device] :is(.input, input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="button"], [type="submit"]), textarea, select) { font-size: max(16px, var(--nc-phone-body)); }
   /* These two DM fields also have component-level !important declarations. */
-  :root :is(.dm-search, .dm-input) { font-size: max(16px, var(--nc-phone-body)) !important; }
+  :root[data-ios-device] :is(.dm-search, .dm-input) { font-size: max(16px, var(--nc-phone-body)) !important; }
 
   :root[data-ios-layout="on"] {
     --nc-ios-safe-top: env(safe-area-inset-top, 0px);

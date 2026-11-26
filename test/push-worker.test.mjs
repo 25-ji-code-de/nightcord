@@ -52,3 +52,19 @@ test('notification click focuses existing app without navigating drafts, or open
   assert.equal(w.opened.length, 1);
   await w.state(null); await w.emit('notificationclick', { notification }); assert.equal(w.focused(), 1);
 });
+
+test('room push obeys room choices, pause and account ownership, and opens the correct room URL', async () => {
+  const w = worker(), room = 'nightcord-default', data = { type: 'room', ownerId: 'sekai:bob', room };
+  await w.state({ ownerId: data.ownerId }); await w.push(data); assert.equal(w.notices.length, 0);
+  await w.state({ ownerId: data.ownerId, rooms: { [room]: { message: true } } });
+  await w.push(data); assert.equal(w.notices.length, 1); assert.equal(w.notices[0].tag, 'room:' + room);
+  await w.emit('notificationclick', { notification: { data, close() {} } });
+  assert.deepEqual(w.opened, ['/?chat=nightcord-default']);
+  const managed = 'r_' + 'a'.repeat(32);
+  await w.emit('notificationclick', { notification: { data: { ...data, room: managed }, close() {} } });
+  assert.equal(w.opened.at(-1), '/?room=' + managed);
+  await w.push({ ...data, room: '../bad' }); assert.equal(w.notices.length, 1);
+  await w.state({ ownerId: data.ownerId, rooms: { [room]: { message: true, pausedUntil: Date.now() + 10000 } } });
+  await w.push(data); assert.equal(w.notices.length, 1);
+  await w.state(null); await w.push(data); assert.equal(w.notices.length, 1);
+});

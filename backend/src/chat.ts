@@ -12,6 +12,8 @@ import { roomsRoute } from './rooms/routes';
 export { ManagedRoom } from './rooms/room';
 import { dmRoute } from './dm/routes';
 import { pushRoute } from './push';
+import { RoomPush, pushDeviceKey, type RoomPushPreferences } from './room-push';
+import { reply } from './messaging/protocol';
 export { VoiceRoom } from './voice/room';
 export { VoiceQuota } from './voice/quota';
 export { DirectRoom } from './dm/room';
@@ -32,6 +34,8 @@ interface Session {
   roomName?: string;
   voiceTicketAt?: number;
   voiceUsed?: boolean;
+  pushDevice?: string;
+  pushViewing?: boolean;
 }
 type StoredMessage = { name: string; message: string; timestamp: number; profile: string };
 type ChatMessage = { name: string; message: string; timestamp: number; user: Profile };
@@ -104,6 +108,18 @@ export default {
 } satisfies ExportedHandler<ChatEnv>;
 
 export class ChatRoom extends DurableObject<ChatEnv> {
+  private roomPush: RoomPush;
+  async roomPushSettings(actor: Profile, room: string, endpoint: string, preferences: RoomPushPreferences) {
+    const result = await reply(async () => {
+      const id = room.length === 64 ? this.env.ROOMS.idFromString(room) : this.env.ROOMS.idFromName(room);
+      if (!id.equals(this.ctx.id)) throw new Error('Wrong room');
+      const device = await pushDeviceKey(endpoint);
+      this.ctx.storage.transactionSync(() => this.roomPush.manage(actor, room, endpoint, device, preferences));
+      return {};
+    });
+    return { status: result.status, code: String(result.data.code || '') };
+  }
+  async alarm() { await this.roomPush.drain(); }
   directPeer(actorId: string, peerId: string): Profile | null {
     const rows = this.ctx.storage.sql.exec<{ id: string; profile: string }>('SELECT id,profile FROM room_members WHERE id IN (?,?)', actorId, peerId).toArray();
     if (rows.length !== 2) return null;
@@ -128,6 +144,12 @@ export class ChatRoom extends DurableObject<ChatEnv> {
         WHERE json_extract(profile, '$.authenticated') = 1 AND json_extract(profile, '$.id') LIKE 'sekai:%'
         ORDER BY id DESC`);
     }
+    this.roomPush = new RoomPush(ctx, env,
+      owner => !!ctx.storage.sql.exec('SELECT 1 FROM room_members WHERE id=?', owner).toArray().length,
+      () => new Set(ctx.getWebSockets().flatMap(ws => {
+        const s = ws.deserializeAttachment() as Session;
+        return !s.closed && s.user && s.authExpiresAt > Date.now() && s.pushDevice && s.pushViewing ? [s.user.id + '\n' + s.pushDevice] : [];
+      })));
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -155,6 +177,13 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     const frame = data as Record<string, unknown>;
     const initial = ws.deserializeAttachment() as Session;
     if (initial.closed) return;
+    if (frame.type === 'push:attention') {
+      if (initial.user?.authenticated && initial.authExpiresAt > Date.now() && typeof frame.device === 'string' && /^[a-f0-9]{64}$/.test(frame.device) && typeof frame.viewing === 'boolean') {
+        ws.serializeAttachment({ ...initial, pushDevice: frame.device, pushViewing: frame.viewing });
+        if (frame.viewing) this.roomPush.read(initial.user.id, frame.device);
+      }
+      return;
+    }
     if (frame.type === 'room:visibility') return this.setVisibility(ws, initial, frame);
     if (frame.type === 'voice:ticket') {
       const requestId = typeof frame.requestId === 'string' && /^[a-zA-Z0-9_-]{16,80}$/.test(frame.requestId) ? frame.requestId : null;
@@ -277,11 +306,15 @@ export class ChatRoom extends DurableObject<ChatEnv> {
         name: initial.user.displayName, message: frame.message as string, user: { ...initial.user, isMobile: initial.user.isMobile === true },
         timestamp: Math.max(Date.now(), (previous?.timestamp || 0) + 1),
       };
-      const inserted = this.ctx.storage.sql.exec<{ id: number }>(
-        'INSERT INTO messages (name, message, timestamp, profile) VALUES (?, ?, ?, ?) RETURNING id',
-        entry.name, entry.message, entry.timestamp, JSON.stringify(entry.user),
-      ).one();
-      this.ctx.storage.sql.exec('DELETE FROM messages WHERE id <= ?', inserted.id - STORED_MESSAGE_LIMIT);
+      await this.ctx.storage.transaction(async () => {
+        const inserted = this.ctx.storage.sql.exec<{ id: number }>(
+          'INSERT INTO messages (name, message, timestamp, profile) VALUES (?, ?, ?, ?) RETURNING id',
+          entry.name, entry.message, entry.timestamp, JSON.stringify(entry.user),
+        ).one();
+        this.ctx.storage.sql.exec('DELETE FROM messages WHERE id <= ?', inserted.id - STORED_MESSAGE_LIMIT);
+        if (this.roomPush.enqueue(entry.user.id, entry.message, timestamp => this.ctx.storage.sql.exec<{ owner: string }>(
+          "SELECT json_extract(profile,'$.id') AS owner FROM messages WHERE timestamp=? LIMIT 1", timestamp).toArray()[0]?.owner)) await this.roomPush.schedule();
+      });
       this.broadcast(entry);
     } catch (error) {
       console.error('Chat event failed', error instanceof Error ? error.message : 'Unknown error');

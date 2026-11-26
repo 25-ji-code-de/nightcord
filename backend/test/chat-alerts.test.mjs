@@ -96,6 +96,45 @@ test('chat notifications, preferences, presence and multiple tabs', { timeout: 1
     assert.match(await page.locator('#palette-status').textContent(), /正在试听：成员上线/);
   });
 
+  await t.test('room push switches are independent, announce failures and fit a small screen', async t => {
+    const { page } = await fixture(t);
+    await page.evaluate(() => {
+      const rooms = {};
+      ui.pushNotifications = { config: { enabled: true }, supported: () => true, state: { rooms },
+        roomPreferences: room => rooms[room] || {},
+        setRoomPreferences: async (room, change) => {
+          if (window.failPush) throw new Error('推送同步失败，请重试。');
+          rooms[room] = { ...rooms[room], ...change };
+        }, roomAttention() {} };
+    });
+    await page.locator('#navigation-settings').click();
+    await page.getByRole('tab', { name: '消息提醒' }).click();
+    const message = page.getByRole('switch', { name: '新消息：推送', exact: true });
+    assert.equal(await message.isChecked(), false);
+    await message.check(); assert.equal(await message.isChecked(), true);
+    const mention = page.getByRole('switch', { name: '@ 我：推送', exact: true });
+    await page.evaluate(() => { window.failPush = true; });
+    await mention.click(); await page.waitForFunction(() => !ui.alerts.view.pushBusy);
+    assert.equal(await mention.isChecked(), false);
+    assert.match(await page.locator('#settings-messages [role=status]').textContent(), /推送同步失败/);
+    await page.evaluate(() => { window.failPush = false; });
+    await mention.check(); assert.equal(await message.isChecked(), true);
+    await page.evaluate(() => ui.setCurrentRoom('another-room'));
+    assert.equal(await message.isChecked(), false); assert.equal(await mention.isChecked(), false);
+    await page.evaluate(() => ui.setCurrentRoom('alerts-test'));
+    assert.equal(await message.isChecked(), true); assert.equal(await mention.isChecked(), true);
+    await page.setViewportSize({ width: 375, height: 812 });
+    for (const kind of ['新消息', '回复我', '@ 我', '全体提及']) {
+      const input = page.getByRole('switch', { name: kind + '：推送', exact: true });
+      await input.scrollIntoViewIfNeeded(); const box = await input.locator('..').boundingBox();
+      assert.ok(box.x >= 0 && box.x + box.width <= 375);
+    }
+    if (process.env.NIGHTCORD_ALERT_ARTIFACTS) {
+      await mkdir(process.env.NIGHTCORD_ALERT_ARTIFACTS, { recursive: true });
+      await page.screenshot({ path: join(process.env.NIGHTCORD_ALERT_ARTIFACTS, 'settings-push-mobile.png') });
+    }
+  });
+
   await t.test('ordinary arrivals group without stealing focus and open the latest message', async t => {
     const { page } = await fixture(t);
     await page.locator('#navigation-tasks').click();

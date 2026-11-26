@@ -4,7 +4,10 @@ Cloudflare Worker + SQLite Durable Objects, compatible with the JSON/WebSocket
 protocol used by [workers-chat-demo](https://github.com/cloudflare/workers-chat-demo).
 Production hostname: `chat.nightcord.de5.net`, Worker: `nightcord-chat`.
 
-Optional private-message Web Push shares the per-account `UserInbox` storage and alarm.
+Optional Web Push keeps device credentials in the per-account `UserInbox`.
+Private messages share its alarm; room messages use bounded, coalesced room-local
+tasks and the existing room alarm, with a limit of 500 delivery attempts per room
+per UTC day. No polling is added. Room push is opt-in per device and message category.
 Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` using Wrangler secrets;
 it stays disabled until all three exist and `DM_MODE=on`. No new binding or migration
 is needed. See [PWA setup, endpoints and delivery limits](../docs/PWA.md).

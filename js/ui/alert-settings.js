@@ -42,6 +42,19 @@ class AlertSettingsView {
     input.addEventListener('change', () => this.save(prefs => { prefs[key] = input.checked; }));
     this.controls.set(key, input);
   }
+  pushToggle(parent, kind, label) {
+    const input = this.toggle(parent, '推送', '', `${label}：推送`); input.dataset.push = kind;
+    input.addEventListener('change', async () => {
+      const push = this.alerts.ui.pushNotifications, room = this.alerts.ui.currentRoom, enabled = input.checked;
+      if (!push) return;
+      this.pushBusy = true; this.pushError = ''; this.refresh();
+      try {
+        await push.setRoomPreferences(room, { [kind]: enabled, pausedUntil: this.alerts.preferences.read().pausedUntil });
+        this.setStatus('推送设置已保存，仅对当前账号、这台设备和这个聊天室生效。');
+      } catch (error) { this.pushError = error.message; this.setStatus(error.message); }
+      finally { this.pushBusy = false; this.refresh(); }
+    });
+  }
   choices(parent, key, label, options) {
     const group = this.node('fieldset', '', 'alert-choice'); group.dataset.alertChoice = key;
     group.append(this.node('legend', label));
@@ -68,6 +81,7 @@ class AlertSettingsView {
     const controls = this.node('div', '', 'alert-kind-controls');
     this.checkbox(controls, `${kind}Notice`, '提醒', '', `${label}：站内提醒`);
     this.checkbox(controls, `${kind}Sound`, '声音', '', `${label}：声音`);
+    if (['reply', 'mention', 'everyone'].includes(kind)) this.pushToggle(controls, kind, label);
     group.append(controls); parent.append(group);
   }
   disclosure(parent, key, title, description) {
@@ -123,6 +137,12 @@ class AlertSettingsView {
         prefs.pausedUntil = mode === 'off' ? 0 : mode === 'hour' ? Date.now() + 3600000
           : mode === 'tomorrow' ? tomorrow.getTime() : Number.MAX_SAFE_INTEGER;
       });
+      const push = this.alerts.ui.pushNotifications, room = this.alerts.ui.currentRoom;
+      if (push?.state?.rooms?.[room]) {
+        void push.setRoomPreferences(room, { pausedUntil: this.alerts.preferences.read().pausedUntil }).catch(error => {
+          this.pushError = '站内提醒已保存，但后台暂停同步失败：' + error.message; this.setStatus(this.pushError); this.refresh();
+        });
+      }
     });
     const select = this.node('span', '', 'alert-select-control'); select.append(this.pause, this.icon('chevron'));
     pause.append(select); general.append(pause);
@@ -136,6 +156,7 @@ class AlertSettingsView {
     const modes = [['off', '关闭'], ['away', '未被查看时'], ['always', '始终']];
     this.choices(message, 'messageNotice', '悬浮提醒', modes);
     this.choices(message, 'message', '提示声音', modes);
+    this.pushToggle(message, 'message', '新消息');
     message.append(this.node('p', '“未被查看时”包括离开页面、浏览历史记录或打开其他面板。', 'alert-hint'));
 
     const mentions = this.node('section', '', 'alert-category'); mentions.append(this.node('h3', '回复与提及')); messageFields.append(mentions);
@@ -152,7 +173,10 @@ class AlertSettingsView {
     this.followed = this.node('div', '', 'alert-followed'); presence.append(this.followed);
     const activity = this.disclosure(presence, 'activity', '近期动态');
     this.activity = this.node('div', '', 'alert-activity'); activity.append(this.activity);
-    for (const fields of [messageFields, presence]) fields.append(this.node('p', '锁屏或关闭网页后暂不发送通知。', 'alert-hint alert-footnote'));
+    this.pushStatus = this.node('p', '', 'alert-hint alert-footnote'); this.pushStatus.setAttribute('role', 'status');
+    messageFields.append(this.pushStatus);
+    messageFields.append(this.node('p', '推送默认关闭。开启后，离开页面或关闭网页仍可收到通知；连续消息会合并，同一房间每分钟最多推送一次。首次开启也会启用这台设备的私信推送。', 'alert-hint'));
+    presence.append(this.node('p', '成员上下线仅在页面内提醒。', 'alert-hint alert-footnote'));
     this.refresh();
   }
   mountVisibility(parent) {
@@ -228,6 +252,18 @@ class AlertSettingsView {
   refresh() {
     if (!this.panels.size) return;
     const prefs = this.alerts.preferences.read(), scope = this.alerts.preferences.key();
+    const push = this.alerts.ui.pushNotifications, roomPrefs = push?.roomPreferences(this.alerts.ui.currentRoom);
+    const unavailable = !this.alerts.ui.currentUser?.authenticated ? '登录 SEKAI Pass 后可开启后台推送。'
+      : !push?.supported() ? '当前浏览器不支持后台推送；iPhone / iPad 请先添加到主屏幕后打开。'
+      : !push.config?.enabled ? '后台推送暂不可用，请稍后再试。' : '';
+    if (this.pushStatus) {
+      this.pushStatus.textContent = this.pushError || (this.pushBusy || push?.busy ? '正在同步推送设置…' : unavailable
+        || (push.state?.pausedUntil > Date.now() ? '设备推送已暂停，可在“应用与推送通知”中恢复。' : '推送按当前账号、设备和聊天室保存；声音与站内提醒可独立设置。'));
+      this.pushStatus.setAttribute('aria-busy', String(!!(this.pushBusy || push?.busy)));
+    }
+    for (const input of this.panels.get('messages')?.root.querySelectorAll('[data-push]') || []) {
+      input.checked = !!roomPrefs?.[input.dataset.push]; input.disabled = !!unavailable || this.pushBusy || push?.busy;
+    }
     for (const [key, panel] of this.panels) {
       panel.fields.disabled = !scope;
       panel.fields.hidden = !scope;

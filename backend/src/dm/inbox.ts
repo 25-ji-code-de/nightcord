@@ -72,6 +72,12 @@ export class UserInbox extends DurableObject<ChatEnv> {
     await this.scheduleExpiry();
     return { status: result.status, code: String(result.data.code || ''), enabled: result.data.enabled === true, pausedUntil: Number(result.data.pausedUntil || 0) };
   }
+  hasPushDevice(owner: string, endpoint: string) {
+    this.owner(owner); return this.push?.hasDevice(endpoint) || false;
+  }
+  async sendRoomPush(owner: string, endpoint: string, room: string) {
+    this.owner(owner); return this.push ? this.push.sendRoom(owner, endpoint, room) : 'gone';
+  }
   async handle(actor: Profile, action: string, input: Record<string, unknown>, snapshot?: Snapshot) {
     return reply(async () => {
       available(this.env, action === 'reserve');

@@ -7,6 +7,7 @@
   const ios = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const node = id => document.getElementById(id);
   function render() {
+    if (typeof nightcord !== 'undefined') nightcord.ui?.alerts?.view.refresh();
     if (!node('pwa-status')) return;
     node('pwa-status').textContent = status;
     node('pwa-install').hidden = !installPrompt || installed();
@@ -21,10 +22,10 @@
     node('pwa-push-description').textContent = !supported ? '当前环境不支持后台推送通知，请使用 HTTPS 协议及兼容的浏览器。'
       : ios() && !installed() ? '请先将应用添加到主屏幕，然后从主屏幕打开 Nightcord。'
       : !push?.supported() ? '您当前的浏览器不支持 Web 推送。'
-      : !push.user ? '请使用您的 SEKAI Pass 登录，以启用私信推送通知。'
+      : !push.user ? '请使用您的 SEKAI Pass 登录，以启用推送通知。'
       : Notification.permission === 'denied' ? '通知权限已被拦截，请在浏览器的站点设置中允许通知。'
       : !push.config?.enabled ? '后台推送通知当前不可用，请稍后再试。'
-      : enabled ? (push.state.pausedUntil > Date.now() ? '推送通知已暂停，暂停结束后将自动恢复。' : '已启用。即使关闭页面，您也能收到新私信的提醒。')
+      : enabled ? (push.state.pausedUntil > Date.now() ? '推送通知已暂停，暂停结束后将自动恢复。' : '已启用私信推送。聊天室推送可在“消息提醒”中分别开启。')
       : '点击“启用推送通知”后，浏览器将请求发送通知的权限。';
     for (const id of ['pwa-install', 'pwa-push-pause', 'pwa-storage', 'pwa-update']) node(id).disabled = busy;
     node('pwa-push-pause').disabled = busy || push?.busy;
@@ -92,7 +93,7 @@
       return choice.outcome === 'accepted' ? '安装已启动，请等待浏览器完成后续流程。' : '安装已取消，您稍后仍可通过浏览器菜单进行安装。';
     }));
     node('pwa-push-enable').addEventListener('click', () => action(async () => {
-      if (push.state) { await push.disable(); return '已禁用此设备上的私信推送通知。'; }
+      if (push.state) { await push.disable(); return '已禁用此设备上的全部推送通知。'; }
       await push.enable(); return '已启用私信推送通知。';
     }));
     node('pwa-push-pause').addEventListener('click', () => action(async () => { await push.pause(); return '“勿扰”设置已同步。'; }));

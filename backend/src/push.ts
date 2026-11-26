@@ -3,6 +3,7 @@ import * as webpush from 'web-push';
 import { corsHeaders, type ChatEnv } from './guest';
 import { authenticate, bearer, body, fail, object, reply } from './messaging/protocol';
 import type { Snapshot } from './dm/protocol';
+import { roomPushPreferences, validPushRoom } from './room-push';
 
 export interface PushSecrets { VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string }
 type Device = { endpoint: string; subscription: string; paused_until: number; expires_at: number };
@@ -39,10 +40,20 @@ export async function pushRoute(request: Request, env: ChatEnv, origin: string) 
   }
   const result = await reply(async () => {
     if (request.method !== 'POST') return fail('method_not_allowed', 405);
-    if (!['/api/push/subscribe', '/api/push/unsubscribe'].includes(path)) return fail('not_found', 404);
+    if (!['/api/push/subscribe', '/api/push/unsubscribe', '/api/push/room'].includes(path)) return fail('not_found', 404);
     const { user } = await authenticate(env, bearer(request));
     if (!await env.LIMITERS.getByName('push:' + user.id).check()) return fail('rate_limited', 429);
     const input = await body(request);
+    if (path.endsWith('/room')) {
+      if (!validPushRoom(input.room)) return fail('not_found', 404);
+      const target = endpoint(input.endpoint), prefs = roomPushPreferences(input.preferences);
+      if (!await env.DM_INBOXES.getByName(user.id).hasPushDevice(user.id, target)) return fail('invalid_subscription');
+      const room = input.room.startsWith('r_') ? env.MANAGED_ROOMS.getByName(input.room)
+        : env.ROOMS.get(input.room.length === 64 ? env.ROOMS.idFromString(input.room) : env.ROOMS.idFromName(input.room));
+      const result = await room.roomPushSettings(user, input.room, target, prefs);
+      if (result.status !== 200) return fail(result.code, result.status);
+      return {};
+    }
     if (path.endsWith('/subscribe')) {
       if (!pushConfigured(env)) return fail('push_unavailable', 503);
       input.subscription = await subscription(input.subscription);
@@ -77,6 +88,24 @@ export class PushDelivery {
   private remove(target: string) {
     this.sql.exec('DELETE FROM push_devices WHERE endpoint=?', target);
     this.sql.exec('DELETE FROM push_outbox WHERE endpoint=?', target);
+  }
+  hasDevice(target: string) {
+    return !!this.sql.exec('SELECT 1 FROM push_devices WHERE endpoint=? AND expires_at>?', target, Date.now()).toArray().length;
+  }
+  async sendRoom(owner: string, target: string, room: string): Promise<string> {
+    const device = this.sql.exec<Device>('SELECT * FROM push_devices WHERE endpoint=?', target).toArray()[0];
+    if (!device || device.expires_at <= Date.now()) return 'gone';
+    if (!pushConfigured(this.env) || device.paused_until > Date.now()) return 'skipped';
+    let status = 0;
+    try {
+      const details = webpush.generateRequestDetails(JSON.parse(device.subscription), JSON.stringify({ type: 'room', ownerId: owner, room }),
+        { TTL: 300, urgency: 'normal', vapidDetails: { subject: this.env.VAPID_SUBJECT!, publicKey: this.env.VAPID_PUBLIC_KEY!, privateKey: this.env.VAPID_PRIVATE_KEY! } });
+      const response = await fetch(details.endpoint, { method: 'POST', headers: details.headers, body: new Uint8Array(details.body!),
+        redirect: 'manual', signal: AbortSignal.timeout(10000) });
+      status = response.status; await response.body?.cancel();
+    } catch { /* Caller retains the durable task and bounds retries. */ }
+    if (status === 404 || status === 410) { this.remove(target); return 'gone'; }
+    return status >= 200 && status < 500 && status !== 429 ? 'sent' : 'retry';
   }
   cancel(conversation: string) { this.sql.exec('DELETE FROM push_outbox WHERE conversation=?', conversation); }
   enqueue(snapshot: Snapshot) {

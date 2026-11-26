@@ -2,6 +2,8 @@
 class PushNotifications {
   constructor(app, registration, changed) {
     this.app = app; this.registration = registration; this.changed = changed;
+    this.app.pushNotifications = this;
+    if (app.ui) app.ui.pushNotifications = this;
     this.base = app.directMessages.base.replace(/\/dm$/, '/push');
     this.user = app.directMessages.user;
     this.config = null; this.state = null; this.busy = false; this.generation = 0; this.queue = Promise.resolve();
@@ -16,6 +18,7 @@ class PushNotifications {
     this.app.eventBus.on('session:updated', ({ user }) => { void this.setUser(user); });
     this.app.eventBus.on('dm:updated', () => this.badge());
     this.app.eventBus.on('dm:synced', () => this.openPending());
+    for (const event of ['room:synced', 'room:ready', 'rooms:updated']) this.app.eventBus.on(event, () => { void this.roomAttention(); });
     for (const event of ['auth:required', 'session:unavailable']) {
       this.app.eventBus.on(event, () => { if (this.user || this.state) void this.logout(); });
     }
@@ -27,6 +30,15 @@ class PushNotifications {
         this.openPending();
         event.ports?.[0]?.postMessage({ ok: true });
       }
+      if (event.data?.type === 'OPEN_ROOM' && this.validRoom(event.data.room) && this.user?.id === event.data.ownerId) {
+        const room = event.data.room;
+        // Only reuse a tab already in that room; another room may contain a draft.
+        if (this.app.ui?.currentRoom === room && !this.app.ui.elements?.main?.classList.contains('dm-view')) {
+          this.app.ui.sidebarFeatures?.close?.();
+          this.app.ui.elements?.chatlog?.scrollTo?.({ top: this.app.ui.elements.chatlog.scrollHeight });
+          event.ports?.[0]?.postMessage({ ok: true });
+        } else event.ports?.[0]?.postMessage({ ok: false });
+      }
     });
     window.addEventListener('storage', event => {
       if (event.key === this.storageKey || event.key === null) { this.generation++; this.state = this.read(); this.changed(); }
@@ -34,6 +46,61 @@ class PushNotifications {
     this.ready = this.initialize();
   }
   supported() { return 'PushManager' in window && 'Notification' in window; }
+  validRoom(room) { return typeof room === 'string' && /^(?:[a-z0-9-]{1,32}|[a-f0-9]{64}|r_[a-f0-9]{32})$/.test(room); }
+  roomPreferences(room = this.app.ui?.currentRoom) {
+    return { message: false, reply: false, mention: false, everyone: false, pausedUntil: 0,
+      ...(this.state?.ownerId === this.user?.id ? this.state?.rooms?.[room] : {}) };
+  }
+  async setRoomPreferences(room, preferences) {
+    if (!this.validRoom(room) || !this.user) throw new Error('请登录并进入聊天室后设置推送。');
+    const scope = this.scope();
+    // Keep the permission request in the originating switch gesture.
+    if (!this.state) await this.enable();
+    this.check(scope);
+    return this.serial(async () => {
+      this.check(scope);
+      const state = this.read(), sub = await (await this.registration)?.pushManager.getSubscription();
+      this.check(scope);
+      if (!state || state.ownerId !== scope.ownerId || !sub) throw new Error('请重新启用推送通知。');
+      const prefs = { ...this.roomPreferences(room), ...preferences };
+      await this.call('/room', { room, endpoint: sub.endpoint, preferences: prefs }, scope);
+      try { await this.save({ ...state, rooms: { ...state.rooms, [room]: { ...prefs, syncedAt: Date.now() } } }, scope); }
+      catch (error) {
+        await this.call('/room', { room, endpoint: sub.endpoint, preferences: this.roomPreferences(room) }, scope).catch(() => {});
+        throw error;
+      }
+      this.attentionState = null; await this.roomAttention();
+    });
+  }
+  async roomAttention() {
+    try {
+      const ui = this.app.ui, room = ui?.currentRoom;
+      if (!room || !this.state || this.state.ownerId !== this.user?.id || !this.state.rooms?.[room]) return;
+      const saved = this.state.rooms[room];
+      if (!this.busy && saved.syncedAt < Date.now() - 86400000 && ['message', 'reply', 'mention', 'everyone'].some(key => saved[key])) {
+        this.roomRenewals ||= new Map();
+        if (!(this.roomRenewals.get(room) > Date.now() - 600000)) {
+          this.roomRenewals.set(room, Date.now());
+          void this.setRoomPreferences(room, {}).catch(() => {});
+        }
+      }
+      const ws = ui.managedChat ? this.app.rooms?.transport?.ws : this.app.chatRoom?.wsManager?.ws;
+      if (!ws || ws.readyState !== 1) return;
+      if (this.attentionSocket === ws && this.attentionState === room + ':' + (ui.alerts?.viewing() === true)) return;
+      const scope = this.scope(), registration = await this.registration;
+      const sub = await registration?.pushManager?.getSubscription();
+      if (sub && this.attentionEndpoint !== sub.endpoint) {
+        this.attentionDevice = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sub.endpoint))), n => n.toString(16).padStart(2, '0')).join('');
+        this.attentionEndpoint = sub.endpoint;
+      }
+      if (!sub || scope.generation !== this.generation || ui.currentRoom !== room) return;
+      // Focus may change while the browser retrieves its subscription.
+      const viewing = ui.alerts?.viewing() === true, key = room + ':' + viewing;
+      if (this.attentionSocket === ws && this.attentionState === key) return;
+      ws.send(JSON.stringify({ type: 'push:attention', requestId: crypto.randomUUID(), device: this.attentionDevice, viewing }));
+      this.attentionSocket = ws; this.attentionState = key;
+    } catch { /* Browser subscription lookup must not interrupt chat. */ }
+  }
   read() {
     try {
       const state = JSON.parse(localStorage.getItem(this.storageKey) || 'null');
@@ -99,7 +166,9 @@ class PushNotifications {
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(({ login_required: '请重新登录 SEKAI Pass。', too_many_devices: '已达到 8 台设备的上限，请先在其他设备上关闭推送通知。',
-        rate_limited: '请求过于频繁，请稍后再试。', push_unavailable: '服务器端尚未启用推送通知功能。' })[data.code] || '推送通知设置同步失败，请检查网络连接后再试。');
+        rate_limited: '请求过于频繁，请稍后再试。', push_unavailable: '服务器端尚未启用推送通知功能。',
+        room_push_limit: '这个聊天室的推送订阅已达上限。', not_found: '当前无法订阅这个聊天室，请确认仍有访问权限。',
+        invalid_subscription: '设备订阅已失效，请重新启用推送。' })[data.code] || '推送通知设置同步失败，请检查网络连接后再试。');
     }
     this.check(scope);
   }
@@ -133,6 +202,7 @@ class PushNotifications {
       } catch { /* Retain the user's choice so a later visit can repair the subscription. */ }
     }
     this.changed(); this.openPending();
+    void this.roomAttention();
   }
   async enable() {
     if (!this.user || !this.config?.enabled || !this.supported()) throw new Error('目前无法启用推送通知，请参阅上述说明。');

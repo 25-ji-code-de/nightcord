@@ -11,7 +11,8 @@ class SekaiParser {
     this.maxPayloadBytes = maxPayloadBytes;
     this.tokenCache = new Map();
     this.tokenCacheMaxSize = 100;
-    this.codec = new SekaiResources();
+    const Resources = typeof module !== 'undefined' && module.exports ? require('./resources.js').SekaiResources : SekaiResources;
+    this.codec = new Resources();
   }
 
   normalizeSyntax(text) {
@@ -315,3 +316,4 @@ class SekaiParser {
     return tokens;
   }
 }
+if (typeof module !== 'undefined' && module.exports) module.exports = { SekaiParser };

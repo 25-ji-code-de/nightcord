@@ -4,7 +4,10 @@
 if (typeof RoomDestination !== 'undefined') RoomDestination.capture();
 let nightcord = new Nightcord();
 const params = new URLSearchParams(location.search);
-if (params.has('test')) {
+const pushRoom = params.get('chat');
+if (pushRoom && /^(?:[a-z0-9-]{1,32}|[a-f0-9]{64})$/.test(pushRoom)) {
+  nightcord.init(pushRoom);
+} else if (params.has('test')) {
   nightcord.init('nightcord-test');
 } else {
   nightcord.init();

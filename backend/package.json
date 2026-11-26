@@ -7,7 +7,7 @@
     "types": "wrangler types",
     "check": "npm run types && tsc --noEmit",
     "pretest": "wrangler deploy --dry-run --outdir dist",
-    "test": "node --test test/guest.test.mjs test/chat.test.mjs test/voice.test.mjs test/voice-cleanup.test.mjs test/voice-quota.test.mjs test/dm.test.mjs test/dm-cost.test.mjs test/rooms.test.mjs test/push.test.mjs",
+    "test": "node --test test/guest.test.mjs test/chat.test.mjs test/voice.test.mjs test/voice-cleanup.test.mjs test/voice-quota.test.mjs test/dm.test.mjs test/dm-cost.test.mjs test/rooms.test.mjs test/push.test.mjs test/room-push.test.mjs",
     "test:voice:browser": "node --test test/voice-browser.test.mjs",
     "test:browser": "node --test --test-concurrency=1 test/browser.test.mjs test/auth-expiry.test.mjs test/appearance.test.mjs test/ios-layout.test.mjs test/sidebar-features.test.mjs test/message-rendering.test.mjs test/reply-interactions.test.mjs test/mentions.test.mjs test/notifications.test.mjs test/emoji.test.mjs test/composer-format.test.mjs test/entry-sound.test.mjs test/chat-alerts.test.mjs test/room-visibility-browser.test.mjs test/room-visibility-policy-browser.test.mjs test/dm-browser.test.mjs test/rooms-browser.test.mjs test/pwa-browser.test.mjs",
     "deploy": "wrangler deploy",

@@ -259,7 +259,7 @@ self.addEventListener('message', (event) => {
         const cache = await caches.open(DEVICE_CACHE);
         const state = data.state;
         if (state && typeof state.ownerId === 'string' && state.ownerId.startsWith('sekai:')) {
-          await cache.put(DEVICE_STATE, new Response(JSON.stringify({ ownerId: state.ownerId, pausedUntil: state.pausedUntil || 0, expiresAt: Date.now() + 90 * 86400000 }), { headers: { 'Content-Type': 'application/json' } }));
+          await cache.put(DEVICE_STATE, new Response(JSON.stringify({ ownerId: state.ownerId, rooms: state.rooms || {}, pausedUntil: state.pausedUntil || 0, expiresAt: Date.now() + 90 * 86400000 }), { headers: { 'Content-Type': 'application/json' } }));
         } else {
           await cache.delete(DEVICE_STATE);
           for (const notification of await self.registration.getNotifications()) notification.close();
@@ -271,19 +271,25 @@ self.addEventListener('message', (event) => {
   }
 });
 
+function isPushRoom(room) { return typeof room === 'string' && /^(?:[a-z0-9-]{1,32}|[a-f0-9]{64}|r_[a-f0-9]{32})$/.test(room); }
 self.addEventListener('push', event => {
   event.waitUntil((async () => {
     let payload;
     try { payload = event.data?.json(); } catch { return; }
-    if (payload?.type !== 'dm' || !/^[a-f0-9]{64}$/.test(payload.conversation)) return;
+    const room = payload?.type === 'room' && isPushRoom(payload.room);
+    if (!room && (payload?.type !== 'dm' || !/^[a-f0-9]{64}$/.test(payload.conversation))) return;
     const state = await (await (await caches.open(DEVICE_CACHE)).match(DEVICE_STATE))?.json();
     if (!state || state.ownerId !== payload.ownerId || state.pausedUntil > Date.now() || state.expiresAt <= Date.now()) return;
+    if (room) {
+      const prefs = state.rooms?.[payload.room];
+      if (!prefs || prefs.pausedUntil > Date.now() || !['message', 'reply', 'mention', 'everyone'].some(key => prefs[key] === true)) return;
+    }
     // userVisibleOnly requires a notification even when a window is focused;
     // silently consuming pushes can revoke the subscription on Safari.
     await self.registration.showNotification('Nightcord', {
-      body: '您有新的私信，请打开 Nightcord 查看。', icon: '/icons/icon-192.png',
-      tag: 'dm:' + payload.conversation, renotify: false,
-      data: { ownerId: payload.ownerId, conversation: payload.conversation },
+      body: room ? '聊天室有新消息，请打开 Nightcord 查看。' : '您有新的私信，请打开 Nightcord 查看。', icon: '/icons/icon-192.png',
+      tag: room ? 'room:' + payload.room : 'dm:' + payload.conversation, renotify: false,
+      data: room ? { type: 'room', ownerId: payload.ownerId, room: payload.room } : { ownerId: payload.ownerId, conversation: payload.conversation },
     });
     try { await self.navigator?.setAppBadge?.(); } catch { /* Optional API. */ }
   })());
@@ -292,7 +298,8 @@ self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil((async () => {
     const data = event.notification.data;
-    if (!data || !/^[a-f0-9]{64}$/.test(data.conversation)) return;
+    const room = data?.type === 'room' && isPushRoom(data.room);
+    if (!data || !room && !/^[a-f0-9]{64}$/.test(data.conversation)) return;
     const state = await (await (await caches.open(DEVICE_CACHE)).match(DEVICE_STATE))?.json();
     if (state?.ownerId !== data.ownerId || state.expiresAt <= Date.now()) return;
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -307,14 +314,14 @@ self.addEventListener('notificationclick', event => {
         const finish = ok => { clearTimeout(timer); channel.port1.close(); resolve(ok); };
         const timer = setTimeout(() => finish(false), 1500);
         channel.port1.onmessage = event => finish(event.data?.ok === true);
-        try { client.postMessage({ ...data, type: 'OPEN_DM' }, [channel.port2]); }
+        try { client.postMessage({ ...data, type: room ? 'OPEN_ROOM' : 'OPEN_DM' }, [channel.port2]); }
         catch { finish(false); }
       });
       if (received) return;
     }
     // An older or still-loading tab may not understand notification navigation.
     // Open another window rather than navigating away from its unsent draft.
-    await self.clients.openWindow('/?dm=' + data.conversation);
+    await self.clients.openWindow(room ? '/?' + (data.room.startsWith('r_') ? 'room=' : 'chat=') + encodeURIComponent(data.room) : '/?dm=' + data.conversation);
   })());
 });
 

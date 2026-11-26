@@ -22,7 +22,7 @@ async function fixture(options = {}) {
   const app = { identity: { getAccessToken: async () => 'test-token' }, eventBus: { on: (name, fn) => handlers.set(name, fn) },
     directMessages: { base: 'https://chat.nightcord.de5.net/api/dm', user, ready: false, conversations: new Map() },
     directMessageView: { open: id => opened.push(id) } };
-  const sandbox = { console, URL, URLSearchParams, Uint8Array, atob, AbortSignal, MessageChannel, setTimeout, clearTimeout,
+  const sandbox = { console, URL, URLSearchParams, Uint8Array, TextEncoder, atob, AbortSignal, MessageChannel, setTimeout, clearTimeout, crypto: globalThis.crypto,
     location: { search: options.search || '', href: 'https://nightcord.de5.net/' + (options.search || '') },
     history: { state: null, replaceState() {} }, localStorage, sessionStorage: localStorage,
     window: { PushManager: function () {}, Notification: {}, addEventListener() {} },
@@ -132,4 +132,63 @@ test('a same-account session refresh queued during enable does not revoke the co
   const refreshing = f.push.setUser(f.push.user);
   response.resolve(); await enabling; await refreshing;
   assert.ok(f.sub()); assert.equal(f.push.state.ownerId, 'sekai:bob');
+});
+
+test('room switches request permission explicitly, retain independent categories and isolate rooms', async () => {
+  const f = await fixture();
+  await f.push.setRoomPreferences('nightcord-default', { mention: true });
+  assert.equal(f.order[0], 'permission');
+  assert.equal(f.calls.filter(call => call.url.endsWith('/subscribe')).length, 1);
+  assert.equal(f.push.roomPreferences().message, false);
+  assert.equal(f.push.roomPreferences('nightcord-default').mention, true);
+  assert.equal(f.push.roomPreferences('nightcord-test').mention, false);
+  await f.push.setRoomPreferences('nightcord-default', { message: true });
+  assert.equal(f.order.filter(item => item === 'permission').length, 1);
+  assert.equal(f.push.roomPreferences('nightcord-default').mention, true);
+  assert.equal(f.push.roomPreferences('nightcord-default').message, true);
+  assert.equal(f.states.at(-1).rooms['nightcord-default'].mention, true);
+  await f.push.disable(); assert.equal(f.push.roomPreferences('nightcord-default').mention, false);
+});
+
+test('failed room synchronization does not present an enabled switch', async () => {
+  const f = await fixture({ beforeResponse: url => { if (url.endsWith('/room')) throw new Error('Room offline'); } });
+  await assert.rejects(f.push.setRoomPreferences('nightcord-default', { message: true }), /Room offline/);
+  assert.equal(f.push.roomPreferences('nightcord-default').message, false);
+  assert.ok(f.push.state, 'device permission remains usable for a later retry');
+});
+
+test('attention changes reuse the existing socket and never send a request for every message or scroll', async () => {
+  const f = await fixture(); await f.push.setRoomPreferences('nightcord-default', { message: true });
+  const frames = []; let viewing = true;
+  f.app.ui = { currentRoom: 'nightcord-default', alerts: { viewing: () => viewing } };
+  f.app.chatRoom = { wsManager: { ws: { readyState: 1, send: text => frames.push(JSON.parse(text)) } } };
+  const requests = f.calls.length;
+  for (let i = 0; i < 30; i++) await f.push.roomAttention();
+  assert.equal(frames.length, 1); assert.equal(frames[0].viewing, true);
+  viewing = false; await f.push.roomAttention(); assert.equal(frames.length, 2);
+  assert.equal(f.calls.length, requests);
+});
+
+test('switching accounts while a room setting saves cannot restore the old device', async () => {
+  const response = deferred();
+  const f = await fixture({ beforeResponse: url => url.endsWith('/room') ? response.promise : undefined });
+  const saving = f.push.setRoomPreferences('nightcord-default', { message: true });
+  while (!f.calls.some(call => call.url.endsWith('/room'))) await new Promise(resolve => setImmediate(resolve));
+  const switching = f.push.setUser({ id: 'sekai:alice', authenticated: true });
+  response.resolve(); await assert.rejects(saving, /账户已切换/); await switching;
+  assert.equal(f.push.state, null); assert.equal(f.push.roomPreferences('nightcord-default').message, false);
+});
+
+test('unchanged attention can renew an old room choice without per-message synchronization', async () => {
+  const f = await fixture(); await f.push.setRoomPreferences('nightcord-default', { mention: true });
+  f.app.ui = { currentRoom: 'nightcord-default', alerts: { viewing: () => true } };
+  f.app.chatRoom = { wsManager: { ws: { readyState: 1, send() {} } } };
+  await f.push.roomAttention();
+  f.push.state.rooms['nightcord-default'].syncedAt = Date.now() - 2 * 86400000;
+  f.storage.set(f.push.storageKey, JSON.stringify(f.push.state));
+  const before = f.calls.length;
+  for (let i = 0; i < 30; i++) await f.push.roomAttention();
+  await f.push.queue;
+  assert.equal(f.calls.length, before + 1);
+  assert.ok(f.push.roomPreferences('nightcord-default').syncedAt > Date.now() - 1000);
 });

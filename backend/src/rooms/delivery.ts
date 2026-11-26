@@ -2,13 +2,15 @@
 import type { ChatEnv } from '../guest';
 import { apply } from './directory';
 import { RoomStore } from './schema';
-export type Session = { user: import('../identity').Profile | null; expiresAt: number; closed?: boolean; busy?: boolean; readAt?: number; authAt?: number; visibilityBlocked?: boolean };
+export type Session = { user: import('../identity').Profile | null; expiresAt: number; closed?: boolean; busy?: boolean; readAt?: number; authAt?: number; visibilityBlocked?: boolean; pushDevice?: string; pushViewing?: boolean };
 type Pending = { destination: string; version: number; payload: string; attempts: number; due: number };
 export class RoomDelivery {
+  pushDue: () => number | null = () => null;
   private work: Promise<void> | null = null;
   constructor(private ctx: DurableObjectState, private env: ChatEnv, private store: RoomStore) {}
   async schedule() {
     const deadlines = this.ctx.getWebSockets().map(ws => ws.deserializeAttachment() as Session).filter(s => !s.closed).map(s => s.expiresAt);
+    const pushDue = this.pushDue(); if (pushDue !== null) deadlines.push(Math.max(Date.now() + 1000, pushDue));
     if (this.store.exists()) {
       const due = this.store.sql.exec<{ due: number | null }>('SELECT MIN(due) AS due FROM outbox').one().due;
       if (due !== null) deadlines.push(Math.max(Date.now() + 1000, due));

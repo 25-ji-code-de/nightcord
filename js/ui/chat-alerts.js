@@ -28,6 +28,7 @@ class ChatAlerts {
           && !this.banner.node?.contains(document.activeElement)) this.banner.dismiss();
       }
       this.delivery.announce();
+      void this.ui.pushNotifications?.roomAttention();
     };
     for (const event of ['focus', 'blur']) window.addEventListener(event, this.attention);
     document.addEventListener('visibilitychange', this.attention);

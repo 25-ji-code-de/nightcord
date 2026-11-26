@@ -8,12 +8,29 @@ import { manage, memberPage, requireMember } from './membership';
 import { history, send } from './messages';
 import { RoomDelivery, type Session } from './delivery';
 import type { Creation } from './directory';
+import { RoomPush, pushDeviceKey, type RoomPushPreferences } from '../room-push';
 export class ManagedRoom extends DurableObject<ChatEnv> {
   private store: RoomStore;
   private delivery: RoomDelivery;
+  private roomPush: RoomPush;
   constructor(ctx: DurableObjectState, env: ChatEnv) {
     super(ctx, env); this.store = new RoomStore(ctx.storage); this.delivery = new RoomDelivery(ctx, env, this.store);
     if (this.store.exists()) this.store.initializeVisibility();
+    this.roomPush = new RoomPush(ctx, env,
+      owner => ['on', 'read-only'].includes(env.ROOMS_MODE || '') && this.store.exists() && this.store.state().status === 'active' && !!this.store.require(owner) && this.store.visibilityAllowed(owner),
+      () => new Set(ctx.getWebSockets().flatMap(ws => {
+        const s = ws.deserializeAttachment() as Session;
+        return !s.closed && s.user && s.expiresAt > Date.now() && s.pushDevice && s.pushViewing ? [s.user.id + '\n' + s.pushDevice] : [];
+      })));
+    this.delivery.pushDue = () => this.roomPush.next();
+  }
+  async roomPushSettings(actor: Profile, room: string, endpoint: string, preferences: RoomPushPreferences) {
+    const result = await reply(async () => {
+      if (!this.store.exists() || this.store.state().id !== room) return fail('not_found', 404);
+      const device = await pushDeviceKey(endpoint);
+      this.ctx.storage.transactionSync(() => this.roomPush.manage(actor, room, endpoint, device, preferences)); return {};
+    });
+    return { status: result.status, code: String(result.data.code || '') };
   }
   async initialize(actor: Profile, creation: Creation) {
     const result = await reply(async () => {
@@ -150,6 +167,13 @@ export class ManagedRoom extends DurableObject<ChatEnv> {
       }
       if (!s.user) return fail('login_required', 401);
       requireMember(this.store, s.user);
+      if (input.type === 'push:attention') {
+        if (typeof input.device === 'string' && /^[a-f0-9]{64}$/.test(input.device) && typeof input.viewing === 'boolean') {
+          s.pushDevice = input.device; s.pushViewing = input.viewing; ws.serializeAttachment(s);
+          if (input.viewing) this.roomPush.read(s.user.id, input.device);
+        }
+        return { type: 'push:attention' };
+      }
       if (input.type === 'room:visibility') {
         if (typeof input.visibility !== 'string' || !['online', 'offline', 'hidden'].includes(input.visibility)) return fail('invalid_visibility');
         if (!await this.env.LIMITERS.getByName('room-visibility:' + s.user.id).check()) return fail('rate_limited', 429);
@@ -173,7 +197,13 @@ export class ManagedRoom extends DurableObject<ChatEnv> {
       }
       if (!this.store.visibilityAllowed(s.user.id)) return fail('visibility_confirmation_required', 409);
       if (input.type === 'send') {
-        const saved = send(this.store, this.env, s.user, input);
+        const actor = s.user;
+        const saved = await this.ctx.storage.transaction(async () => {
+          const saved = send(this.store, this.env, actor, input);
+          if (!saved.duplicate && this.roomPush.enqueue(actor.id, saved.message.text, seq => this.store.sql.exec<{ sender_id: string }>(
+            'SELECT sender_id FROM messages WHERE seq=?', seq).toArray()[0]?.sender_id, saved.message.replyTo)) await this.roomPush.schedule();
+          return saved;
+        });
         if (!saved.duplicate) this.broadcast({ type: 'message', message: saved.message });
         return { type: 'ack', message: saved.message };
       }
@@ -189,7 +219,7 @@ export class ManagedRoom extends DurableObject<ChatEnv> {
   }
   async alarm() {
     if (!this.store.exists()) return;
-    this.revokeConnections(); this.broadcast({ type: 'presence', online: this.online() }); await this.delivery.drain();
+    this.revokeConnections(); this.broadcast({ type: 'presence', online: this.online() }); await this.roomPush.drain(); await this.delivery.drain();
   }
   async webSocketClose(ws: WebSocket) { this.close(ws, 1000); this.broadcast({ type: 'presence', online: this.online() }); await this.ctx.storage.transaction(() => this.delivery.schedule()); }
   async webSocketError(ws: WebSocket) { await this.webSocketClose(ws); }

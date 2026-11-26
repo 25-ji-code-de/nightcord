@@ -12,6 +12,7 @@ class VoiceManager {
     this.audioContextFactory = audioContextFactory;
     this.state = { available: false, loginRequired: true, joined: false, busy: false, microphone: false, outputVolume: 1, outputMuted: false, joinedAt: null, message: '', members: [], speaking: [] };
     this.lastOutputVolume = 1;
+    this.maxOutputVolume = 2;
     this.generation = 0;
     this.micGeneration = 0;
     this.ticketRequests = new Map();
@@ -76,6 +77,7 @@ class VoiceManager {
     if (!this.chat.currentUser) { this.state.message = '请在文本聊天连接就绪后再加入语音聊天。'; this.emit(); return; }
     if (this.state.loginRequired && !this.chat.currentUser.authenticated) { this.state.message = '在加入语音聊天前，请先使用 SEKAI Pass 登录。'; this.emit(); return; }
     const generation = ++this.generation;
+    if (this.state.outputVolume > 1) this.preparePlaybackContext();
     const credential = { base: this.base(), token: Array.from(crypto.getRandomValues(new Uint8Array(32)), value => value.toString(16).padStart(2, '0')).join('') };
     this.identity = this.chat.currentUser.id;
     this.state.busy = true; this.state.message = '正在加入语音会话……'; this.emit();
@@ -265,13 +267,7 @@ class VoiceManager {
         if (this.receiver !== pc || this.membership !== membership) return;
         const memberId = mapping.get(event.transceiver.mid);
         if (!memberId) return;
-        const audio = document.createElement('audio'); audio.autoplay = true;
-        this.applyPlaybackVolume(memberId, audio);
-        audio.srcObject = new MediaStream([event.track]);
-        this.playbacks.get(memberId)?.audio.remove();
-        this.playbacks.set(memberId, { audio, mid: event.transceiver.mid });
-        document.querySelector('#voice-audio')?.append(audio);
-        void audio.play().catch(() => { this.state.playbackBlocked = true; this.emit(); });
+        this.addPlayback(memberId, new MediaStream([event.track]), event.transceiver.mid);
       });
       await pc.setRemoteDescription(result.sessionDescription);
       await pc.setLocalDescription(await pc.createAnswer());
@@ -486,9 +482,66 @@ class VoiceManager {
     void this.replaceTrack(attempt, attempt.silence.track).catch(failed);
     void this.syncMicrophone(attempt, false).catch(failed);
   }
+  preparePlaybackContext() {
+    if (!this.playbackContext) {
+      try {
+        const context = this.audioContextFactory();
+        this.playbackContext = context;
+        this.maxOutputVolume = 2;
+        context.addEventListener('statechange', () => {
+          if (this.playbackContext === context && context.state !== 'running') {
+            this.state.playbackBlocked = true; this.emit();
+          }
+        });
+      } catch {
+        this.maxOutputVolume = 1;
+        this.state.outputVolume = Math.min(1, this.state.outputVolume);
+        this.lastOutputVolume = Math.min(1, this.lastOutputVolume);
+        return null;
+      }
+    }
+    const context = this.playbackContext;
+    void context.resume().catch(() => {
+      if (this.playbackContext === context) { this.state.playbackBlocked = true; this.emit(); }
+    });
+    return context;
+  }
+  addPlayback(memberId, stream, mid) {
+    this.closePlayback(memberId);
+    const audio = document.createElement('audio'); audio.autoplay = true;
+    audio.srcObject = stream;
+    this.playbacks.set(memberId, { audio, mid });
+    this.applyPlaybackVolume(memberId, audio);
+    document.querySelector('#voice-audio')?.append(audio);
+    void audio.play().catch(() => {
+      if (this.playbacks.get(memberId)?.audio === audio) { this.state.playbackBlocked = true; this.emit(); }
+    });
+  }
   applyPlaybackVolume(memberId, audio) {
-    audio.volume = (this.volumes.get(memberId) ?? 1) * this.state.outputVolume;
-    audio.muted = this.state.outputMuted;
+    const memberVolume = this.volumes.get(memberId) ?? 1;
+    const player = this.playbacks.get(memberId);
+    if (memberVolume * this.state.outputVolume > 1 && player?.audio === audio && !player.gain) {
+      const context = this.preparePlaybackContext();
+      if (context) {
+        const source = context.createMediaStreamSource(audio.srcObject);
+        const gain = context.createGain(), analyser = context.createAnalyser();
+        analyser.fftSize = 1024;
+        gain.gain.value = 0;
+        audio.muted = true;
+        source.connect(gain); gain.connect(context.destination); source.connect(analyser);
+        Object.assign(player, { source, gain, analyser, samples: new Float32Array(analyser.fftSize) });
+      }
+    }
+    const volume = memberVolume * this.state.outputVolume;
+    if (player?.gain) {
+      // Keep the original element playing so Chromium continues decoding RTP.
+      // Only the Web Audio graph is audible, so mute and member volume apply here.
+      player.gain.gain.value = this.state.outputMuted ? 0 : volume;
+      audio.volume = 0; audio.muted = true;
+    } else {
+      audio.volume = Math.min(1, volume);
+      audio.muted = this.state.outputMuted;
+    }
   }
   setVolume(memberId, volume) {
     if (!Number.isFinite(volume)) return;
@@ -498,7 +551,8 @@ class VoiceManager {
   }
   setOutputVolume(volume) {
     if (!Number.isFinite(volume)) return;
-    this.state.outputVolume = Math.max(0, Math.min(1, volume));
+    if (volume > 1) this.preparePlaybackContext();
+    this.state.outputVolume = Math.max(0, Math.min(this.maxOutputVolume, volume));
     this.state.outputMuted = this.state.outputVolume === 0;
     if (this.state.outputVolume > 0) this.lastOutputVolume = this.state.outputVolume;
     this.updateOutput();
@@ -511,11 +565,15 @@ class VoiceManager {
     this.updateOutput();
   }
   updateOutput() {
+    if (this.playbackContext) this.preparePlaybackContext();
     for (const [memberId, { audio }] of this.playbacks) this.applyPlaybackVolume(memberId, audio);
     this.emit();
   }
   async enablePlayback() {
-    try { await Promise.all([...this.playbacks.values()].map(({ audio }) => audio.play())); this.state.playbackBlocked = false; }
+    try {
+      await Promise.all([this.playbackContext?.resume(), ...[...this.playbacks.values()].map(({ audio }) => audio.play())]);
+      this.state.playbackBlocked = false;
+    }
     catch { this.state.playbackBlocked = true; }
     this.emit();
   }
@@ -530,17 +588,30 @@ class VoiceManager {
         const stats = await pc.getStats();
         for (const stat of stats.values()) if (stat.kind === 'audio' && stat.audioLevel > 0.02) {
           if (own && this.state.microphone && stat.type === 'media-source') speaking.add(this.membership?.memberId);
-          if (!own && stat.type === 'inbound-rtp') for (const [memberId, player] of this.playbacks) if (player.mid === stat.mid && this.state.members.find(member => member.memberId === memberId)?.microphone !== false) speaking.add(memberId);
+          if (!own && stat.type === 'inbound-rtp') for (const [memberId, player] of this.playbacks) if (!player.analyser && player.mid === stat.mid && this.state.members.find(member => member.memberId === memberId)?.microphone !== false) speaking.add(memberId);
         }
+      }
+      // A muted native sink can report zero RTP audioLevel even while Web Audio
+      // is audible. Detect speech before gain so listening settings do not hide it.
+      for (const [memberId, player] of this.playbacks) if (player.analyser) {
+        player.analyser.getFloatTimeDomainData(player.samples);
+        const energy = player.samples.reduce((sum, value) => sum + value * value, 0) / player.samples.length;
+        if (energy > 0.02 ** 2 && this.state.members.find(member => member.memberId === memberId)?.microphone !== false) speaking.add(memberId);
       }
       if (generation === this.generation) { this.state.speaking = [...speaking].filter(Boolean); this.bus.emit('voice:activity', this.state.speaking); }
     } catch { /* Closed connections and missing optional stats need no toast. */ }
     finally { this.sampling = false; }
   }
+  closePlayback(memberId) {
+    const player = this.playbacks.get(memberId);
+    if (!player) return;
+    player.audio.pause(); player.audio.srcObject = null; player.audio.remove();
+    player.source?.disconnect(); player.gain?.disconnect(); player.analyser?.disconnect();
+    this.playbacks.delete(memberId);
+  }
   closeReceiver() {
     this.receiver?.close(); this.receiver = null;
-    for (const { audio } of this.playbacks.values()) { audio.pause(); audio.srcObject = null; audio.remove(); }
-    this.playbacks.clear();
+    for (const memberId of this.playbacks.keys()) this.closePlayback(memberId);
   }
   async leave() {
     const membership = this.membership; this.membership = null;
@@ -549,6 +620,8 @@ class VoiceManager {
     this.capture?.getTracks().forEach(track => track.stop()); this.capture = null;
     this.releasePublisher(this.publisherAttempt, false); this.publisher = null; this.capturePending = false; this.publisherAttempt = null;
     this.closeReceiver(); this.iceConfig = null;
+    const playbackContext = this.playbackContext; this.playbackContext = null;
+    void playbackContext?.close().catch(() => {});
     this.volumes.clear();
     this.state = { ...this.state, joined: false, busy: false, microphone: false, joinedAt: null, message: '', members: [], speaking: [], recoveryNeeded: false, playbackBlocked: false, usage: null };
     this.emit();

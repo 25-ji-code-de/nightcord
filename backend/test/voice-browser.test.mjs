@@ -366,6 +366,47 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
     await two.locator('[data-voice-output-up]').click();
     assert.equal(await two.evaluate(() => [...nightcord.voice.playbacks.values()][0].audio.muted), false);
     assert.equal(await two.evaluate(() => [...nightcord.voice.playbacks.values()][0].audio.volume), 0.25, 'restoring master volume preserves the member mix');
+    assert.equal(await two.locator('[data-voice-output-up]').getAttribute('aria-disabled'), 'false', '100% is no longer the upper limit');
+    await two.locator('.voice-volume input').fill('1');
+    await two.locator('[data-voice-output-up]').focus();
+    for (let step = 0; step < 10; step++) await two.keyboard.press('Space');
+    assert.equal(await two.locator('[data-voice-output-readout]').textContent(), '200%');
+    assert.equal(await two.locator('[data-voice-output-up]').getAttribute('aria-disabled'), 'true');
+    assert.equal(await two.locator('[data-voice-output-up]').evaluate(node => node === document.activeElement), true, 'the volume endpoint preserves keyboard focus');
+    await two.keyboard.press('Space');
+    assert.equal(await two.evaluate(() => nightcord.voice.state.outputVolume), 2);
+    await two.waitForFunction(() => {
+      const player = [...nightcord.voice.playbacks.values()][0];
+      return player.gain?.gain.value === 2 && !player.audio.paused && player.audio.currentTime > 0;
+    });
+    const boost = await two.evaluate(async () => {
+      const manager = nightcord.voice, player = [...manager.playbacks.values()][0], context = manager.playbackContext;
+      const before = context.createAnalyser(), after = context.createAnalyser();
+      player.source.connect(before); player.gain.connect(after);
+      const samples = new Float32Array(before.fftSize), energy = [0, 0];
+      for (let sample = 0; sample < 30; sample++) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        [before, after].forEach((analyser, index) => {
+          analyser.getFloatTimeDomainData(samples);
+          energy[index] += samples.reduce((sum, value) => sum + value * value, 0);
+        });
+      }
+      player.source.disconnect(before); player.gain.disconnect(after); before.disconnect(); after.disconnect();
+      return { ratio: Math.sqrt(energy[1] / energy[0]), energy, state: context.state, time: context.currentTime,
+        source: player.source.mediaStream.getTracks().map(track => ({ readyState: track.readyState, enabled: track.enabled, muted: track.muted })) };
+    });
+    assert.ok(boost.ratio > 1.8 && boost.ratio < 2.2, `200% must double the actual audio signal: ${JSON.stringify(boost)}`);
+    await two.waitForFunction(() => nightcord.voice.state.speaking.includes([...nightcord.voice.playbacks.keys()][0]));
+    await two.screenshot({ path: join(artifacts, 'mobile-volume-200.png') });
+    await two.locator('[data-voice-output-mute]').click();
+    assert.equal(await two.evaluate(() => [...nightcord.voice.playbacks.values()][0].gain.gain.value), 0);
+    await two.locator('[data-voice-output-mute]').click();
+    assert.equal(await two.locator('[data-voice-output-readout]').textContent(), '200%');
+    await two.locator('.voice-volume input').fill('0.25');
+    assert.equal(await two.evaluate(() => [...nightcord.voice.playbacks.values()][0].gain.gain.value), 0.5, 'boost still respects a quieter member mix');
+    for (let step = 0; step < 10; step++) await two.locator('[data-voice-output-down]').click();
+    assert.equal(await two.evaluate(() => [...nightcord.voice.playbacks.values()][0].gain.gain.value), 0.25, 'returning to 100% removes the boost');
+    assert.equal(await two.evaluate(() => [...nightcord.voice.playbacks.values()][0].audio.muted), true, 'the native element cannot duplicate the amplified output');
     assert.equal(await two.locator('[data-voice-line-lamp]').getAttribute('aria-label'), '语音已接通');
     assert.match(await two.locator('[data-voice-elapsed]').getAttribute('datetime'), /^PT\d+S$/, 'the display reports real elapsed call time');
     await two.keyboard.press('Escape');
@@ -374,7 +415,11 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
     await two.locator('[data-voice-member]').click();
     assert.equal(await two.locator('.voice-volume input').inputValue(), '0.25', 'the member display restores the selected listening volume');
     await one.evaluate(() => { window.originalTrack = nightcord.voice.capture.getAudioTracks()[0]; window.originalPublisher = nightcord.voice.publisher; });
-    await two.evaluate(() => { window.originalReceiver = nightcord.voice.receiver; window.originalAudio = [...nightcord.voice.playbacks.values()][0].audio; });
+    await two.evaluate(() => {
+      window.originalReceiver = nightcord.voice.receiver;
+      const player = [...nightcord.voice.playbacks.values()][0]; window.originalAudio = player.audio;
+      window.outputAnalyser = nightcord.voice.playbackContext.createAnalyser(); player.gain.connect(window.outputAnalyser);
+    });
     const originalVersion = await two.evaluate(() => nightcord.voice.state.members.find(member => member.memberId !== nightcord.voice.membership.memberId).publicationVersion);
     const allocations = calls.filter(call => typeof call === 'string' && call.endsWith('/sessions/new')).length;
     await openVoice(one);
@@ -390,7 +435,11 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
       return page.evaluate(async direction => {
         const pc = direction === 'outbound-rtp' ? nightcord.voice.publisher : nightcord.voice.receiver;
         const report = await pc.getStats(), stats = [...report.values()].find(stat => stat.type === direction && stat.kind === 'audio');
-        return { at: Date.now(), packets: stats.packetsSent ?? stats.packetsReceived, bytes: stats.bytesSent ?? stats.bytesReceived, headerBytes: stats.headerBytesSent ?? stats.headerBytesReceived, energy: stats.totalAudioEnergy || 0 };
+        // The native element is silent after boosting; measure the audible graph.
+        const samples = new Float32Array(window.outputAnalyser?.fftSize || 0);
+        window.outputAnalyser?.getFloatTimeDomainData(samples);
+        const level = samples.length ? Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length) : 0;
+        return { at: Date.now(), packets: stats.packetsSent ?? stats.packetsReceived, bytes: stats.bytesSent ?? stats.bytesReceived, headerBytes: stats.headerBytesSent ?? stats.headerBytesReceived, level };
       }, direction);
     }
     await delay(live ? 3000 : 1000);
@@ -402,24 +451,24 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
       publisherPacketsPerSecond: rate(quietStart.publisher, quietEnd.publisher), receiverPacketsPerSecond: rate(quietStart.receiver, quietEnd.receiver) };
     assert.ok(muted.publisherPacketsPerSecond > 0 && muted.publisherPacketsPerSecond < 15, `DTX must reduce silent publishing packets: ${JSON.stringify(muted)}`);
     if (live) assert.ok(muted.receiverPacketsPerSecond > 0 && muted.receiverPacketsPerSecond < 15, `SFU must preserve the packet savings: ${JSON.stringify(muted)}`);
-    assert.ok(quietEnd.receiver.energy - quietStart.receiver.energy < 0.0001, 'muting must stop real audio energy');
+    assert.ok(quietEnd.receiver.level < 0.0001, 'muting must stop real audio output');
     const resumeAt = Date.now();
     await one.locator('[data-voice-mic]').click();
     await one.waitForFunction(() => nightcord.voice.state.microphone);
     let resumed;
     for (let retry = 0; retry < 100; retry++) {
       resumed = await mediaStats(two, 'inbound-rtp');
-      if (resumed.energy > quietEnd.receiver.energy + 0.0001) break;
+      if (resumed.level > 0.0001) break;
       await delay(50);
     }
-    assert.ok(resumed.energy > quietEnd.receiver.energy + 0.0001, 'real audio must resume on the existing subscription');
+    assert.ok(resumed.level > 0.0001, 'real audio must resume on the existing subscription');
     const resumeMs = resumed.at - resumeAt;
     assert.ok(resumeMs < 5000, `warm unmute must avoid ICE and publication setup: ${resumeMs} ms`);
     assert.equal(await one.evaluate(() => nightcord.voice.publisher === window.originalPublisher), true);
     assert.equal(await two.evaluate(() => nightcord.voice.receiver === window.originalReceiver && [...nightcord.voice.playbacks.values()][0].audio === window.originalAudio), true);
     assert.equal(await two.evaluate(() => nightcord.voice.state.members.find(member => member.memberId !== nightcord.voice.membership.memberId).publicationVersion), originalVersion);
     assert.equal(calls.filter(call => typeof call === 'string' && call.endsWith('/sessions/new')).length, allocations, 'mute and reopen allocate no new SFU sessions');
-    assert.equal(await two.evaluate(() => [...nightcord.voice.playbacks.values()][0].audio.volume), 0.25, 'warm unmute preserves the chosen volume');
+    assert.equal(await two.evaluate(() => [...nightcord.voice.playbacks.values()][0].gain.gain.value), 0.25, 'warm unmute preserves the chosen volume');
     await one.evaluate(() => { window.lastTrack = nightcord.voice.capture.getAudioTracks()[0]; nightcord.joinRoom('voice-other'); });
     assert.equal(await one.evaluate(() => window.lastTrack.readyState), 'ended');
     await two.waitForFunction(() => nightcord.voice.state.members.length === 1 && nightcord.voice.playbacks.size === 0);
@@ -427,6 +476,7 @@ test('two browsers carry audio, keep DTX subscriptions across mute, and clean up
     await openVoice(two);
     await two.locator('[data-voice-leave]').click();
     await two.waitForFunction(() => !nightcord.voice.state.joined);
+    assert.equal(await two.evaluate(() => nightcord.voice.playbackContext), null, 'leaving releases the playback audio context');
     await observer.waitForFunction(() => !document.querySelector('#voice-users .voice-user') && document.querySelectorAll('#online-users .voice-user').length === 2);
     await two.evaluate(() => nightcord.chatRoom.leave());
     await observer.waitForFunction(() => document.querySelector('#offline-users [data-user-id="sekai:voice-two"]'));

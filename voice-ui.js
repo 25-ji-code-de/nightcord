@@ -262,7 +262,7 @@ class VoiceUI {
     if (this.outputReadout.textContent !== outputValue) this.outputReadout.textContent = outputValue;
     // Keep the focused rocker key in the tab order when it reaches an endpoint.
     this.outputDown.setAttribute('aria-disabled', String(state.outputVolume === 0));
-    this.outputUp.setAttribute('aria-disabled', String(state.outputVolume === 1 && !state.outputMuted));
+    this.outputUp.setAttribute('aria-disabled', String(state.outputVolume >= this.manager.maxOutputVolume && !state.outputMuted));
     this.syncClock();
     this.join.hidden = state.joined || state.busy;
     this.mic.disabled = !state.joined; this.quickMic.hidden = !state.joined;

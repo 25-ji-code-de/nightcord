@@ -9,17 +9,29 @@ function capture() {
   const track = { kind: 'audio', readyState: 'live', stopped: false, enabled: true, stop() { this.stopped = true; this.readyState = 'ended'; }, addEventListener() {} };
   return { track, getTracks: () => [track], getAudioTracks: () => [track] };
 }
+function playbackAudio() {
+  let volume = 1;
+  return {
+    get volume() { return volume; },
+    set volume(value) { assert.ok(value >= 0 && value <= 1, 'media element volume stays within its supported range'); volume = value; },
+    play: async () => {}, pause() { this.paused = true; }, remove() { this.removed = true; },
+  };
+}
 function harness() {
   const audioContexts = [];
+  const node = properties => ({ connections: new Set(), connect(target) { this.connections.add(target); }, disconnect() { this.connections.clear(); }, ...properties });
   class AudioContext {
-    constructor() { this.state = 'running'; audioContexts.push(this); }
+    constructor() { this.state = 'running'; this.destination = node(); audioContexts.push(this); }
     createMediaStreamDestination() { this.stream = capture(); return { stream: this.stream }; }
     createConstantSource() { return { offset: { value: 1 }, connect() {}, start() {}, stop() {} }; }
-    resume() { return Promise.resolve(); }
+    createMediaStreamSource(stream) { return node({ mediaStream: stream }); }
+    createGain() { return node({ gain: { value: 1 } }); }
+    createAnalyser() { return node({ level: 0, getFloatTimeDomainData(samples) { samples.fill(this.level); } }); }
+    resume() { this.state = 'running'; return Promise.resolve(); }
     close() { this.state = 'closed'; return Promise.resolve(); }
     addEventListener(name, listener) { if (name === 'statechange') this.stateChanged = listener; }
   }
-  const context = vm.createContext({ crypto, AbortSignal, Uint8Array, setTimeout, clearTimeout, setInterval, clearInterval, AudioContext, navigator: {}, document: { hidden: false }, RTCPeerConnection: class {} });
+  const context = vm.createContext({ crypto, AbortSignal, Uint8Array, setTimeout, clearTimeout, setInterval, clearInterval, AudioContext, navigator: {}, document: { hidden: false, createElement: playbackAudio, querySelector: () => null }, RTCPeerConnection: class {} });
   for (const file of ['event-bus.js', 'voice-manager.js']) vm.runInContext(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), context);
   const bus = vm.runInContext('new EventBus()', context);
   const chat = { roomname: 'test', currentUser: { authenticated: true, id: 'one' }, wsManager: { hostname: 'chat.test' } };
@@ -65,7 +77,8 @@ async function publishing({ silence = true } = {}) {
 
 test('master listening controls preserve each member mix, restore zero volume and leave microphone capture alone', async () => {
   const h = await publishing();
-  const audio = {}, otherAudio = {};
+  const audio = playbackAudio(), otherAudio = playbackAudio();
+  audio.srcObject = capture(); otherAudio.srcObject = capture();
   h.manager.playbacks.set('first', { audio });
   h.manager.playbacks.set('second', { audio: otherAudio });
   h.manager.setVolume('first', 0.25);
@@ -83,7 +96,75 @@ test('master listening controls preserve each member mix, restore zero volume an
   assert.equal(audio.volume, 0.2);
   h.manager.setOutputVolume(NaN); h.manager.setVolume('first', Infinity);
   assert.equal(audio.volume, 0.2); assert.equal(h.manager.state.outputVolume, 0.8);
-  h.manager.playbacks.clear(); h.manager.destroy();
+  h.manager.setOutputVolume(1.5);
+  assert.equal(audio.volume, 0.375);
+  assert.equal(otherAudio.volume, 0); assert.equal(h.manager.playbacks.get('second').gain.gain.value, 1.5);
+  h.manager.setOutputVolume(3);
+  assert.equal(h.manager.state.outputVolume, 2);
+  assert.equal(audio.volume, 0.5); assert.equal(h.manager.playbacks.get('second').gain.gain.value, 2);
+  h.manager.toggleOutputMute();
+  assert.equal(audio.muted, true); assert.equal(otherAudio.muted, true);
+  assert.equal(h.manager.playbacks.get('second').gain.gain.value, 0);
+  h.manager.setOutputVolume(0); h.manager.toggleOutputMute();
+  assert.equal(h.manager.state.outputVolume, 2); assert.equal(h.manager.state.outputMuted, false);
+  assert.equal(h.manager.playbacks.get('second').gain.gain.value, 2);
+  assert.equal(h.manager.state.microphone, true); assert.equal(h.stream.track.readyState, 'live');
+  h.manager.setOutputVolume(-1);
+  assert.equal(h.manager.state.outputVolume, 0); assert.equal(otherAudio.volume, 0);
+  assert.equal(h.manager.playbacks.get('second').gain.gain.value, 0);
+  h.manager.destroy();
+});
+
+test('boosted playback survives track replacement and reconnect, then releases its graph on leave', async () => {
+  const h = harness(), stream = capture();
+  h.manager.setOutputVolume(2);
+  const context = h.manager.playbackContext;
+  h.manager.addPlayback('first', stream, '0');
+  const first = h.manager.playbacks.get('first');
+  assert.equal(first.source.mediaStream, stream);
+  assert.equal(first.source.connections.has(first.gain), true); assert.equal(first.gain.connections.has(context.destination), true);
+  assert.equal(first.source.connections.has(first.analyser), true);
+  assert.equal(first.audio.srcObject, stream);
+  assert.equal(first.audio.volume, 0); assert.equal(first.audio.muted, true); assert.equal(first.gain.gain.value, 2);
+  h.manager.setVolume('first', 0.75);
+  assert.equal(first.gain.gain.value, 1.5);
+  h.manager.toggleOutputMute();
+  first.analyser.level = 0.03;
+  await h.manager.sampleActivity();
+  assert.deepEqual([...h.manager.state.speaking], ['first'], 'listening mute does not hide a member who is speaking');
+  first.analyser.level = 0;
+  await h.manager.sampleActivity();
+  assert.equal(h.manager.state.speaking.length, 0);
+  h.manager.addPlayback('first', capture(), '1');
+  assert.equal(first.audio.removed, true); assert.equal(first.audio.srcObject, null);
+  assert.equal(first.source.connections.size, 0); assert.equal(first.gain.connections.size, 0); assert.equal(first.analyser.connections.size, 0);
+  assert.equal(stream.track.stopped, false, 'output cleanup never stops the source track');
+  h.manager.closeReceiver();
+  assert.equal(h.manager.playbacks.size, 0); assert.equal(context.state, 'running');
+  h.manager.addPlayback('first', capture(), '2');
+  const reconnected = h.manager.playbacks.get('first');
+  assert.equal(reconnected.audio.muted, true); assert.equal(reconnected.gain.gain.value, 0);
+  h.manager.toggleOutputMute();
+  assert.equal(reconnected.gain.gain.value, 1.5);
+  assert.equal(h.manager.playbackContext, context);
+  context.state = 'suspended'; context.stateChanged();
+  assert.equal(h.manager.state.playbackBlocked, true);
+  await h.manager.enablePlayback();
+  assert.equal(context.state, 'running'); assert.equal(h.manager.state.playbackBlocked, false);
+  await h.manager.leave();
+  assert.equal(context.state, 'closed'); assert.equal(h.manager.playbackContext, null);
+  assert.equal(reconnected.source.connections.size, 0); assert.equal(reconnected.gain.connections.size, 0);
+  h.manager.destroy();
+});
+
+test('unavailable Web Audio preserves ordinary playback and reports a matching volume limit', () => {
+  const h = harness();
+  h.manager.audioContextFactory = () => { throw new Error('Web Audio unavailable'); };
+  h.manager.addPlayback('first', capture(), '0');
+  h.manager.setOutputVolume(2);
+  assert.equal(h.manager.state.outputVolume, 1); assert.equal(h.manager.maxOutputVolume, 1);
+  assert.equal(h.manager.playbacks.get('first').audio.volume, 1);
+  h.manager.destroy();
 });
 
 test('a minute-limit heartbeat closes capture and media and explains the daily limit', async () => {

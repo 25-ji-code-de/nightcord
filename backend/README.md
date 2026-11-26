@@ -115,6 +115,9 @@ into GitHub. The account ID already comes from the checked-in configuration.
 
 Deployments run one at a time, apply pending D1 migrations before publishing,
 tag the Worker version with the tested commit SHA, and check `/health` afterward.
+The automated health probe uses the production Worker's `workers.dev` address
+and validates the JSON response; the custom domain can reject GitHub-hosted
+runners before they reach the Worker. User traffic continues through the custom domain.
 An obsolete commit or a pull request cannot deploy. To retry a failed deployment,
 run **Deploy backend** manually on `main`; the same CI and change checks apply.
 Frontend publication continues through the existing Cloudflare Pages integration.

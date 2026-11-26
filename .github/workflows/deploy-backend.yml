@@ -78,4 +78,10 @@ jobs:
           npx wrangler d1 migrations apply ROOM_DIRECTORY --remote
           npx wrangler deploy --tag "$DEPLOY_SHA"
       - name: Check production health
-        run: curl --fail --show-error --silent --retry 5 --retry-all-errors --retry-delay 5 https://chat.nightcord.de5.net/health
+        # Probe the same production Worker directly: the custom domain can
+        # reject GitHub-hosted runners before the request reaches the Worker.
+        run: |
+          curl --fail --show-error --silent --connect-timeout 10 --max-time 30 \
+            --retry 5 --retry-all-errors --retry-delay 5 \
+            https://nightcord-chat.houtar.workers.dev/health --output health.json
+          node -e "const h = require('./health.json'); if (h.service !== 'nightcord-chat' || h.status !== 'ok') process.exit(1); console.log(h);"

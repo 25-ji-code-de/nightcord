@@ -574,9 +574,12 @@ document.addEventListener('DOMContentLoaded', () => {
   <template id="appearance-settings-template">
   <dialog class="settings-dialog" id="appearance-settings" aria-labelledby="settings-title">
     <header class="settings-header">
-      <div>
+      <button type="button" class="settings-back" aria-label="返回设置列表" hidden>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m14 6-6 6 6 6"/></svg>
+      </button>
+      <div class="settings-heading">
         <p class="settings-eyebrow">Nightcord</p>
-        <h1 id="settings-title">设置</h1>
+        <h1 id="settings-title" tabindex="-1">设置</h1>
       </div>
       <button type="button" class="settings-close" aria-label="关闭设置">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M6 18 18 6"/></svg>

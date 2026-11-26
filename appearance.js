@@ -104,20 +104,38 @@
     const status = dialog.querySelector('#palette-status');
     const sidebar = dialog.querySelector('.settings-sidebar');
     const content = dialog.querySelector('.settings-content');
+    const back = dialog.querySelector('.settings-back');
+    const title = dialog.querySelector('#settings-title');
+    const eyebrow = dialog.querySelector('.settings-eyebrow');
     const tabs = [...sidebar.querySelectorAll('[role="tab"]')];
     const pages = tabs.map(tab => dialog.querySelector(`#${tab.getAttribute('aria-controls')}`));
     const desktopSettings = window.matchMedia('(min-width: 769px) and (pointer: fine), (min-width: 1025px)');
     let selectedPage = 'appearance';
+    let mobilePageOpen = false;
     const syncPages = () => {
       const desktop = desktopSettings.matches;
       const focused = document.activeElement;
-      sidebar.hidden = !desktop;
+      const activeTab = tabs.find(tab => tab.dataset.settingsPage === selectedPage);
+      sidebar.hidden = !desktop && mobilePageOpen;
+      sidebar.setAttribute('role', desktop ? 'tablist' : 'navigation');
+      if (desktop) sidebar.setAttribute('aria-orientation', 'vertical');
+      else sidebar.removeAttribute('aria-orientation');
+      content.hidden = !desktop && !mobilePageOpen;
+      back.hidden = desktop || !mobilePageOpen;
+      title.textContent = !back.hidden ? activeTab.textContent.trim() : '设置';
+      eyebrow.textContent = !back.hidden ? '设置' : 'Nightcord';
       tabs.forEach((tab, index) => {
         const selected = tab.dataset.settingsPage === selectedPage;
-        tab.setAttribute('aria-selected', String(selected));
-        tab.tabIndex = selected ? 0 : -1;
+        if (desktop) {
+          tab.setAttribute('role', 'tab');
+          tab.setAttribute('aria-selected', String(selected));
+        } else {
+          tab.removeAttribute('role');
+          tab.removeAttribute('aria-selected');
+        }
+        tab.tabIndex = !desktop || selected ? 0 : -1;
         const page = pages[index];
-        page.hidden = desktop && !selected;
+        page.hidden = !selected || content.hidden;
         if (desktop) {
           page.setAttribute('role', 'tabpanel');
           page.setAttribute('aria-labelledby', tab.id);
@@ -128,19 +146,28 @@
       });
       // Resizing must never leave keyboard focus inside a hidden page or tab.
       if (dialog.open && focused?.closest('[hidden]')) {
-        (desktop ? tabs.find(tab => tab.tabIndex === 0) : dialog.querySelector('.settings-close')).focus({ preventScroll: true });
+        (desktop || !mobilePageOpen ? activeTab : title).focus({ preventScroll: true });
       }
     };
     const selectPage = tab => {
       selectedPage = tab.dataset.settingsPage;
+      mobilePageOpen = true;
       syncPages();
       content.scrollTop = 0;
+      if (!desktopSettings.matches) title.focus({ preventScroll: true });
     };
+    const showCategories = () => {
+      mobilePageOpen = false;
+      syncPages();
+      tabs.find(tab => tab.dataset.settingsPage === selectedPage).focus({ preventScroll: true });
+    };
+    back.addEventListener('click', showCategories);
     sidebar.addEventListener('click', event => {
-      const tab = event.target.closest('[role="tab"]');
+      const tab = event.target.closest('[data-settings-page]');
       if (tab) selectPage(tab);
     });
     sidebar.addEventListener('keydown', event => {
+      if (!desktopSettings.matches) return;
       const index = tabs.indexOf(event.target);
       if (index < 0) return;
       let next;
@@ -153,7 +180,11 @@
       selectPage(tabs[next]);
       tabs[next].focus({ preventScroll: true });
     });
-    desktopSettings.addEventListener('change', syncPages);
+    desktopSettings.addEventListener('change', () => {
+      // Keep the current category open when an already-open desktop dialog narrows.
+      if (!desktopSettings.matches && dialog.open) mobilePageOpen = true;
+      syncPages();
+    });
     syncPages();
     const sync = palette => options.forEach(option => { option.checked = option.value === palette; });
     const syncMemberList = value => memberListOptions.forEach(option => { option.checked = option.value === value; });
@@ -170,25 +201,38 @@
       previousFocus = document.activeElement;
       document.body.appendChild(dialog);
       trigger.setAttribute('aria-controls', dialog.id);
+      mobilePageOpen = false;
       syncPages();
       dialog.showModal();
       window.dispatchEvent(new CustomEvent('nightcord:settings-open'));
       if (desktopSettings.matches) tabs.find(tab => tab.tabIndex === 0).focus({ preventScroll: true });
-      else options.find(option => option.checked)?.focus({ preventScroll: true });
+      else {
+        sidebar.scrollTop = 0;
+        tabs[0].focus({ preventScroll: true });
+      }
     });
     dialog.querySelector('.settings-close').addEventListener('click', () => dialog.close());
+    const dismiss = () => {
+      if (!desktopSettings.matches && mobilePageOpen) showCategories();
+      else dialog.close();
+    };
+    dialog.addEventListener('cancel', event => {
+      event.preventDefault();
+      dismiss();
+    });
     dialog.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        dialog.close();
+        dismiss();
         return;
       }
       if (event.key !== 'Tab') return;
       // A native radio group contributes only the selected option to Tab order.
-      const first = dialog.querySelector('.settings-close');
-      const last = [...dialog.querySelectorAll('button, input, select, summary, a[href]')]
-        .filter(element => !element.matches(':disabled') && element.tabIndex >= 0 && element.getClientRects().length).at(-1);
+      const controls = [...dialog.querySelectorAll('button, input, select, summary, a[href]')]
+        .filter(element => !element.matches(':disabled') && element.tabIndex >= 0 && element.getClientRects().length);
+      const first = controls[0];
+      const last = controls.at(-1);
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last?.focus();

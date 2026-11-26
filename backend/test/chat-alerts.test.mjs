@@ -365,7 +365,13 @@ test('chat notifications, preferences, presence and multiple tabs', { timeout: 1
     // Use the settings event through the actual button, including the mobile drawer.
     await page.locator('.sidebar-toggle').first().click();
     await page.locator('#navigation-settings').click();
+    const category = async name => {
+      const back = page.getByRole('button', { name: '返回设置列表', exact: true });
+      if (await back.isVisible()) await back.click();
+      await page.getByRole('button', { name, exact: true }).click();
+    };
     for (const kind of ['新消息', '回复我', '@ 我', '成员上线', '成员下线']) {
+      await category(kind.startsWith('成员') ? '成员动态与关注' : '消息提醒');
       await page.getByRole('button', { name: `试听${kind}音效`, exact: true }).click();
       await page.waitForFunction(() => ui.alerts.sounds.active?.currentTime > 0);
       assert.equal(await page.evaluate(() => ui.alerts.sounds.state), 'ready');
@@ -373,11 +379,13 @@ test('chat notifications, preferences, presence and multiple tabs', { timeout: 1
     }
     await page.evaluate(() => { ui.alerts.sounds.ext = 'mp3'; });
     for (const kind of ['新消息', '回复我', '@ 我', '成员上线', '成员下线']) {
+      await category(kind.startsWith('成员') ? '成员动态与关注' : '消息提醒');
       await page.getByRole('button', { name: `试听${kind}音效`, exact: true }).click();
       await page.waitForFunction(() => ui.alerts.sounds.active?.currentTime > 0 && ui.alerts.sounds.active?.ended);
       assert.equal(await page.evaluate(() => ui.alerts.sounds.state), 'ready');
     }
     assert.equal(await page.locator('.alert-settings').evaluateAll(nodes => nodes.every(node => node.scrollWidth <= node.clientWidth + 1)), true);
+    await category('消息提醒');
     await page.locator('[data-alert=message]:checked').focus();
     await page.keyboard.press('ArrowRight');
     assert.equal(await page.evaluate(() => ui.alerts.preferences.read().message), 'always');
@@ -397,18 +405,17 @@ test('chat notifications, preferences, presence and multiple tabs', { timeout: 1
     assert.deepEqual(await page.evaluate(() => {
       const { replyNotice, replySound } = ui.alerts.preferences.read(); return { replyNotice, replySound };
     }), { replyNotice: false, replySound: false }, 'the sound label is a separate click target');
+    await category('声音与免打扰');
     await page.getByRole('slider', { name: '提醒音量', exact: true }).focus();
     await page.keyboard.press('ArrowRight');
     assert.equal(await page.evaluate(() => ui.alerts.preferences.read().volume), .55);
     assert.equal(await page.getByRole('slider').getAttribute('aria-valuetext'), '55%');
     if (process.env.NIGHTCORD_ALERT_ARTIFACTS) {
       await mkdir(process.env.NIGHTCORD_ALERT_ARTIFACTS, { recursive: true });
-      await page.locator('#settings-sound h2').scrollIntoViewIfNeeded();
-      await page.evaluate(() => { const dialog = document.querySelector('#appearance-settings'); dialog.scrollTop += document.querySelector('.alert-settings').getBoundingClientRect().top - dialog.getBoundingClientRect().top - 24; });
+      await page.locator('.settings-content').evaluate(node => { node.scrollTop = 0; });
       await page.screenshot({ path: join(process.env.NIGHTCORD_ALERT_ARTIFACTS, 'settings-mobile.png') });
-      await page.locator('.alert-category').evaluate(node => {
-        const dialog = node.closest('dialog'); dialog.scrollTop += node.getBoundingClientRect().top - dialog.getBoundingClientRect().top - 24;
-      });
+      await category('消息提醒');
+      await page.locator('#settings-messages .alert-category').first().scrollIntoViewIfNeeded();
       await page.screenshot({ path: join(process.env.NIGHTCORD_ALERT_ARTIFACTS, 'settings-replies-mobile.png') });
     }
     await page.setViewportSize({ width: 812, height: 375 });

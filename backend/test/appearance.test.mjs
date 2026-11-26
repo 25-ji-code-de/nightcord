@@ -206,8 +206,13 @@ test('appearance settings independently apply palettes and member styles, preser
       await page.setViewportSize(viewport);
       await page.locator('.sidebar-toggle').click();
       await page.locator('#navigation-settings').click();
-      assert.equal(await dialog.locator('.settings-sidebar').isVisible(), false);
-      assert.equal(await dialog.locator('.settings-page[hidden]').count(), 0);
+      const categories = dialog.getByRole('navigation', { name: '设置分类' });
+      const back = dialog.getByRole('button', { name: '返回设置列表', exact: true });
+      assert.equal(await categories.isVisible(), true);
+      assert.equal(await categories.getByRole('button').count(), 5);
+      assert.equal(await dialog.locator('.settings-page:visible').count(), 0);
+      assert.equal(await back.isVisible(), false);
+      assert.equal(await dialog.locator('#settings-title').textContent(), '设置');
       const bounds = await dialog.evaluate(node => {
         const rect = node.getBoundingClientRect();
         return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, overflow: node.scrollWidth > node.clientWidth };
@@ -215,6 +220,24 @@ test('appearance settings independently apply palettes and member styles, preser
       assert.ok(bounds.left >= 15 && bounds.right <= viewport.width - 15);
       assert.ok(bounds.top >= 15 && bounds.bottom <= viewport.height - 15);
       assert.equal(bounds.overflow, false);
+      if (process.env.NIGHTCORD_REVIEW_ARTIFACTS) {
+        await page.screenshot({ path: process.env.NIGHTCORD_REVIEW_ARTIFACTS + '/settings-list-' + viewport.width + '.png' });
+      }
+      for (const name of ['外观与布局', '声音与免打扰', '消息提醒', '应用与推送通知', '成员动态与关注']) {
+        const category = categories.getByRole('button', { name, exact: true });
+        const target = await category.getAttribute('aria-controls');
+        await category.click();
+        assert.equal(await dialog.locator('.settings-page:visible').count(), 1);
+        assert.equal(await dialog.locator('#' + target).isVisible(), true);
+        assert.equal(await categories.isVisible(), false);
+        assert.equal(await dialog.locator('#settings-title').textContent(), name);
+        assert.equal(await dialog.locator('#settings-title').evaluate(node => node === document.activeElement), true);
+        assert.equal(await back.evaluate(node => node.getBoundingClientRect().width >= 44 && node.getBoundingClientRect().height >= 44), true);
+        await back.click();
+        assert.equal(await categories.isVisible(), true);
+        assert.equal(await category.evaluate(node => node === document.activeElement), true);
+      }
+      await categories.getByRole('button', { name: '外观与布局', exact: true }).click();
       await plumOrchid.check();
       assert.equal(await page.locator('.input-area').evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(63, 51, 82)');
       assert.equal(await dialog.locator('.palette-color-options').evaluate(node => node.scrollWidth <= node.clientWidth), true);
@@ -223,13 +246,25 @@ test('appearance settings independently apply palettes and member styles, preser
         assert.ok(previewHeight < 300, `mobile palette choices occupy ${previewHeight}px`);
       }
       if (process.env.NIGHTCORD_REVIEW_ARTIFACTS) {
-        await dialog.evaluate(node => { node.scrollTop = 0; });
+        await dialog.locator('.settings-content').evaluate(node => { node.scrollTop = 0; });
         await page.screenshot({ path: process.env.NIGHTCORD_REVIEW_ARTIFACTS + '/palette-' + viewport.width + '.png' });
       }
+      const headerBefore = await dialog.locator('.settings-header').boundingBox();
+      await page.locator('#ios-layout-toggle').scrollIntoViewIfNeeded();
+      assert.deepEqual(await dialog.locator('.settings-header').boundingBox(), headerBefore, 'the back button stays fixed while settings scroll');
       for (let i = 0; i < 4; i++) {
         await page.keyboard.press('Tab');
         assert.equal(await dialog.evaluate(node => node.contains(document.activeElement)), true);
       }
+      await page.keyboard.press('Escape');
+      assert.equal(await categories.isVisible(), true, 'Escape returns to the category list first');
+      await categories.getByRole('button', { name: '外观与布局', exact: true }).click();
+      assert.equal(await plumOrchid.isChecked(), true, 'returning to a category preserves preferences');
+      await page.getByRole('button', { name: '关闭设置', exact: true }).click();
+      await dialog.waitFor({ state: 'detached' });
+      await page.locator('.sidebar-toggle').click();
+      await page.locator('#navigation-settings').click();
+      assert.equal(await categories.isVisible(), true, 'reopening mobile settings starts at the category list');
       // Settings replaces the mobile drawer on every platform.
       await page.keyboard.press('Escape');
       await dialog.waitFor({ state: 'detached' });
@@ -249,12 +284,13 @@ test('appearance settings independently apply palettes and member styles, preser
     // setViewportSize resolves before the matchMedia change handler updates the dialog.
     await dialog.locator('.settings-sidebar').waitFor({ state: 'hidden' });
     assert.equal(await dialog.locator('.settings-sidebar').isVisible(), false);
-    assert.equal(await dialog.locator('.settings-page[hidden]').count(), 0);
-    assert.equal(await page.locator('.settings-close').evaluate(node => node === document.activeElement), true);
-    await plumOrchid.focus();
+    assert.equal(await dialog.locator('.settings-page:visible').count(), 1);
+    assert.equal(await dialog.locator('#settings-sound').isVisible(), true);
+    assert.equal(await page.locator('#settings-title').evaluate(node => node === document.activeElement), true);
+    await page.getByRole('button', { name: '返回设置列表', exact: true }).focus();
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.waitForFunction(() => document.querySelector('.settings-tab[aria-selected="true"]') === document.activeElement);
-    assert.equal(await soundTab.evaluate(node => node === document.activeElement), true, 'resizing moves focus out of the hidden page');
+    assert.equal(await soundTab.evaluate(node => node === document.activeElement), true, 'resizing moves focus out of the hidden back button');
     assert.equal(await page.getByRole('tabpanel').count(), 1);
     await appearanceTab.click();
     assert.ok(await appearanceTab.evaluate(node => parseFloat(getComputedStyle(node).transitionDuration) <= .001));

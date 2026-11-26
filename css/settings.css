@@ -2,10 +2,11 @@
 .settings-dialog {
   box-sizing: border-box;
   width: min(640px, calc(100vw - 32px));
+  height: min(720px, calc(100dvh - 32px));
   max-height: calc(100dvh - 32px);
   margin: auto;
   padding: 0;
-  overflow-y: auto;
+  overflow: hidden;
   border: 1px solid rgb(var(--nc-line) / .18);
   border-radius: 12px;
   background: rgb(var(--nc-panel));
@@ -15,32 +16,46 @@
   color-scheme: dark;
 }
 .settings-dialog::backdrop { background: rgb(12 12 24 / .65); }
+.settings-dialog[open] { display: flex; flex-direction: column; }
 .settings-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 28px 28px 20px; border-bottom: 1px solid rgb(var(--nc-line) / var(--nc-line-alpha)); }
+.settings-header, .settings-footer { flex-shrink: 0; }
+.settings-heading { flex: 1; min-width: 0; }
 .settings-eyebrow { margin: 0 0 4px; font-size: 12px; letter-spacing: .06em; color: rgb(var(--nc-text-muted)); }
-.settings-header h1 { margin: 0; font-size: 24px; line-height: 1.4; font-weight: 600; }
-.settings-close { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; margin: -8px -8px 0 0; padding: 0; border: 0; border-radius: 6px; color: rgb(var(--nc-icon)); background: transparent; cursor: pointer; }
-.settings-close:hover, .settings-close:active { background: rgb(var(--nc-line) / .08); color: rgb(var(--nc-text)); }
-.settings-close:focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: -2px; }
-.settings-content { padding: 24px 28px 28px; }
-.settings-sidebar[hidden], .settings-page[hidden] { display: none; }
+.settings-header h1 { margin: 0; font-size: 24px; line-height: 1.4; font-weight: 600; text-wrap: balance; }
+.settings-close, .settings-back { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; margin: -8px -8px 0 0; padding: 0; border: 0; border-radius: 6px; color: rgb(var(--nc-icon)); background: transparent; cursor: pointer; }
+.settings-back { align-self: center; margin: 0 0 0 -8px; }
+.settings-close:hover, .settings-close:active, .settings-back:hover, .settings-back:active { background: rgb(var(--nc-line) / .08); color: rgb(var(--nc-text)); }
+.settings-close:focus-visible, .settings-back:focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: -2px; }
+.settings-content { flex: 1; min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 24px 28px 28px; }
+.settings-sidebar[hidden], .settings-page[hidden], .settings-content[hidden], .settings-back[hidden] { display: none; }
 .settings-page { min-width: 0; }
 .settings-page-title { display: none; }
+.settings-sidebar { display: flex; flex: 1; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 20px; }
+.settings-tab { position: relative; display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-height: 64px; padding: 14px 16px; border: 0; border-radius: 6px; background: rgb(var(--nc-line) / .04); color: rgb(var(--nc-text)); font: inherit; text-align: left; cursor: pointer; transition: background 150ms, color 150ms; }
+.settings-tab svg { flex-shrink: 0; width: 20px; height: 20px; }
+.settings-tab::after { content: ""; flex-shrink: 0; width: 7px; height: 7px; margin-left: auto; border-top: 1.75px solid; border-right: 1.75px solid; transform: rotate(45deg); color: rgb(var(--nc-icon)); }
+.settings-tab:hover, .settings-tab:active { background: rgb(var(--nc-line) / .08); color: rgb(var(--nc-text)); }
+.settings-tab:focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: 2px; }
+.settings-page .alert-settings { margin-top: 0; padding-top: 0; border-top: 0; }
+.settings-page .alert-settings > h2 { display: none; }
+@media (max-width: 768px), (max-width: 1024px) and (pointer: coarse) {
+  .settings-header { align-items: center; gap: 8px; }
+  .settings-header h1 { font-size: 20px; }
+  .settings-close { margin: 0 -8px 0 0; }
+}
 /* Wide screens use one persistent sidebar and one scrolling settings page. */
 @media (min-width: 769px) and (pointer: fine), (min-width: 1025px) {
   .settings-dialog { width: min(900px, calc(100vw - 48px)); height: min(720px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px); overflow: hidden; }
   .settings-dialog[open] { display: grid; grid-template-columns: 208px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
   .settings-header, .settings-footer { grid-column: 1 / -1; }
-  .settings-sidebar { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; padding: 20px 12px; border-right: 1px solid rgb(var(--nc-line) / var(--nc-line-alpha)); background: rgb(var(--nc-line) / .025); }
-  .settings-tab { position: relative; display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-height: 44px; padding: 10px 14px; border: 0; border-radius: 6px; background: transparent; color: rgb(var(--nc-text-muted)); font: inherit; font-size: 14px; text-align: left; cursor: pointer; transition: background 150ms, color 150ms; }
-  .settings-tab svg { flex-shrink: 0; width: 20px; height: 20px; }
+  .settings-sidebar { gap: 6px; padding: 20px 12px; border-right: 1px solid rgb(var(--nc-line) / var(--nc-line-alpha)); background: rgb(var(--nc-line) / .025); }
+  .settings-tab { min-height: 44px; padding: 10px 14px; background: transparent; color: rgb(var(--nc-text-muted)); font-size: 14px; }
+  .settings-tab::after { display: none; }
   .settings-tab:hover { background: rgb(var(--nc-line) / .06); color: rgb(var(--nc-text)); }
   .settings-tab[aria-selected="true"] { background: rgb(var(--nc-accent) / .12); color: rgb(var(--nc-accent)); font-weight: 600; }
   .settings-tab[aria-selected="true"]::before { content: ""; position: absolute; left: 0; width: 3px; height: 20px; border-radius: 2px; background: currentColor; }
-  .settings-tab:focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: 2px; }
-  .settings-content { min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
   .settings-page-title { display: block; margin: 0 0 24px; font-size: 20px; line-height: 1.5; font-weight: 600; }
-  .settings-page .alert-settings { margin-top: 0; padding-top: 0; border-top: 0; }
-  .settings-page .alert-settings > h2 { font-size: 20px; }
+  .settings-page .alert-settings > h2 { display: block; font-size: 20px; }
 }
 .palette-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .palette-fieldset legend { padding: 0; font-size: 16px; font-weight: 600; }

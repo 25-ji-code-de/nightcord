@@ -43,6 +43,7 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
     const openSettings = async () => {
       if (await page.locator('.sidebar-toggle').isVisible() && !await page.locator('#navigation-settings').isVisible()) await page.locator('.sidebar-toggle').click();
       await page.locator('#navigation-settings').click();
+      await page.getByRole('button', { name: '外观与布局', exact: true }).click();
     };
     const toggle = page.getByRole('switch', { name: 'iPhone / iOS 适配', exact: true });
     const rounded = page.getByRole('switch', { name: '圆角', exact: true });
@@ -83,12 +84,9 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
     await rounded.check();
     await toggle.focus();
     await page.keyboard.press('Tab');
-    assert.equal(await page.locator('#pwa-storage').evaluate(node => node === document.activeElement), true);
-    await page.locator('#pwa-update').focus();
-    await page.keyboard.press('Tab');
-    assert.equal(await page.locator('.settings-close').evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator('.settings-back').evaluate(node => node === document.activeElement), true);
     await page.keyboard.press('Shift+Tab');
-    assert.equal(await page.locator('#pwa-update').evaluate(node => node === document.activeElement), true);
+    assert.equal(await toggle.evaluate(node => node === document.activeElement), true);
     const second = await context.newPage();
     await second.goto(origin);
     assert.equal(await second.locator('html').getAttribute('data-ios-layout'), 'on');
@@ -164,10 +162,18 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '34px'; });
     await openSettings();
-    await toggle.scrollIntoViewIfNeeded();
+    const toggleTrack = '.settings-toggle:has(#ios-layout-toggle) .settings-toggle-track';
+    await page.locator(toggleTrack).scrollIntoViewIfNeeded();
     assert.equal((await bounds('#appearance-settings')).overflow, false);
-    assert.ok((await bounds('#ios-layout-toggle')).bottom <= (await bounds('.settings-footer')).top + 1);
-    assert.ok((await page.locator('.settings-toggle-track').first().boundingBox()).width >= 44);
+    const largeTextToggle = await bounds(toggleTrack);
+    const largeTextFooter = await bounds('.settings-footer');
+    assert.ok(largeTextToggle.top >= (await bounds('.settings-header')).bottom);
+    assert.ok(largeTextToggle.bottom <= largeTextFooter.top);
+    assert.ok(largeTextToggle.width >= 44);
+    // At large text sizes the label can exceed the scroller height; its end must remain reachable.
+    await toggle.evaluate(node => node.scrollIntoView({ block: 'end' }));
+    assert.ok((await bounds('#ios-layout-toggle')).bottom <= largeTextFooter.top + 1);
+    if (process.env.NIGHTCORD_IOS_SCREENSHOTS) await page.screenshot({ path: resolve(root, '.qa-artifacts/ios-layout/settings-large-text.png') });
     await closeSettings();
     await page.evaluate(() => { document.documentElement.style.removeProperty('font-size'); });
 
@@ -220,6 +226,7 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
     await blocked.evaluate(() => new UIManager(new EventBus()).setupChatRoom(() => {}, () => {}));
     await blocked.locator('.sidebar-toggle').click();
     await blocked.locator('#navigation-settings').click();
+    await blocked.getByRole('button', { name: '外观与布局', exact: true }).click();
     assert.equal(await blocked.locator('html').getAttribute('data-ios-layout'), 'on');
     await blocked.getByRole('switch', { name: 'iPhone / iOS 适配', exact: true }).uncheck();
     assert.equal(await blocked.locator('html').getAttribute('data-ios-layout'), 'off');
@@ -241,6 +248,7 @@ test('iOS layout preserves preferences and keeps phone controls within the visib
       await devicePage.evaluate(() => new UIManager(new EventBus()).setupChatRoom(() => {}, () => {}));
       await devicePage.locator('.sidebar-toggle').click();
       await devicePage.locator('#navigation-settings').click();
+      await devicePage.getByRole('button', { name: '外观与布局', exact: true }).click();
       const switchWidth = await devicePage.locator('.settings-toggle-track').first().evaluate(node => node.getBoundingClientRect().width);
       assert.equal(switchWidth, 44, `${profile.name}: switches keep the shared Nightcord style`);
       await devicePage.locator('.settings-close').click();

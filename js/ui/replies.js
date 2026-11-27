@@ -97,10 +97,11 @@ class ReplyView {
     this.touchRepliesBound = true;
     const interactive = 'a, button, input, textarea, select, label, summary, [role="button"], [role="slider"], [tabindex], [contenteditable]:not([contenteditable="false"]), img, video, audio, iframe, pre, .sekai-reply';
     const threshold = 64;
-    let gesture = null, blockedClick = null;
+    let gesture = null, blockedClick = null, selectedRow = null;
     const selection = () => !!window.getSelection()?.toString();
     const clearSelected = () => {
-      log.querySelector('.is-reply-selected')?.classList.remove('is-reply-selected');
+      selectedRow?.classList.remove('is-reply-selected');
+      selectedRow = null;
     };
     const reset = () => {
       if (!gesture) return;
@@ -115,8 +116,7 @@ class ReplyView {
       if (event.touches.length !== 1) { reset(); clearSelected(); return; }
       reset(); blockedClick = null;
       const row = event.target.closest('.message');
-      const selected = log.querySelector('.is-reply-selected');
-      if (selected !== row) clearSelected();
+      if (selectedRow !== row) clearSelected();
       const button = row?.querySelector('.message-reply-btn');
       if (!button || !eligible(row) || event.target.closest(interactive) || selection()) return;
       const touch = event.touches[0];
@@ -163,7 +163,7 @@ class ReplyView {
         blockedClick = { row: current.row, until: performance.now() + 750 };
         if (current.ready && dx >= threshold && dy < 40) current.button.click();
       } else if (Math.abs(dx) < 12 && dy < 12 && performance.now() - current.started < 450) {
-        current.row.classList.toggle('is-reply-selected');
+        selectedRow = current.row.classList.toggle('is-reply-selected') ? current.row : null;
       }
     }, { passive: false });
     log.addEventListener('click', event => {

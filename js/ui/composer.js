@@ -24,22 +24,26 @@ class ChatComposerView {
     this.ui.chatRoomListenersBound = true;
 
     // 监听滚动事件，检测用户是否接近底部
-    chatlog.addEventListener("scroll", UIManager.throttle(() => {
+    chatlog.addEventListener("scroll", () => {
       const distanceFromBottom = chatlog.scrollHeight - chatlog.scrollTop - chatlog.clientHeight;
+      const wasAtBottom = this.ui.isAtBottom;
       // 如果距离底部小于阈值，认为用户在底部附近
       this.ui.isAtBottom = distanceFromBottom < this.ui.scrollThreshold;
       this.ui.updateUserActivityTime();
-    }, 100).bind(this));
+      // Only an attention change needs unread updates and cross-tab broadcasts.
+      // Run after measuring so the notification layer sees the current position.
+      if (wasAtBottom !== this.ui.isAtBottom) this.ui.alerts?.attention();
+    }, { passive: true });
 
     // 监听触摸事件（移动端）
     chatlog.addEventListener("touchmove", UIManager.throttle(() => {
       this.ui.updateUserActivityTime();
-    }, 100).bind(this));
+    }, 100).bind(this), { passive: true });
 
     // 监听鼠标滚轮事件（桌面端）
     chatlog.addEventListener("wheel", UIManager.throttle(() => {
       this.ui.updateUserActivityTime();
-    }, 100).bind(this));
+    }, 100).bind(this), { passive: true });
 
     // Submit message
     chatInput.addEventListener("keydown", async (event) => {

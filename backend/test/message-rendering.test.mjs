@@ -321,6 +321,104 @@ test('message rendering batches updates without losing or duplicating messages',
     assert.deepEqual(result.counts, { created: 25, heightReads: 1, scrollWrites: 1 });
   });
 
+  await t.test('stream chunks render once per frame and preserve rich-text source across frames', async t => {
+    const page = await fixture(t);
+    const result = await page.evaluate(async () => {
+      const stream = ui.startStreamingMessage('chunks', 'Nako');
+      let renders = 0, streamSearches = 0;
+      const render = ui.sekaiRenderer.render.bind(ui.sekaiRenderer);
+      ui.sekaiRenderer.render = text => { renders++; return render(text); };
+      const query = ui.elements.chatlog.querySelector.bind(ui.elements.chatlog);
+      ui.elements.chatlog.querySelector = selector => {
+        if (selector.includes('data-message-id')) streamSearches++;
+        return query(selector);
+      };
+      counts.heightReads = counts.scrollWrites = 0;
+      for (let i = 0; i < 120; i++) ui.appendStreamingContent('chunks', `**part ${i}** `);
+      const before = renders;
+      await nextFrame();
+      const first = { renders, streamSearches, heightReads: counts.heightReads, scrollWrites: counts.scrollWrites,
+        bold: stream.querySelectorAll('strong').length };
+      ui.appendStreamingContent('chunks', '**next');
+      await nextFrame();
+      ui.appendStreamingContent('chunks', ' frame**');
+      await nextFrame();
+      return { before, first, bold: stream.querySelectorAll('strong').length,
+        last: [...stream.querySelectorAll('strong')].at(-1).textContent };
+    });
+    assert.equal(result.before, 0);
+    assert.deepEqual(result.first, { renders: 1, streamSearches: 0, heightReads: 1, scrollWrites: 1, bold: 120 });
+    assert.equal(result.bold, 121);
+    assert.equal(result.last, 'next frame');
+  });
+
+  await t.test('finishing before the next frame renders the authoritative content without stale writes', async t => {
+    const page = await fixture(t);
+    const result = await page.evaluate(async () => {
+      const stream = ui.startStreamingMessage('finished', 'Nako');
+      ui.appendStreamingContent('finished', 'pending partial');
+      ui.finishStreamingMessage('finished', 'Nako', ' **final** ', 'reasoning');
+      const immediate = stream.querySelector('.message-text')?.textContent;
+      await nextFrame();
+      const noChunks = ui.startStreamingMessage('no-chunks', 'Nako');
+      ui.finishStreamingMessage('no-chunks', 'Nako', 'complete without chunks');
+      return { immediate, final: stream.querySelector('.message-text')?.textContent,
+        bold: stream.querySelector('strong')?.textContent, reasoning: stream.querySelector('.nako-thinking-icon')?.title,
+        noChunks: noChunks.querySelector('.message-text')?.textContent, streaming: stream.classList.contains('streaming') };
+    });
+    assert.deepEqual(result, { immediate: 'final', final: 'final', bold: 'final', reasoning: 'reasoning',
+      noChunks: 'complete without chunks', streaming: false });
+  });
+
+  await t.test('cancelled streams and room changes discard queued content without scrolling', async t => {
+    const page = await fixture(t);
+    const result = await page.evaluate(async () => {
+      ui.startStreamingMessage('cancelled', 'Nako');
+      ui.appendStreamingContent('cancelled', 'discard this');
+      ui.eventBus.emit('nako:cancelled', { messageId: 'cancelled' });
+      counts.heightReads = counts.scrollWrites = 0;
+      await nextFrame();
+      const afterCancel = { heightReads: counts.heightReads, scrollWrites: counts.scrollWrites, rows: rows() };
+      ui.startStreamingMessage('old-room', 'Nako');
+      ui.setCurrentRoom('new-room');
+      ui.appendStreamingContent('old-room', 'old content');
+      await renderComplete();
+      await nextFrame();
+      return { afterCancel, rows: rows(), streams: ui.elements.chatlog.querySelectorAll('.streaming').length };
+    });
+    assert.deepEqual(result.afterCancel, { heightReads: 0, scrollWrites: 0, rows: [] });
+    assert.deepEqual(result.rows, []);
+    assert.equal(result.streams, 0);
+  });
+
+  await t.test('simultaneous streams share a scroll and leave readers of history in place', async t => {
+    const page = await fixture(t);
+    const result = await page.evaluate(async () => {
+      seed(); await renderComplete();
+      ui.startStreamingMessage('one', 'Nako');
+      ui.startStreamingMessage('two', 'Miku');
+      counts.heightReads = counts.scrollWrites = 0;
+      ui.appendStreamingContent('one', 'one');
+      ui.appendStreamingContent('two', 'two');
+      await nextFrame();
+      const followed = { heightReads: counts.heightReads, scrollWrites: counts.scrollWrites };
+      ui.isAtBottom = false;
+      ui.lastUserActivityTime = Date.now();
+      ui.elements.chatlog.scrollTop = 0;
+      counts.heightReads = counts.scrollWrites = 0;
+      ui.appendStreamingContent('one', ' continued');
+      ui.appendStreamingContent('two', ' continued');
+      await nextFrame();
+      return { followed, heightReads: counts.heightReads, scrollWrites: counts.scrollWrites,
+        top: ui.elements.chatlog.scrollTop, rows: rows().slice(-2) };
+    });
+    assert.deepEqual(result.followed, { heightReads: 1, scrollWrites: 1 });
+    assert.equal(result.heightReads, 0);
+    assert.equal(result.scrollWrites, 0);
+    assert.equal(result.top, 0);
+    assert.deepEqual(result.rows, ['one continued', 'two continued']);
+  });
+
   await t.test('large history yields to input, includes arrivals and keeps the active stream', async t => {
     const page = await fixture(t);
     const partial = await page.evaluate(async () => {

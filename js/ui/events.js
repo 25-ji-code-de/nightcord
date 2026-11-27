@@ -202,8 +202,7 @@ class ChatUIEvents {
 
       // 移除流式消息
       if (data.messageId) {
-        const msgDiv = this.ui.elements.chatlog.querySelector(`[data-message-id="${data.messageId}"]`);
-        if (msgDiv) msgDiv.remove();
+        this.ui.streamingView.cancelStreamingMessage(data.messageId);
       }
     });
 
@@ -211,8 +210,7 @@ class ChatUIEvents {
     this.onPublic('nako:cancelled', (data) => {
       // 移除流式消息
       if (data.messageId) {
-        const msgDiv = this.ui.elements.chatlog.querySelector(`[data-message-id="${data.messageId}"]`);
-        if (msgDiv) msgDiv.remove();
+        this.ui.streamingView.cancelStreamingMessage(data.messageId);
       }
     });
   }

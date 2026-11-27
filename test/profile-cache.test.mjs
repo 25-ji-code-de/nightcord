@@ -103,3 +103,21 @@ test('profile history is bounded to the 1000 most recently observed identities',
   assert.equal(reloaded.getKnownProfile('sekai:1'), null);
   assert.equal(JSON.parse(h.values.get('nightcord-known-profiles')).length, 1000);
 });
+
+test('unchanged profile snapshots are parsed once while other tabs remain immediately visible', () => {
+  const h = harness();
+  const entries = Array.from({ length: 1000 }, (_, i) => ({
+    profile: profile(`sekai:${i}`, `Name ${i}`), observedAt: i,
+  }));
+  h.values.set('nightcord-known-profiles', JSON.stringify(entries));
+  const storage = h.createStorage();
+  const normalize = storage.normalizeProfile.bind(storage);
+  let normalizations = 0;
+  storage.normalizeProfile = value => { normalizations++; return normalize(value); };
+  for (let i = 0; i < 1000; i++) assert.equal(storage.getKnownProfile(`sekai:${i}`).displayName, `Name ${i}`);
+  assert.equal(normalizations, 1000, 'looking up 1000 identities must not normalize a million entries');
+  entries[0] = { profile: profile('sekai:0', 'Changed in another tab'), observedAt: 2000 };
+  h.values.set('nightcord-known-profiles', JSON.stringify(entries));
+  assert.equal(storage.getKnownProfile('sekai:0').displayName, 'Changed in another tab');
+  assert.equal(normalizations, 2000);
+});

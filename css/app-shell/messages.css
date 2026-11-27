@@ -1,3 +1,13 @@
+/* Use a block list: revealing a group need not lay out every flex item again. */
+.messages { display: block; }
+.messages > * + *, .message-batch > .message + .message { margin-top: 2px; }
+.message-batch {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto var(--message-batch-height, 1152px);
+  /* Floating reply buttons extend above the first row in each group. */
+  overflow-clip-margin: 20px;
+}
+
 /* Reply button */
 .message-reply-btn {
   position: absolute;

@@ -70,6 +70,8 @@
     }
 
     scheduleRefresh() {
+      // Navigation can reuse classification until chat/session data changes.
+      if (this._messageTools) this._messageTools.mentionsCache = null;
       if (this.refreshPending) return;
       this.refreshPending = true;
       queueMicrotask(() => { this.refreshPending = false; this.refresh(); });
@@ -154,11 +156,11 @@
       this.ui.closeNavigationDrawer?.();
       this.ui.elements.main.classList.add('tool-view');
       this.panel.hidden = false;
-      this.body.scrollTop = 0;
       document.querySelector('#navigation-chat')?.removeAttribute('aria-current');
       document.querySelector(`#navigation-${kind}`)?.classList.add('is-active');
       document.querySelector(`#navigation-${kind}`)?.setAttribute('aria-current', 'page');
       this.refresh();
+      this.body.scrollTop = 0;
       (this.content.querySelector('input:not(:disabled), button:not(:disabled), summary') || this.panel.querySelector('button')).focus();
     }
 

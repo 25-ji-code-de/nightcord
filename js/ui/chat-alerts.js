@@ -23,7 +23,7 @@ class ChatAlerts {
     ];
     this.attention = () => {
       if (this.viewing()) {
-        this.unread = 0; this.renderUnread();
+        if (this.unread) { this.unread = 0; this.renderUnread(); }
         if (this.banner.kindName === 'message' && this.preferences.read().messageNotice !== 'always'
           && !this.banner.node?.contains(document.activeElement)) this.banner.dismiss();
       }
@@ -33,7 +33,6 @@ class ChatAlerts {
     for (const event of ['focus', 'blur']) window.addEventListener(event, this.attention);
     document.addEventListener('visibilitychange', this.attention);
     document.addEventListener('focusin', this.attention);
-    ui.elements.chatlog?.addEventListener('scroll', this.attention, { passive: true });
     this.storageChanged = event => {
       if (event.key !== null && event.key !== this.preferences.key()) return;
       this.preferences.invalidate(event.key); this.settingsChanged(); this.view.refresh();
@@ -191,7 +190,6 @@ class ChatAlerts {
     for (const event of ['focus', 'blur']) window.removeEventListener(event, this.attention);
     document.removeEventListener('visibilitychange', this.attention);
     document.removeEventListener('focusin', this.attention);
-    this.ui.elements.chatlog?.removeEventListener('scroll', this.attention);
     window.removeEventListener('storage', this.storageChanged);
   }
 }

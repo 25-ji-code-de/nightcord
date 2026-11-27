@@ -559,6 +559,80 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     assert.equal(await page.locator('.main').evaluate(node => node.inert), false);
   });
 
+  await t.test('long history skips distant groups, preserves navigation and avoids repeated scroll work', async t => {
+    const { page } = await fixture(t);
+    const initial = await page.evaluate(async () => {
+      window.frame = () => new Promise(requestAnimationFrame);
+      ui.messages = Array.from({ length: 512 }, (_, i) => ({
+        ...ui.createMessageData(peer.displayName, `History ${i} **formatted** ` + 'variable height '.repeat(i % 5), 1700000000000 + i), profile: peer,
+      }));
+      ui.renderMessages();
+      do { await frame(); } while (ui.messageRenderFrame !== null || ui.messageBuild);
+      await frame(); await frame();
+      window.savedRow = ui.messageIndex.get(1700000000000);
+      const groups = [...ui.elements.chatlog.querySelectorAll('.message-batch')];
+      return { rows: ui.elements.chatlog.querySelectorAll('.message').length, groups: groups.length,
+        bounded: groups.every(group => group.childElementCount <= 16),
+        containment: getComputedStyle(groups[0]).contentVisibility,
+        bottom: ui.elements.chatlog.scrollHeight - ui.elements.chatlog.scrollTop - ui.elements.chatlog.clientHeight };
+    });
+    assert.equal(initial.rows, 512);
+    assert.equal(initial.groups, 32);
+    assert.equal(initial.bounded, true);
+    assert.equal(initial.containment, 'auto');
+    assert.ok(initial.bottom < 2, 'initial history still follows the newest message');
+
+    const navigation = await page.evaluate(async () => {
+      const log = ui.elements.chatlog;
+      log.scrollTop = 1500; await frame(); await frame();
+      const top = log.scrollTop;
+      ui.elements.chatInput.value = 'draft survives navigation';
+      for (const kind of ['help', 'search', 'inbox']) {
+        features.open(kind); await frame();
+        features.close(false); await frame(); await frame();
+      }
+      // Jump into a previously skipped group, as a search result/reply does.
+      const target = ui.messageIndex.get(1700000000000 + 320);
+      target.scrollIntoView({ block: 'center', behavior: 'instant' });
+      await frame(); await frame();
+      const rect = target.getBoundingClientRect(), viewport = log.getBoundingClientRect();
+      return { sameRow: savedRow === ui.messageIndex.get(1700000000000) && savedRow.isConnected,
+        restored: features.chatScrollTop, top, draft: ui.elements.chatInput.value,
+        jumped: rect.top >= viewport.top && rect.bottom <= viewport.bottom,
+        text: target.querySelector('.message-text').textContent };
+    });
+    assert.equal(navigation.sameRow, true);
+    assert.ok(Math.abs(navigation.restored - navigation.top) < 2, 'switches retain the reading position');
+    assert.equal(navigation.draft, 'draft survives navigation');
+    assert.equal(navigation.jumped, true);
+    assert.match(navigation.text, /History 320/);
+
+    const work = await page.evaluate(async () => {
+      const log = ui.elements.chatlog;
+      let searches = 0, announcements = 0, classifications = 0;
+      const query = log.querySelector.bind(log), announce = ui.alerts.delivery.announce.bind(ui.alerts.delivery);
+      const reasons = ui.alerts.reasons.bind(ui.alerts);
+      log.querySelector = selector => { if (selector === '.is-reply-selected') searches++; return query(selector); };
+      ui.alerts.delivery.announce = (...args) => { announcements++; return announce(...args); };
+      ui.alerts.reasons = (...args) => { classifications++; return reasons(...args); };
+      ui.isAtBottom = false;
+      for (let i = 0; i < 30; i++) log.dispatchEvent(new Event('scroll'));
+      const steady = { searches, announcements };
+      features.scheduleRefresh(); await Promise.resolve();
+      classifications = 0;
+      features.open('help'); features.close(false); features.open('help'); features.close(false);
+      const cachedClassifications = classifications;
+      ui.eventBus.emit('message:received', { name: peer.displayName, user: peer, message: '@everyone new mention', timestamp: 1700000010000 });
+      await Promise.resolve(); await frame();
+      return { steady, cachedClassifications, refreshed: classifications > 0,
+        includesNew: features.mentions().some(message => message.text === '@everyone new mention') };
+    });
+    assert.deepEqual(work.steady, { searches: 0, announcements: 0 });
+    assert.equal(work.cachedClassifications, 0);
+    assert.equal(work.refreshed, true);
+    assert.equal(work.includesNew, true);
+  });
+
   if (process.env.NIGHTCORD_SCREENSHOT_DIR) {
     const { page } = await fixture(t);
     await page.evaluate(() => {

@@ -80,6 +80,10 @@ class ChatMessageView {
     if (this.ui.managedChat) return;
     try {
       const room = this.ui.currentRoom || 'nightcord-default';
+      if (this.ui.storage?.appendMessage) {
+        this.ui.storage.appendMessage(room, msgObj);
+        return;
+      }
       let localMsgs = this.ui.storage
         ? this.ui.storage.loadMessages(room)
         : (this.ui.loadLocalMessages(room) || []);

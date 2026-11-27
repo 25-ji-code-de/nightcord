@@ -12,17 +12,25 @@ return class SidebarMessages {
   }
 
   mentions() {
-    const user = this.sidebar.ui.currentUser;
+    const { ui } = this.sidebar;
+    const user = ui.currentUser;
     if (!user) return [];
+    const cached = this.mentionsCache;
+    if (cached && cached.messages === ui.messages && cached.length === ui.messages.length
+        && cached.room === ui.currentRoom && cached.userId === user.id && cached.name === user.displayName) return cached.value;
     const seen = new Set();
-    const messages = new Map(this.messages().map(message => [Number(message.replyKey || message.timestamp), message]));
-    return this.messages().filter(message => {
+    const history = this.messages();
+    const messages = new Map(history.map(message => [Number(message.replyKey || message.timestamp), message]));
+    const value = history.filter(message => {
       const key = messageKey(message);
       if (!message.profile?.id || message.profile.id === user.id || message.sender || seen.has(key)
         || !(this.sidebar.ui.alerts ? this.sidebar.ui.alerts.reasons(message, ts => messages.get(ts)).some(kind => kind !== 'message')
           : this.sidebar.ui.mentions?.isMentioned(message.text, user))) return false;
       seen.add(key); return true;
     }).sort((a, b) => b.timestamp - a.timestamp).slice(0, 2000);
+    this.mentionsCache = { messages: ui.messages, length: ui.messages.length,
+      room: ui.currentRoom, userId: user.id, name: user.displayName, value };
+    return value;
   }
 
   resultsList(renderMore = () => this.sidebar.refresh()) {

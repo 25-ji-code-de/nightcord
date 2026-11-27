@@ -30,6 +30,9 @@ class StorageManager {
     this.legacyLastKey = opts.legacyLastKey || 'nightcord-lastmsg';
     this.defaultRoom = opts.defaultRoom || 'nightcord-default';
     this.knownProfiles = new Map();
+    this.knownProfilesRaw = undefined;
+    this.pendingMessages = new Map();
+    this.messageFlushTimer = null;
 
     // 自动执行一次旧数据迁移（如果存在旧键）
     try {
@@ -38,6 +41,12 @@ class StorageManager {
       // 不阻塞主流程
       console.warn('StorageManager: migrateLegacy failed', e);
     }
+    // A short batch keeps synchronous storage off the receive path. Flush before
+    // leaving/backgrounding so a reload does not lose the last received messages.
+    window.addEventListener?.('pagehide', () => this.flushMessages());
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.flushMessages();
+    });
   }
 
   storageKeyMessages(room) { return `nightcord-messages:${room}`; }
@@ -62,7 +71,10 @@ class StorageManager {
 
   loadKnownProfiles() {
     try {
-      const entries = JSON.parse(localStorage.getItem('nightcord-known-profiles') || '[]');
+      const raw = localStorage.getItem('nightcord-known-profiles');
+      // Read the current value to notice other tabs, but parse/sort only changes.
+      if (raw === this.knownProfilesRaw) return;
+      const entries = JSON.parse(raw || '[]');
       if (Array.isArray(entries)) {
         for (const entry of entries.slice(-1000)) {
           const profile = this.normalizeProfile(entry?.profile);
@@ -73,6 +85,7 @@ class StorageManager {
           }
         }
       }
+      this.knownProfilesRaw = raw;
     } catch { /* Unavailable or malformed storage must not prevent profile display. */ }
     const entries = [...this.knownProfiles.values()].sort((a, b) => a.observedAt - b.observedAt).slice(-1000);
     this.knownProfiles = new Map(entries.map(entry => [entry.profile.id, entry]));
@@ -87,7 +100,9 @@ class StorageManager {
     this.knownProfiles.set(profile.id, { profile, observedAt: Date.now() });
     if (this.knownProfiles.size > 1000) this.knownProfiles.delete(this.knownProfiles.keys().next().value);
     try {
-      localStorage.setItem('nightcord-known-profiles', JSON.stringify([...this.knownProfiles.values()]));
+      const raw = JSON.stringify([...this.knownProfiles.values()]);
+      localStorage.setItem('nightcord-known-profiles', raw);
+      this.knownProfilesRaw = raw;
     } catch { /* Retain the in-memory observation even if storage is full or blocked. */ }
   }
 
@@ -99,10 +114,38 @@ class StorageManager {
   }
 
   loadMessages(room) {
+    this.flushMessages(room);
     try {
       const messages = JSON.parse(localStorage.getItem(this.storageKeyMessages(room)) || '[]');
       return this.normalizeAIMessages(messages, room);
     } catch (e) { return []; }
+  }
+
+  appendMessage(room, message) {
+    let pending = this.pendingMessages.get(room);
+    if (!pending) this.pendingMessages.set(room, pending = []);
+    pending.push(message);
+    if (pending.length > 2000) pending.splice(0, pending.length - 2000);
+    if (this.messageFlushTimer === null) {
+      this.messageFlushTimer = setTimeout(() => this.flushMessages(), 100);
+    }
+  }
+
+  flushMessages(room) {
+    const rooms = room === undefined ? [...this.pendingMessages.keys()] : [room];
+    for (const key of rooms) {
+      const pending = this.pendingMessages.get(key);
+      if (!pending) continue;
+      this.pendingMessages.delete(key);
+      // Read at commit time, including writes from other tabs during the batch.
+      const stored = this.loadMessages(key);
+      this.saveMessages(key, [...(Array.isArray(stored) ? stored : []), ...pending].slice(-2000));
+      this.setLastMsgTimestamp(key, Math.max(this.getLastMsgTimestamp(key), ...pending.map(message => message.timestamp)));
+    }
+    if (!this.pendingMessages.size && this.messageFlushTimer !== null) {
+      clearTimeout(this.messageFlushTimer);
+      this.messageFlushTimer = null;
+    }
   }
 
   saveMessages(room, msgs) {
@@ -123,6 +166,7 @@ class StorageManager {
   }
 
   getLastMsgTimestamp(room) {
+    this.flushMessages(room);
     try { return Number(localStorage.getItem(this.storageKeyLastMsg(room)) || 0); } catch (e) { return 0; }
   }
 

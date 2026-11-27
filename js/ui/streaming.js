@@ -2,7 +2,16 @@
  * Copyright (C) 2025 The 25-ji-code-de Team */
 /** StreamingMessageView: streamingView component; ui supplies shared presentation context. */
 class StreamingMessageView {
-  constructor(ui) { this.ui = ui; }
+  constructor(ui) {
+    this.ui = ui;
+    this.streams = new Map();
+    this.contents = new WeakMap();
+    this.pending = new Set();
+    this.frame = null;
+    for (const event of ['room:changed', 'chat:cleared']) ui.eventBus.on(event, () => {
+      for (const id of this.streams.keys()) this.cancelStreamingMessage(id);
+    });
+  }
 
   /**
    * 开始流式消息
@@ -18,6 +27,8 @@ class StreamingMessageView {
     const msgDiv = this.ui.createMessageElement(messageData);
     msgDiv.dataset.messageId = messageId;
     msgDiv.classList.add('streaming');
+    this.streams.set(messageId, msgDiv);
+    this.contents.set(msgDiv, '');
 
     // 添加到 DOM
     this.ui.elements.chatlog.appendChild(msgDiv);
@@ -36,36 +47,68 @@ class StreamingMessageView {
    * @param {string} chunk - 文本片段
    */
   appendStreamingContent(messageId, chunk) {
-    const msgDiv = this.ui.elements.chatlog.querySelector(`[data-message-id="${messageId}"]`);
+    // Resolve in O(1), even with thousands of messages preceding the preview.
+    const msgDiv = this.streams.get(messageId);
     if (!msgDiv) return;
 
-    let textElement = msgDiv.querySelector('.message-text');
+    // Keep the source separate from rendered text (Markdown/SEKAI tokens can
+    // disappear from textContent). Coalesce all chunks received before a frame.
+    this.contents.set(msgDiv, (this.contents.get(msgDiv) || '') + chunk);
+    this.pending.add(msgDiv);
+    if (this.frame !== null) return;
+    if (typeof requestAnimationFrame === 'function') {
+      this.frame = requestAnimationFrame(() => this.flushStreamingContent());
+    } else {
+      this.flushStreamingContent();
+    }
+  }
 
-    // 如果还没有文本元素，创建一个
+  forgetStream(messageId) {
+    const msgDiv = this.streams.get(messageId);
+    this.streams.delete(messageId);
+    this.pending.delete(msgDiv);
+    if (msgDiv) this.contents.delete(msgDiv);
+    if (!this.pending.size && this.frame !== null) {
+      cancelAnimationFrame(this.frame);
+      this.frame = null;
+    }
+    return msgDiv;
+  }
+
+  cancelStreamingMessage(messageId) {
+    this.forgetStream(messageId)?.remove();
+  }
+
+  renderStreamingContent(msgDiv, content) {
+    let textElement = msgDiv.querySelector('.message-text');
     if (!textElement) {
       textElement = document.createElement('p');
       textElement.className = 'message-text sekai-message__text';
-      const contentDiv = msgDiv.querySelector('.message-content');
-      if (contentDiv) {
-        contentDiv.appendChild(textElement);
-      }
+      msgDiv.querySelector('.message-content')?.appendChild(textElement);
     }
-
-    // 获取当前文本并追加
-    const currentText = textElement.textContent + chunk;
-
-    // 重新渲染（支持 SEKAI 富文本）
-    textElement.innerHTML = '';
     if (this.ui.sekaiRenderer) {
-      textElement.appendChild(this.ui.sekaiRenderer.render(currentText));
+      textElement.replaceChildren(this.ui.sekaiRenderer.render(content));
     } else if (this.ui.stickerService) {
-      textElement.appendChild(this.ui.stickerService.renderTextWithStickers(currentText));
+      textElement.replaceChildren(this.ui.stickerService.renderTextWithStickers(content));
     } else {
-      textElement.textContent = currentText;
+      textElement.textContent = content;
     }
+  }
 
-    // 智能滚动
-    if (this.ui.shouldAutoScrollToBottom()) {
+  flushStreamingContent() {
+    this.frame = null;
+    let changed = false;
+    for (const msgDiv of this.pending) {
+      // Cancellation or a room change can detach the preview before this frame.
+      if (!this.ui.elements.chatlog.contains(msgDiv) || !msgDiv.classList.contains('streaming')) {
+        this.forgetStream(msgDiv.dataset.messageId);
+        continue;
+      }
+      this.renderStreamingContent(msgDiv, this.contents.get(msgDiv) || '');
+      changed = true;
+    }
+    this.pending.clear();
+    if (changed && this.ui.shouldAutoScrollToBottom()) {
       this.ui.elements.chatlog.scrollTop = this.ui.elements.chatlog.scrollHeight;
     }
   }
@@ -79,7 +122,7 @@ class StreamingMessageView {
    */
   finishStreamingMessage(messageId, user, fullContent, reasoning = '') {
     // 移除流式标记，但保留消息元素
-    const msgDiv = this.ui.elements.chatlog.querySelector(`[data-message-id="${messageId}"]`);
+    const msgDiv = this.forgetStream(messageId);
     if (msgDiv) {
       delete msgDiv.dataset.messageId;
       msgDiv.classList.remove('streaming');
@@ -88,18 +131,7 @@ class StreamingMessageView {
       msgDiv.dataset.localNakoMessageId = messageId;
 
       // 更新消息内容（去掉开头和结尾的空白）
-      const textElement = msgDiv.querySelector('.message-text');
-      if (textElement) {
-        const cleanContent = fullContent.trim();
-        textElement.innerHTML = '';
-        if (this.ui.sekaiRenderer) {
-          textElement.appendChild(this.ui.sekaiRenderer.render(cleanContent));
-        } else if (this.ui.stickerService) {
-          textElement.appendChild(this.ui.stickerService.renderTextWithStickers(cleanContent));
-        } else {
-          textElement.textContent = cleanContent;
-        }
-      }
+      this.renderStreamingContent(msgDiv, fullContent.trim());
 
       // 如果有思考过程，在昵称旁边添加思考图标（仅桌面端显示）
       if (reasoning && reasoning.trim()) {
@@ -111,6 +143,9 @@ class StreamingMessageView {
           thinkingIcon.title = reasoning.trim();
           headerDiv.appendChild(thinkingIcon);
         }
+      }
+      if (this.ui.shouldAutoScrollToBottom()) {
+        this.ui.elements.chatlog.scrollTop = this.ui.elements.chatlog.scrollHeight;
       }
     }
 

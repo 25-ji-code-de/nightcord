@@ -2,7 +2,25 @@
  * Copyright (C) 2025 The 25-ji-code-de Team */
 /** MessageListView: messageList component; ui supplies shared presentation context. */
 class MessageListView {
+  static BATCH_SIZE = 16;
   constructor(ui) { this.ui = ui; }
+
+  // Bound rendering work to small groups without removing message nodes. Media,
+  // selections and reply indexes survive scrolling; the browser skips distant groups.
+  groupMessages(rows, previous = null) {
+    const fragment = document.createDocumentFragment();
+    let batch = previous?.classList.contains('message-batch') ? previous : null;
+    while (rows.firstChild) {
+      if (!batch || batch.childElementCount >= MessageListView.BATCH_SIZE) {
+        batch = document.createElement('div');
+        batch.className = 'message-batch';
+        fragment.appendChild(batch);
+      }
+      batch.appendChild(rows.firstChild);
+      batch.style.setProperty('--message-batch-height', `${batch.childElementCount * 72}px`);
+    }
+    return fragment;
+  }
 
   /**
    * 请求重建消息列表；同一帧内的追加会一并从最新 messages 渲染。
@@ -97,7 +115,7 @@ class MessageListView {
       }
       this.ui.messageIndex = build.index;
       this.ui.messageMeta = build.meta;
-      this.ui.elements.chatlog.replaceChildren(build.fragment, ...streams);
+      this.ui.elements.chatlog.replaceChildren(this.groupMessages(build.fragment), ...streams);
       this.ui.messageBuild = null;
       if (this.shouldAutoScrollToBottom()) this.ui.elements.chatlog.scrollTop = this.ui.elements.chatlog.scrollHeight;
       PerformanceOptimizer.mark('renderMessages-end');
@@ -116,10 +134,12 @@ class MessageListView {
     messages.forEach(msg => fragment.appendChild(this.ui.createMessageElement(msg)));
 
     if (rebuild) {
-      chatlog.replaceChildren(fragment);
+      chatlog.replaceChildren(this.groupMessages(fragment));
     } else {
       // 保留已有消息节点及其状态，新消息仍排在流式回复之前。
-      chatlog.insertBefore(fragment, chatlog.querySelector('.streaming'));
+      const stream = chatlog.querySelector('.streaming');
+      const previous = stream ? stream.previousElementSibling : chatlog.lastElementChild;
+      chatlog.insertBefore(this.groupMessages(fragment, previous), stream);
     }
 
     // Read the final height once per batch so new messages are visible without

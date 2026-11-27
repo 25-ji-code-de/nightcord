@@ -16,31 +16,54 @@ function cursorPos(t, list) {
   return [lerp(list[i][1], list[i + 1][1], k), lerp(list[i][2], list[i + 1][2], k)];
 }
 
-// 镜头：缩放按 ZOOM 关键帧；中心是光标位置的滑动平均（向前看半个窗口），
-// 所以镜头像摄影师一样稳稳跟着光标，不会每个动作都抖一下。
+// 平滑过渡曲线：起止处速度和加速度都为 0，推拉不会有“顿一下”的感觉。
+const smoother = x => { x = clamp(x); return x * x * x * (x * (x * 6 - 15) + 10); };
+// 软夹紧：在边界附近用平滑曲线代替硬折角，镜头跟随贴边时不会突然停住。
+function softClamp(v, lo, hi, k = 60) {
+  const sp = u => (u > 20 ? u : Math.log1p(Math.exp(u)));
+  return lo + k * sp((v - lo) / k) - k * sp((v - hi) / k);
+}
+
+// 推近程度 z ∈ [0, 1] 与这一段的目标倍率。
+function zoomAt(t) {
+  for (const [a, b, c, d, s] of ZOOM_SPANS) {
+    if (t >= a && t <= d) return { z: t < b ? smoother(seg(t, a, b)) : t > c ? 1 - smoother(seg(t, c, d)) : 1, s, hold: c };
+  }
+  return { z: 0, s: S_BASE };
+}
+
+// 光标的平滑轨迹：1.2 秒的三角窗加权平均，并略微提前（镜头像摄影师一样预判光标去向）。
+function followPoint(t) {
+  let ax = 0, ay = 0, n = 0;
+  for (let k = -24; k <= 24; k++) {
+    const w = 1 - Math.abs(k) / 25;
+    const [x, y] = cursorPos(t + 0.2 + k * FOLLOW_WIN / 48, CUR_WIN);
+    ax += x * w; ay += y * w; n += w;
+  }
+  return [ax / n, ay / n];
+}
+
+// 镜头：画面中心对准窗口里的点 f，缩放 s。
+// 全景时 f 是窗口中心（画面略偏下）；推近时 f 渐变到平滑后的光标位置，倍率在对数空间插值，
+// 这样推拉的“感知速度”是均匀的。f 预先软夹紧到目标倍率下窗口能盖满画面的范围，过程中无需硬夹紧。
 const CAM_CACHE = new Map();
 function camera(t) {
   const key = t.toFixed(4);
   if (CAM_CACHE.has(key)) return CAM_CACHE.get(key);
-  const s = track(t, ZOOM, EASE.cam)[0];
-  let ax = 0, ay = 0, n = 0;
-  for (let k = -12; k <= 12; k++) {
-    const w = 1 - Math.abs(k) / 13;
-    const [x, y] = cursorPos(t + 0.25 + k * FOLLOW_LAG / 24, CUR_WIN);
-    ax += x * w; ay += y * w; n += w;
+  const { z, s: sMax, hold } = zoomAt(t);
+  const s = Math.exp(lerp(Math.log(S_BASE), Math.log(sMax), z));
+  let fx = WIN_W / 2, fy = WIN_H / 2;
+  if (z > 0) {
+    // 拉远时不再追光标（光标此刻往往正快速移向下一个按钮），只平稳地退回全景。
+    // 跟随时间在 hold 之后指数减速（起点导数为 1），速度连续，不会突然刹车。
+    const tf = t <= hold ? t : hold + 0.3 * (1 - Math.exp(-(t - hold) / 0.3));
+    const [cx, cy] = followPoint(tf);
+    const hx = 960 / sMax, hy = 540 / sMax;
+    fx = lerp(fx, softClamp(cx, hx, WIN_W - hx), z);
+    fy = lerp(fy, softClamp(cy, hy, WIN_H - hy), z);
   }
-  ax /= n; ay /= n;
-  // 缩放越接近全景，中心越接近窗口中心；全景时窗口居中偏下（给画面上方留空）。
-  const span = ZOOM_SPANS.find(([a, , , d]) => t >= a && t <= d);
-  const z = span ? seg(s, S_BASE, span[4]) : 0;
-  const fx = lerp(WIN_W / 2, ax, z), fy = lerp(WIN_H / 2, ay, z);
-  const baseY = 540 + 50 * (1 - z);
-  let x = 960 - fx * s, y = baseY - fy * s;
-  // 窗口比画面大时必须盖满画面，比画面小时必须完整留在画面内；两种约束在临界缩放处连续衔接。
-  const ex = 1920 - WIN_W * s, ey = 1080 - WIN_H * s;
-  x = clamp(x, Math.min(0, ex), Math.max(0, ex));
-  y = clamp(y, Math.min(0, ey), Math.max(0, ey));
-  const cam = { x, y, s };
+  const cy = 540 + 50 * (1 - z);
+  const cam = { x: 960 - fx * s, y: cy - fy * s, s };
   if (CAM_CACHE.size > 4000) CAM_CACHE.clear();
   CAM_CACHE.set(key, cam);
   return cam;

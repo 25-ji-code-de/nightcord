@@ -16,14 +16,6 @@
 #lines path, #badge path { fill: none; stroke: rgba(236,228,255,.7); stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 0 2; }
 #badge path.fill { fill: #fff; fill-rule: evenodd; stroke: none; stroke-dasharray: none; }
 
-#tiles { left: 0; top: 0; z-index: 17; }
-.tile {
-  position: absolute; left: 0; top: 0; width: 480px; height: 300px; border-radius: 12px; overflow: hidden; display: none;
-  background: #2b2633; transform-origin: 50% 50%;
-  box-shadow: 0 0 0 1px rgba(255,255,255,.14), 0 30px 70px rgba(0,0,0,.5);
-}
-.tile img { position: absolute; left: 0; top: 0; width: 480px; height: 300px; }
-
 #mont { left: 0; top: 0; width: 1920px; height: 1080px; z-index: 50; overflow: hidden; display: none; background: #0b0912; }
 .mshot { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; transform-origin: 0 0; overflow: hidden; display: none; background: #2b2633; }
 .mshot img { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; }

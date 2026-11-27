@@ -40,7 +40,6 @@ const BADGE = {
   outer: svg('path', badgeG, { pathLength: 1 }),
   inner: svg('path', badgeG, { pathLength: 1 }),
   eyes: [svg('path', badgeG), svg('path', badgeG)],
-  ripples: [svg('path', badgeSvg, { pathLength: 1 }), svg('path', badgeSvg, { pathLength: 1 })],
 };
 
 // 窗口：真实前端截图的叠放
@@ -80,13 +79,6 @@ const linesSvg = $('#lines');
 const LINE_EL = {};
 for (const id of ['w0', 'w1', 'w2', 'frame', 'p0', 'p1']) LINE_EL[id] = svg('path', linesSvg, { pathLength: 1 });
 PHONE.x.forEach((x, i) => LINE_EL['p' + i].setAttribute('d', rrect(x, PHONE.y, PHONE.w, PHONE.h, PHONE.r)));
-
-// 卡片墙：完整界面的缩略图，3 × 2 排列。
-const TILE_EL = TILES.map(src => {
-  const el = mk('div', 'tile', null, $('#tiles'));
-  mk('img', null, null, el).src = `../shots/${src}.png`;
-  return el;
-});
 
 // 局部特写：每张是一份完整的 1440x900 窗口，再按镜头裁切放大。
 const MONT_EL = MONTAGE.map(m => {

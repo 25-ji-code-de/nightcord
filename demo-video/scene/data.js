@@ -80,18 +80,20 @@ const MONTAGE = [
 ];
 const MONT_END = MONT_T0 + MONTAGE.length * MONT_STEP;   // = beat(96)
 
-// 第二次高潮后半：两部手机（第 96 拍先勾轮廓再落定，第 99 拍互相转向，第 101.5 拍一上一下飞出画面）。
-const PHONE = { w: 392, h: 820, r: 64, y: 130, x: [554, 974], outline: [MONT_END, MONT_END + 0.6], in: MONT_END + 0.3, turn: beat(99), out: beat(101.5) };
+// 第二次高潮后半：两部手机（第 96 拍先勾轮廓再落定），第 102 拍合成正中的一部，一直停到结尾变形。
+const PHONE = { w: 392, h: 820, r: 64, y: 130, x: [554, 974], outline: [MONT_END, MONT_END + 0.6], in: MONT_END + 0.3, merge: beat(102) };
+// 正中那部手机在舞台上的几何：机身、灵动岛、底部横条（变形成徽章的外圆和两只眼睛）。
+const PH_BOX = { x: 960 - PHONE.w / 2, y: PHONE.y, w: PHONE.w, h: PHONE.h, r: PHONE.r };
+const PH_ISL = { x: PH_BOX.x + 11 + 137, y: PH_BOX.y + 11 + 10, w: 96, h: 26, r: 13 };
+const PH_BAR = { x: 960 - 60, y: PH_BOX.y + PH_BOX.h - 26, w: 120, h: 6, r: 3 };
 
-// 卡片墙：六个界面缩略图每半拍落一张（101.5–104 拍）；105–108 拍每拍点亮一张；第 109 拍起依次卷向中心。
-const TILE_W = 480, TILE_H = 300, TILE_GAP = 40;
-const TILES = ['chat', 'inbox-clean', 'search-2', 'voice-panel', 'settings-indigo', 'tasks'];
-const TILE_T = { in: beat(101.5), step: BEAT / 2, pop: [beat(105), beat(106), beat(107), beat(108)], popIdx: [0, 4, 2, 3] };
-
-// 结尾过门（参考音乐第 109–115 拍每拍一击）：
-// 109 拍卡片卷向中心 → 110 拍勾出圆 → 111 拍内圆与眼睛 → 112 拍填色并弹一下
-// → 113.5 拍移到字标月牙的位置 → 115 拍（最后一击）字标亮出。徽章只在最后约 2 秒出现。
-const END = { gather: beat(109), ring: beat(110), build: beat(111), filled: beat(112), move: beat(113.5), hit: beat(115), fade: DUR - 0.35 };
+// 结尾，照参考片的做法（参考音乐第 109–115 拍每拍一击，第 115 拍最后一击，57.8 秒收住）：
+// 108.6 拍手机开始带透视倾斜 → 109 拍屏幕褪成线框 → 109.6–111.8 拍线框变形成徽章（全程只有线条）
+// → 113.6–115 拍徽章缩小、移到字标月牙的位置 → 第 115 拍月牙填实，字标浮现。
+const END = {
+  tilt: beat(108.6), wash: [beat(109), beat(110)], morph: [beat(109.6), beat(111.8)], inner: [beat(110.6), beat(111.9)],
+  move: [beat(113.6), beat(115)], hit: beat(115), fade: DUR - 0.35,
+};
 const BADGE_R = 150;
 const WM_SC = 0.9;
 const WM_POS = [960 - 542 * WM_SC, 540 - 108 * WM_SC];

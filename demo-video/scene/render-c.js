@@ -67,55 +67,32 @@ function renderMontage(t) {
   });
 }
 
-// 手机：落进轮廓 → 第 99 拍互相转向（带一点透视）→ 第 101.5 拍一部向上、一部向下飞出画面。
+// 手机：落进轮廓 → 第 102 拍两部合成正中的一部（聊天那部在上）→ 结尾带透视倾斜，屏幕褪成线框，交给徽章线条。
 function renderPhones(t) {
-  const turn = EASE.cam(seg(t, PHONE.turn, PHONE.turn + 0.8));
-  const bob = Math.sin(t * 0.9);
+  const merge = EASE.cam(seg(t, PHONE.merge, PHONE.merge + 1.1));
+  const wash = EASE.std(seg(t, END.wash[0], END.wash[1]));
+  const pose = endPose(t);
+  const bob = Math.sin(t * 0.9) * (1 - merge);
   PH.forEach((el, i) => {
     const d = PHONE.in + i * 0.12;
     const k = EASE.ios(seg(t, d, d + 0.9));
-    const out = EASE.std(seg(t, PHONE.out + i * 0.08, PHONE.out + i * 0.08 + 0.55));
-    const dir = i === 0 ? -1 : 1;
+    const away = i === 1 ? EASE.std(seg(t, PHONE.merge + 0.4, PHONE.merge + 1.1)) : 0;
     const ok = put(el, {
-      x: PHONE.x[i] + turn * dir * -36, y: PHONE.y + (1 - k) * 40 + bob * (3 + i * 2) + out * dir * 1150,
-      s: lerp(0.94, 1, k), o: k, b: (1 - k) * 6 + out * 6,
+      x: lerp(PHONE.x[i], PH_BOX.x, merge), y: PHONE.y + (1 - k) * 40 + bob * (3 + i * 2),
+      s: lerp(0.94, 1, k) * (1 - 0.04 * away), o: k * (1 - away) * (1 - wash), b: (1 - k) * 6,
     });
-    if (ok) el.style.transform = `perspective(1600px) ${el.style.transform} rotateY(${(turn * dir * -14 + out * dir * 10).toFixed(2)}deg) rotateZ(${(out * dir * -8).toFixed(2)}deg)`;
-  });
-}
-
-// 卡片墙：3 × 2 的完整界面缩略图每半拍落一张，随后每拍点亮一张，第 109 拍起卷向中心，徽章从中心长出。
-function renderTiles(t) {
-  const tiles = $('#tiles');
-  if (t < TILE_T.in - 0.05 || t > END.ring + 0.6) { vis(tiles, false); return; }
-  vis(tiles, true);
-  const drift = (t - TILE_T.in) * 14;
-  TILE_EL.forEach((el, i) => {
-    const col = i % 3, row = Math.floor(i / 3);
-    const x0 = 960 + (col - 1) * (TILE_W + TILE_GAP) - TILE_W / 2 - drift + 20;
-    const y0 = 540 + (row - 0.5) * (TILE_H + TILE_GAP) - TILE_H / 2;
-    const k = EASE.ios(seg(t, TILE_T.in + i * TILE_T.step, TILE_T.in + i * TILE_T.step + 0.7));
-    // 点亮：被点到的那张放大一点、其余略暗
-    let lit = 0, dim = 0;
-    TILE_T.pop.forEach((p0, n) => {
-      const on = seg(t, p0, p0 + 0.12) * (1 - seg(t, p0 + BEAT - 0.12, p0 + BEAT));
-      if (TILE_T.popIdx[n] === i) lit = Math.max(lit, on); else dim = Math.max(dim, on);
-    });
-    // 收拢：按与中心的距离先后卷进去，边转边缩
-    const g = EASE.cam(seg(t, END.gather + (i % 3 === 1 ? 0 : 0.08) + row * 0.05, END.ring + 0.35));
-    const ang = g * (col - 1 || 0.5) * 70 * (row ? 1 : -1);
-    put(el, {
-      x: lerp(x0, 960 - TILE_W / 2, g), y: lerp(y0 + (1 - k) * 90, 540 - TILE_H / 2, g),
-      s: lerp(0.9, 1, k) * (1 + 0.07 * EASE.out(lit)) * lerp(1, 0.12, g), r: ang + (1 - k) * (col - 1) * 4,
-      o: Math.min(1, k * 1.5) * (1 - EASE.std(seg(g, 0.7, 1))), b: (1 - k) * 6,
-    });
-    el.style.zIndex = lit > 0.5 ? 3 : 1;
-    el.style.filter = (dim > 0 ? `brightness(${(1 - 0.35 * dim).toFixed(3)})` : '') + ((1 - k) * 6 > 0.05 ? ` blur(${((1 - k) * 6).toFixed(2)}px)` : '');
+    // 与线框用同一组旋转和斜切（围绕舞台中心），屏幕淡出时线框正好叠在机身上
+    if (ok && (pose.rot || pose.skew)) {
+      el.style.transformOrigin = `${960 - PH_BOX.x}px ${540 - PH_BOX.y}px`;
+      el.style.transform += ` rotate(${pose.rot.toFixed(3)}deg) skewY(${pose.skew.toFixed(3)}deg)`;
+    } else if (ok) el.style.transformOrigin = '';
+    // 褪色：先变灰变淡，像参考片里屏幕“洗白”成线稿
+    el.style.filter = wash > 0.01 ? `grayscale(${wash.toFixed(3)}) brightness(${(1 + 0.6 * wash).toFixed(3)})` + el.style.filter : el.style.filter;
   });
 }
 
 // 舞台级运镜：高潮落拍时整体轻推一下，平时有极轻的漂移，避免画面完全静止。
-const PUNCH = [[beat(48), 0.025], [beat(80), 0.03], [beat(96), 0.015], [END.filled, 0.02], [END.hit, 0.02]];
+const PUNCH = [[beat(48), 0.025], [beat(80), 0.03], [beat(96), 0.015], [END.hit, 0.012]];
 function renderStage(t) {
   let punch = 0;
   for (const [t0, a] of PUNCH) if (t >= t0) punch += a * Math.exp(-(t - t0) / 0.22);
@@ -132,11 +109,9 @@ function render(t) {
   renderCard(t);
   renderWindow(t, cam);
   renderPhones(t);
-  renderTiles(t);
   renderLines(t);
   renderMontage(t);
   renderBadge(badgeIntro(t) || badgeOutro(t));
-  renderRipples(t);
   renderWordmark(t);
   renderCursor(t, cam);
   put($('#fade'), { o: EASE.cam(seg(t, END.fade, DUR)) });

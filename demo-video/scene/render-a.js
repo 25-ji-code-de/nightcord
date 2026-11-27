@@ -47,7 +47,7 @@ function renderBadge(s) {
   const o = s.box || { x: cx - R, y: cy - R, w: 2 * R, h: 2 * R, r: R };
   const outerD = rrect(o.x, o.y, o.w, o.h, o.r);
   const innerD = circ(cx + 4 * u, cy, 12 * u);
-  const eyeD = [circ(cx, cy, 2 * u), circ(cx + 8 * u, cy, 2 * u)];
+  const eyeD = s.eyeBoxes ? s.eyeBoxes.map(e => rrect(e.x, e.y, e.w, e.h, e.r)) : [circ(cx, cy, 2 * u), circ(cx + 8 * u, cy, 2 * u)];
   BADGE.outer.setAttribute('d', outerD);
   BADGE.inner.setAttribute('d', innerD);
   BADGE.eyes.forEach((e, i) => e.setAttribute('d', eyeD[i]));
@@ -57,7 +57,11 @@ function renderBadge(s) {
   BADGE.outer.style.opacity = BADGE.inner.style.opacity = (s.lineO ?? 1).toFixed(3);
   BADGE.eyes.forEach(e => { e.style.opacity = ((s.lineO ?? 1) * s.eyes).toFixed(3); });
   BADGE.fill.style.opacity = s.fill.toFixed(3);
-  badgeG.setAttribute('transform', s.rot ? `rotate(${s.rot.toFixed(3)} ${cx.toFixed(1)} ${cy.toFixed(1)})` : '');
+  // 旋转与斜切都围绕 (px, py)（默认徽章中心）；斜切模拟参考片里线框“带透视翻过来”的感觉。
+  const px = s.pivot ? s.pivot[0] : cx, py = s.pivot ? s.pivot[1] : cy;
+  badgeG.setAttribute('transform', s.rot || s.skew
+    ? `translate(${px.toFixed(1)} ${py.toFixed(1)}) rotate(${(s.rot || 0).toFixed(3)}) skewY(${(s.skew || 0).toFixed(3)}) translate(${(-px).toFixed(1)} ${(-py).toFixed(1)})`
+    : '');
   badgeSvg.style.opacity = (s.o ?? 1).toFixed(3);
 }
 
@@ -75,48 +79,49 @@ function badgeIntro(t) {
   };
 }
 
-// 结尾：卡片卷进中心的同时勾出外圆 → 内圆与眼睛 → 填色并弹一下 → 移到字标月牙的位置，最后一击交给字标。
+// 结尾的手机姿态：先往一侧带透视倾斜，变形过程中回正。手机 DOM 与线框共用这组值，交接处严丝合缝。
+function endPose(t) {
+  const lean = EASE.cam(seg(t, END.tilt, END.wash[1]));
+  const settle = EASE.cam(seg(t, END.morph[0] + 0.3, END.morph[1] + 0.3));
+  return { rot: lerp(0, 9, lean) * (1 - settle) + 7 * Math.sin(Math.PI * settle) * (1 - settle), skew: lerp(0, -6, lean) * (1 - settle) };
+}
+
+const rbox = (b, k, c) => ({ x: lerp(b.x, c.x, k), y: lerp(b.y, c.y, k), w: lerp(b.w, c.w, k), h: lerp(b.h, c.h, k), r: lerp(b.r, c.r, k) });
+const cbox = (x, y, r) => ({ x: x - r, y: y - r, w: 2 * r, h: 2 * r, r });
+
+// 结尾（照参考片）：手机褪成线框 → 机身变形成外圆、灵动岛与底部横条变成两只眼睛、勾出内圆
+// → 线条徽章停一下 → 缩小并移到字标月牙的位置 → 最后一击时交给实心字标。全程只有线条。
 function badgeOutro(t) {
-  if (t < END.ring - 0.1 || t >= END.hit) return null;
-  const R = BADGE_R;
-  const pop = 1 + 0.12 * Math.sin(Math.PI * seg(t, END.filled, END.filled + 0.32));
-  const go = EASE.cam(seg(t, END.move, END.hit - 0.04));
+  if (t < END.wash[0] || t >= END.hit + 0.4) return null;
+  const R = BADGE_R, u = R / 16;
+  const m = EASE.cam(seg(t, END.morph[0], END.morph[1]));
+  const go = EASE.cam(seg(t, END.move[0], END.move[1]));
+  // 停留时轻轻“呼吸”一下，避免完全静止
+  const breathe = 1 + 0.018 * Math.sin(Math.PI * seg(t, END.morph[1], END.move[0]));
+  const sc = lerp(1, WM_SYM[2] / R, go) * breathe;
+  const cx = lerp(960, WM_SYM[0], go), cy = lerp(540, WM_SYM[1], go);
+  // 在“未缩放的居中徽章”坐标里算形状，再整体缩放平移到 (cx, cy)
+  const tr = b => ({ x: cx + (b.x - 960) * sc, y: cy + (b.y - 540) * sc, w: b.w * sc, h: b.h * sc, r: b.r * sc });
+  const box = tr(rbox(PH_BOX, m, cbox(960, 540, R)));
+  const eyeBoxes = [rbox(PH_ISL, m, cbox(960, 540, 2 * u)), rbox(PH_BAR, m, cbox(960 + 8 * u, 540, 2 * u))].map(tr);
+  const pose = endPose(t);
+  const line = EASE.std(seg(t, END.wash[0] + 0.15, END.wash[1]));
+  const out = EASE.std(seg(t, END.hit, END.hit + 0.35));
   return {
-    cx: lerp(960, WM_SYM[0], go), cy: lerp(540, WM_SYM[1], go), R: lerp(R * pop, WM_SYM[2], go),
-    outer: EASE.out(seg(t, END.ring, END.ring + 0.45)),
-    inner: EASE.out(seg(t, END.build, END.build + 0.4)), eyes: EASE.out(seg(t, END.build + 0.25, END.build + 0.45)),
-    fill: EASE.std(seg(t, END.filled - 0.12, END.filled + 0.12)),
-    lineO: 1 - EASE.std(seg(t, END.filled, END.filled + 0.3)),
-    rot: (1 - EASE.out(seg(t, END.ring, END.build + 0.4))) * -160,
+    cx, cy, R: R * sc, box, eyeBoxes, pivot: [cx, cy],
+    outer: 1, inner: EASE.std(seg(t, END.inner[0], END.inner[1])), eyes: 1,
+    fill: 0, lineO: line * (1 - out), rot: pose.rot, skew: pose.skew,
   };
 }
 
-// 每拍从徽章扩散出去的一圈涟漪（112、113 拍），给最后几拍一点“鼓点”。
-function renderRipples(t) {
-  const rings = BADGE.ripples;
-  [END.filled, beat(113)].forEach((t0, i) => {
-    const p = seg(t, t0, t0 + 0.75);
-    const el = rings[i];
-    if (p <= 0 || p >= 1) { el.style.opacity = '0'; return; }
-    el.setAttribute('d', circ(960, 540, BADGE_R * lerp(1.05, 2.6, EASE.out(p))));
-    el.style.opacity = (0.7 * (1 - p)).toFixed(3);
-    strokeSpan(el, 0, 1);
-  });
-}
-
 // 片尾字标：最后一击时字母依次弹出，月牙由徽章无缝接替。
+// 片尾字标（照参考片）：最后一击时整条字标一起淡入，月牙从线条徽章原位填实，不做逐字飞入。
 function renderWordmark(t) {
   const glow = $('#glow');
-  if (t < END.hit) { vis(wmEl, false); vis(glow, false); return; }
-  put(wmEl, { x: WM_POS[0], y: WM_POS[1], s: WM_SC });
+  if (t < END.hit - 0.05) { vis(wmEl, false); vis(glow, false); return; }
+  const k = EASE.std(seg(t, END.hit - 0.05, END.hit + 0.45));
+  put(wmEl, { x: WM_POS[0], y: WM_POS[1], s: WM_SC, o: k });
   wmEl.style.transformOrigin = '0 0';
-  put(glow, { x: 0, y: -60, o: 0.75 * EASE.out(seg(t, END.hit, END.hit + 0.9)) });
-  LETTERS.forEach((g, i) => {
-    if (i === 0) { g.style.opacity = '1'; g.style.transform = ''; return; }
-    const d = END.hit + (i - 1) * 0.035;
-    const k = EASE.ios(seg(t, d, d + 0.6));
-    g.style.opacity = Math.min(1, k * 1.6).toFixed(3);
-    g.style.transform = `translate(${((1 - k) * -26).toFixed(2)}px, 0px)`;
-    g.style.filter = 1 - k > 0.05 ? `blur(${((1 - k) * 8).toFixed(2)}px)` : '';
-  });
+  put(glow, { x: 0, y: -60, o: 0.45 * EASE.out(seg(t, END.hit, END.hit + 1.2)) });
+  LETTERS.forEach(g => { g.style.opacity = '1'; g.style.transform = ''; g.style.filter = ''; });
 }

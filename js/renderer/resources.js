@@ -92,13 +92,15 @@ class SekaiResources {
     }
     const clean = p.replace(/^\//, '');
 
-    // SEKAI v2 pure UUID
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clean)) {
+    // Repair accidental whitespace only when the result is a valid UUID.
+    // Legacy keys may contain meaningful spaces and must remain unchanged.
+    const uuid = clean.replace(/\s|%20/g, '');
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid)) {
       const k = (kind || 'file').toLowerCase();
       const folder = k === 'image' || k === 'images' ? 'images'
         : k === 'sticker' || k === 'stickers' || k === 'stamp' ? 'stickers'
         : 'files';
-      return `${this.resourceBaseUrl}/${folder}/${clean}`;
+      return `${this.resourceBaseUrl}/${folder}/${uuid}`;
     }
 
     // Legacy storage key: prefer storageBaseUrl (may equal resourceBaseUrl)

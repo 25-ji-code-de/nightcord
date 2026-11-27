@@ -471,13 +471,14 @@ class FileUploadService {
       return raw;
     }
 
-    // Pure UUID → typed SEKAI path
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) {
+    // Match the renderer's UUID repair without rewriting legacy keys or URLs.
+    const uuid = raw.replace(/\s|%20/g, '');
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid)) {
       const k = (kind || 'files').toLowerCase();
       const folder = k === 'image' || k === 'images' ? 'images'
         : k === 'sticker' || k === 'stickers' ? 'stickers'
         : 'files';
-      return `${this.resourceBaseUrl}/${folder}/${raw}`;
+      return `${this.resourceBaseUrl}/${folder}/${uuid}`;
     }
 
     // Legacy key: uid/file.ext. Public downloads go through r2, not storage.

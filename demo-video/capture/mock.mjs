@@ -26,47 +26,53 @@ export function startServer(port = 0) {
   return new Promise(resolve => server.listen(port, '127.0.0.1', () => resolve({ server, port: server.address().port })));
 }
 
-// 固定的“25 时”场景：2026-11-27 00:52 (UTC+8) 起。
-export const T0 = Date.UTC(2026, 10, 26, 16, 52, 0);
-const min = n => T0 + n * 60000;
+// 对话不编：人物与台词取自 demo-video/reference-chat.jpg（与 index.html 注释里保留的示例对话一致）。
+// 时间也同参考图：2026-11-26（UTC+8）15:51 起，截图时刻是 23:46 之后。
+const at = (h, m, s = 0) => Date.UTC(2026, 10, 26, h - 8, m, s);
+export const NOW = at(23, 46, 30);
+export const T_ASK = at(23, 45);       // Amia：有人在吗——？
+export const T_REPLY = at(23, 46);     // K：我在
 
 const avatarSvg = (a, b, glyph) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="64" height="64" fill="url(#g)"/><text x="32" y="43" text-anchor="middle" font-family="Noto Sans CJK SC, sans-serif" font-weight="700" font-size="30" fill="#fff" fill-opacity=".92">${glyph}</text></svg>`;
+// 头像只用首字与配色，不使用任何角色图片。
 const AVATARS = {
-  yue: ['#8b7bd8', '#4b3f8f', '月'], rin: ['#e48ab4', '#8e3f7a', '凛'], mio: ['#5fc8c1', '#2d6f93', '澪'], ya: ['#f0b36a', '#c0507a', '夜'],
+  k: ['#a06bd6', '#5b2d8e', 'K'], yuki: ['#b9a6f0', '#6d5bc4', '雪'], ena: ['#5fd0c4', '#2a8a8f', 'え'], amia: ['#f3a6cf', '#c25d97', 'A'],
 };
 const avatar = key => `https://avatars.nightcord.invalid/${key}.svg`;
 const user = (key, displayName, extra = {}) => ({ id: `sekai:${key}`, displayName, authenticated: true, avatarUrl: avatar(key), ...extra });
 
 export const USERS = {
-  yue: user('yue', '月见'),
-  rin: user('rin', '凛'),
-  mio: user('mio', '澪'),
-  ya: user('ya', '夜航'),
+  k: user('k', 'K'),
+  yuki: user('yuki', '雪'),
+  ena: user('ena', 'えななん'),
 };
-export const ME = { id: 'guest:7c2f9b1e-2d44-4f3a-9a6e-0b5d1c8a77e1', displayName: '小满', authenticated: false };
-export const ME_PASS = { id: 'sekai:xiaoman', displayName: '小满', authenticated: true, avatarUrl: avatar('ya') };
+// 视角是 Amia：游客身份进入；语音需要 SEKAI Pass，那一场用 ME_PASS。
+export const ME = { id: 'guest:7c2f9b1e-2d44-4f3a-9a6e-0b5d1c8a77e1', displayName: 'Amia', authenticated: false };
+export const ME_PASS = { id: 'sekai:amia', displayName: 'Amia', authenticated: true, avatarUrl: avatar('amia') };
+export const ASK = '有人在吗——？';
 
-const mention = (u) => `<$SEKAI:Mention:type=user;display=${encodeURIComponent(u.displayName)}:${u.id}>`;
 const reply = ts => `<$SEKAI:Reply::${ts}>`;
+// K 发的文件，与参考图一致：MIXrough02.mp3，6.9MB。
+const FILE = '[file:https://files.nightcord.invalid/MIXrough02.mp3|MIXrough02.mp3|6.9MB MP3]';
 
-// 历史消息（顺序即时间顺序）。
+// 历史消息（顺序即时间顺序）。withMine：Amia 的“有人在吗——？”已经发出。
 export function history(me, { withMine = false } = {}) {
-  const m = (n, who, message) => ({ timestamp: min(n), name: who.displayName, message, user: who });
-  const nako = (n, message) => ({ timestamp: min(n), name: '月见', message: `[Nako]${message}`, user: USERS.yue });
-  const mine = withMine ? [{ timestamp: min(2.5), name: ME.displayName, message: '我也来！先把提纲发出来', user: ME }] : [];
+  const m = (ts, who, message) => ({ timestamp: ts, name: who.displayName, message, user: who });
   return [
-    m(0, USERS.yue, '凌晨的作业，终于动笔了 🌙'),
-    m(1, USERS.rin, '我这边刚把 **第三章** 的草稿整理完'),
-    m(2, USERS.mio, '要不要开个语音一起赶？'),
-    ...mine,
-    m(3, USERS.ya, `${mention(USERS.mio)} 好，我现在就进去`),
-    m(4, USERS.yue, '顺便把参考资料贴一下：\n> 夜里写出来的东西，白天读总会有点不好意思'),
-    m(5, USERS.rin, `${reply(min(2))}可以呀，我也加入。麦克风先关着，在听`),
-    nako(6, '需要我帮你们把提纲按段落整理一下吗？我可以先出一版。'),
-    m(7, USERS.mio, `${mention(USERS.rin)} 草稿发我看看，我来帮你过一遍`),
-    m(8, USERS.ya, '倒计时：距离 25:00 还有 8 分钟 ⏳'),
+    m(at(15, 51), USERS.k, '快要可以上传了'),
+    m(at(15, 54), me, '哇，好期待♪'),
+    m(at(16, 12), USERS.k, FILE),
+    m(at(16, 13), me, '谢谢！'),
+    m(at(16, 15), USERS.yuki, '我会听的哦'),
+    m(at(20, 36), USERS.ena, '那我先下线啦'),
+    m(at(20, 38), USERS.k, '嗯。25点再见'),
+    m(at(20, 39), USERS.ena, '好～'),
+    ...(withMine ? [m(T_ASK, me, ASK)] : []),
   ];
 }
+
+// K 的回复（实时推送，回复 Amia 那条）：触发站内回复提醒、收件箱与搜索结果。
+export const K_REPLY = { timestamp: T_REPLY, name: 'K', user: USERS.k, message: `${reply(T_ASK)}我在` };
 
 const json = (route, data, status = 200, origin = '*') => route.fulfill({
   status, contentType: 'application/json',
@@ -77,19 +83,20 @@ const json = (route, data, status = 200, origin = '*') => route.fulfill({
 /**
  * 给一个 Playwright page 装上全部网络模拟。
  * options.authenticated: 以 SEKAI Pass 身份进入（语音可用）。
- * options.voice: 模拟语音成员快照。
+ * options.voiceMembers: 模拟语音成员快照。
+ * options.extraLive: 进入后按 delay 推送的实时消息。
  */
-export async function installMock(page, { port, authenticated = false, room = 'nightcord-default', voiceMembers = [], extraLive = [], withMine = false } = {}) {
+export async function installMock(page, { port, authenticated = false, voiceMembers = [], extraLive = [], withMine = false } = {}) {
   const me = authenticated ? ME_PASS : ME;
   const origin = `http://127.0.0.1:${port}`;
-  const state = { ts: min(9), sockets: [] };
+  const state = { ts: T_ASK - 1000, sockets: [] };
 
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
     if (url.hostname === '127.0.0.1') return route.continue();
     if (url.hostname === 'avatars.nightcord.invalid') {
       const key = url.pathname.replace(/^\/|\.svg$/g, '');
-      const [a, b, g] = AVATARS[key] || AVATARS.ya;
+      const [a, b, g] = AVATARS[key] || AVATARS.amia;
       return route.fulfill({ status: 200, contentType: 'image/svg+xml', headers: { 'access-control-allow-origin': '*' }, body: avatarSvg(a, b, g) });
     }
     if (url.hostname === 'chat.nightcord.de5.net') {
@@ -117,13 +124,12 @@ export async function installMock(page, { port, authenticated = false, room = 'n
         for (const entry of history(me, { withMine })) send(entry);
         send({ ready: true });
         for (const entry of extraLive) setTimeout(() => { try { send(entry.build ? entry.build(me) : entry); } catch {} }, entry.delay || 0);
-        if (voiceMembers.length) {
-          send({ type: 'voice:state', snapshot: { revision: 1, members: voiceMembers } });
-        }
+        if (voiceMembers.length) send({ type: 'voice:state', snapshot: { revision: 1, members: voiceMembers } });
         return;
       }
+      // 自己发出的消息：用参考图里的时间 23:45 回显
       if (typeof data.message === 'string') {
-        ws.send(JSON.stringify({ timestamp: ++state.ts + 1e3, name: me.displayName, message: data.message, user: me }));
+        ws.send(JSON.stringify({ timestamp: T_ASK, name: me.displayName, message: data.message, user: me }));
       }
     });
   });

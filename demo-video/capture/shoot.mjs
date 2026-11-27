@@ -2,7 +2,7 @@
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { startServer, installMock, USERS, ME, T0 } from './mock.mjs';
+import { startServer, installMock, USERS, NOW, ASK, K_REPLY } from './mock.mjs';
 
 const require = createRequire('/root/.nvm/versions/node/v22.13.1/lib/node_modules/');
 const { chromium } = require('playwright-core');
@@ -15,7 +15,7 @@ const want = name => !only.length || only.includes(name);
 const { port } = await startServer();
 const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--force-color-profile=srgb', '--font-render-hinting=none'] });
 
-async function open({ width = 1440, height = 900, mobile = false, authenticated = false, guestName = '小满', voiceMembers = [], palette, search = '', extraLive = [], withMine = false } = {}) {
+async function open({ width = 1440, height = 900, mobile = false, authenticated = false, guestName = 'Amia', voiceMembers = [], palette, search = '', extraLive = [], withMine = false } = {}) {
   const context = await browser.newContext({
     viewport: { width, height }, deviceScaleFactor: 2, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', serviceWorkers: 'block',
     ...(mobile ? { isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' } : {}),
@@ -30,7 +30,7 @@ async function open({ width = 1440, height = 900, mobile = false, authenticated 
     } catch {}
   }, [guestName, palette, authenticated]);
   await installMock(page, { port, authenticated, voiceMembers, extraLive, withMine });
-  await page.clock.setFixedTime(T0 + 11 * 60000);
+  await page.clock.setFixedTime(NOW);
   await page.goto(`http://127.0.0.1:${port}/${search}`, { waitUntil: 'load' });
   return { page, context };
 }
@@ -83,15 +83,12 @@ try {
     const { page, context } = await open();
     await page.waitForSelector('.message'); await settle(page, 800);
     await page.click('#navigation-search'); await settle(page, 600);
-    await page.keyboard.type('草稿'); await settle(page, 900);
+    await page.keyboard.type('25点'); await settle(page, 900);
     await shot(page, 'search');
     await context.close();
   }
-  const min = n => T0 + n * 60000;
-  const live = [
-    { delay: 50, build: me => ({ timestamp: min(9.4), name: '凛', user: USERS.rin, message: `<$SEKAI:Reply::${min(2.5)}>当然，我这边也备好了` }) },
-    { delay: 120, build: me => ({ timestamp: min(9.6), name: '夜航', user: USERS.ya, message: `<$SEKAI:Mention:type=user;display=${encodeURIComponent('小满')}:${me.id}> 提纲收到，辛苦啦` }) },
-  ];
+  // 实时消息：K 回复 Amia 的“有人在吗——？”
+  const live = [{ delay: 120, build: () => K_REPLY }];
   if (want('inbox')) {
     console.log('inbox');
     const { page, context } = await open({ withMine: true, extraLive: live });
@@ -102,7 +99,7 @@ try {
   }
   if (want('notify')) {
     console.log('notify');
-    const { page, context } = await open({ withMine: true, extraLive: [{ ...live[1], delay: 1200 }] });
+    const { page, context } = await open({ withMine: true, extraLive: [{ ...live[0], delay: 1200 }] });
     await page.waitForSelector('.message'); await settle(page, 2600);
     await shot(page, 'notify');
     await context.close();
@@ -111,7 +108,7 @@ try {
     console.log('chooser-typed');
     const { page, context } = await open({ guestName: '' });
     await page.waitForSelector('#name-chooser:not(.hidden)'); await settle(page, 600);
-    await page.fill('#name-input', '小满'); await settle(page, 700);
+    await page.fill('#name-input', 'Amia'); await settle(page, 700);
     await shot(page, 'chooser-typed');
     await context.close();
   }
@@ -120,14 +117,14 @@ try {
     {
       const { page, context } = await open({ guestName: '' });
       await page.waitForSelector('#name-chooser:not(.hidden)'); await settle(page, 600);
-      await page.click('#name-input'); await page.keyboard.type('小'); await settle(page, 350);
+      await page.click('#name-input'); await page.keyboard.type('Am'); await settle(page, 350);
       await shot(page, 'chooser-typed-1');
       await context.close();
     }
     {
       const { page, context } = await open();
       await page.waitForSelector('.message'); await settle(page, 900);
-      await page.click('#messageInput'); await page.keyboard.type('提纲来啦，大家看看～'); await settle(page, 500);
+      await page.click('#messageInput'); await page.keyboard.type(ASK); await settle(page, 500);
       await shot(page, 'chat-typed');
       await page.keyboard.press('Enter'); await settle(page, 1400);
       await shot(page, 'chat-sent');
@@ -139,9 +136,9 @@ try {
       await page.click('#navigation-search'); await settle(page, 700);
       await page.mouse.move(1400, 700);
       await shot(page, 'search-0');
-      await page.keyboard.type('草'); await settle(page, 700);
+      await page.keyboard.type('25'); await settle(page, 700);
       await shot(page, 'search-1');
-      await page.keyboard.type('稿'); await settle(page, 700);
+      await page.keyboard.type('点'); await settle(page, 700);
       await shot(page, 'search-2');
       await context.close();
     }
@@ -150,7 +147,7 @@ try {
     console.log('clean');
     const hide = page => page.evaluate(() => document.querySelectorAll('.notice-card, .sekai-notice, .reply-notice, .mention-notice').forEach(n => { n.style.display = 'none'; }));
     {
-      const { page, context } = await open({ withMine: true, extraLive: [{ ...live[1], delay: 600 }] });
+      const { page, context } = await open({ withMine: true, extraLive: [{ ...live[0], delay: 600 }] });
       await page.waitForSelector('.message'); await settle(page, 2200);
       await hide(page); await settle(page, 300);
       await shot(page, 'notify-clean');
@@ -172,7 +169,7 @@ try {
     await page.click('#messageInput'); await settle(page, 500);
     const clip = { x: 340, y: 810, width: 1100, height: 90 };
     await page.screenshot({ path: `${OUT}strip-0.png`, clip });
-    const text = '提纲来啦，大家看看～';
+    const text = ASK;
     for (let i = 1; i <= [...text].length; i++) {
       await page.keyboard.type([...text][i - 1]); await settle(page, 160);
       await page.screenshot({ path: `${OUT}strip-${i}.png`, clip });
@@ -215,7 +212,7 @@ try {
   }
   if (want('voice')) {
     console.log('voice');
-    const members = [USERS.mio, USERS.rin].map((u, i) => ({ memberId: 'm' + i, user: u, microphone: i === 0, publishing: i === 0 }));
+    const members = [USERS.k, USERS.yuki].map((u, i) => ({ memberId: 'm' + i, user: u, microphone: i === 0, publishing: i === 0 }));
     const { page, context } = await open({ voiceMembers: members });
     await page.waitForSelector('.message'); await settle(page, 1500);
     await shot(page, 'voice-roster');

@@ -87,11 +87,11 @@ function renderWindow(t, cam) {
   const stripOp = t < TYPE_START ? 0 : 1 - seg(t, TYPE_END - 0.15, TYPE_END);
   STRIPS.forEach((el, i) => fadeImg(el, i === idx ? stripOp : 0));
 
-  // 站内提醒卡片：从右侧滑入，按 iOS 弹层曲线落定。
+  // 站内提醒卡片（输入框上方的胶囊）：从下方浮起，按 iOS 弹层曲线落定。
   const ti = EASE.ios(seg(t, TOAST.in, TOAST.in + 0.75));
   const to = 1 - EASE.std(seg(t, TOAST.out - 0.3, TOAST.out));
-  const ok = put(toastEl, { x: (1 - ti) * 64, y: (1 - ti) * -10, s: lerp(0.94, 1, ti), o: ti * to });
-  if (ok) toastEl.style.transformOrigin = '100% 0';
+  const ok = put(toastEl, { y: (1 - ti) * 26, s: lerp(0.92, 1, ti), o: ti * to });
+  if (ok) toastEl.style.transformOrigin = '50% 100%';
   return true;
 }
 

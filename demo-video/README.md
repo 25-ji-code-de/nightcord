@@ -14,8 +14,8 @@
 
 | 拍 | 时刻 | 画面 |
 | --- | --- | --- |
-| 0–16 | 0–8.2 s | 线条绕出徽章，徽章落到登录卡片上；输入昵称并进入 |
-| 16–62 | 8.2–31 s | 全景展示整个界面：输入、提醒、收件箱、搜索、配色、语音；打字到提醒、搜索结果、语音面板这三段推近并跟随光标，看完拉回 |
+| 0–16 | 0–8.2 s | 线条绕出徽章，徽章落到登录卡片上；输入昵称 Amia 并进入 |
+| 16–62 | 8.2–31 s | 全景展示整个界面：发消息、K 的回复提醒、收件箱、搜索、配色、语音；打字到提醒、搜索结果、语音面板这三段推近并跟随光标，看完拉回 |
 | 62–80 | 31–39.9 s | 窗口退场；波浪线收成画框，画框撑满全屏 |
 | 80–96 | 39.9–47.8 s | 每 2 拍切一个局部特写 |
 | 96–108.6 | 47.8–54.1 s | 两部手机落定，第 102 拍合成正中的一部 |
@@ -27,11 +27,12 @@
 
 ## 重新生成
 
-依赖：Node 22、`playwright-core`（全局安装）、Google Chrome、ffmpeg（含 `libopenh264`）、Python 3 + Pillow（仅截图素材预处理用）。
+依赖：Node 22、`playwright-core`（全局安装）、Google Chrome、ffmpeg（含 `libopenh264`）。重新生成字标路径时还需要 Python 3。
 
 ```sh
 node capture/shoot.mjs                 # 截取界面素材 → shots/
-python3 capture/prep_assets.py         # 裁出登录卡片、提醒卡片 → assets/
+node capture/prep_assets.mjs           # 裁出登录卡片、提醒卡片 → assets/
+node capture/diffbox.mjs a.png b.png   # 比对两张截图的差异区域，用来定位提醒卡片（可选）
 python3 scene/gen_wordmark.py          # 由 icons/nightcord-wordmark.svg 生成逐字母路径
 node render/preview.mjs 12 20 30       # 抽静帧检查布局（可选）
 node render/sheet.mjs build/s.png 12 20 30   # 把上面的静帧拼成联系表（可选）
@@ -40,4 +41,6 @@ node render/audio.mjs                  # 音轨 → build/audio.wav
 bash render/encode.sh                  # 编码 → ../nightcord-demo.mp4
 ```
 
-素材里的人物、消息和头像均为虚构的演示数据。
+## 对话
+
+对话不是编的：人物（K、雪、えななん、Amia）、台词和时间都取自 `reference-chat.jpg`，与 `index.html` 注释里保留的示例对话一致（`capture/mock.mjs` 的 `history`）。片中视角是 Amia：输入昵称进入，发出“有人在吗——？”，收到 K 的回复“我在”（站内提醒、收件箱），搜索“25点”找到 K 的“嗯。25点再见”。K 在 16:12 发的 `MIXrough02.mp3`（6.9MB）用真实的文件卡片显示。头像只用首字与配色，不使用任何角色图片。

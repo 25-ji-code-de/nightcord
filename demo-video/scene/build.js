@@ -48,7 +48,8 @@ const STATE_EL = STATES.map(s => ({ s, el: img(`../shots/${s.src}.png`, win) }))
 const toastEl = mk('img', null, null, win);
 toastEl.src = '../assets/toast.png';
 // 行内样式：#win img 的通用规则（整窗尺寸）优先级更高，不能靠 id 选择器覆盖。
-toastEl.style.cssText = 'position:absolute;left:1045.5px;top:72px;width:377.5px;height:131.5px;z-index:5;display:none;filter:drop-shadow(0 18px 30px rgba(0,0,0,.45))';
+const TOAST_CSS = `left:${TOAST.x}px;top:${TOAST.y}px;width:${TOAST.w}px;height:${TOAST.h}px;filter:drop-shadow(0 14px 26px rgba(0,0,0,.4))`;
+toastEl.style.cssText = `position:absolute;z-index:5;display:none;${TOAST_CSS}`;
 const STRIPS = [];
 for (let i = 0; i <= TYPE_N; i++) {
   const el = img(`../shots/strip-${i}.png`, win);
@@ -87,7 +88,7 @@ const MONT_EL = MONTAGE.map(m => {
   if (m.toast) {
     const ti = mk('img', null, null, box);
     ti.src = '../assets/toast.png';
-    ti.style.cssText = 'left:1045.5px;top:72px;width:377.5px;height:131.5px;filter:drop-shadow(0 18px 30px rgba(0,0,0,.45))';
+    ti.style.cssText = TOAST_CSS;
   }
   return { m, box };
 });

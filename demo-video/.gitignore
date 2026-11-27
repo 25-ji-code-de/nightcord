@@ -1,0 +1,3 @@
+# 渲染中间产物：可由 render/ 下的脚本重新生成
+frames/
+build/

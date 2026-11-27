@@ -49,15 +49,18 @@ function render(t) {
   renderBg(t);
   const cam = camera(t);
   // 开场字标只在片头出现；片尾字标由 renderOutro 接管。
-  if (t < OUTRO.wm - 0.01) renderWordmark(t);
-  renderCard(t);
+  if (t < OUTRO.wm - 0.01) renderWordmark(Winv(t));
+  renderCard(Winv(t));
   renderWindow(t, cam);
   renderHeadlines(t);
   renderPhones(t);
   renderChips(t);
+  renderLines(t);
+  renderMontage(t);
   renderCursor(t, cam);
   if (t >= OUTRO.wm - 0.01) renderOutro(t);
   put($('#fade'), { o: EASE.cam(seg(t, FADE_OUT, DUR - 0.05)) });
   $('#fade').style.background = '#000';
+  renderStage(t);
 }
 window.render = render;

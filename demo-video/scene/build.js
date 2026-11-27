@@ -26,6 +26,13 @@ const LETTERS = WORDMARK.map(w => {
   return g;
 });
 wmEl.appendChild(wmSvg);
+// 月牙符号的描边：先用线条勾出轮廓，再填充实色（参考视频的线条感）。
+const wmStroke = document.createElementNS(svgNS, 'path');
+wmStroke.setAttribute('d', WORDMARK[0].d);
+wmStroke.setAttribute('transform', WORDMARK[0].transform);
+wmStroke.setAttribute('pathLength', '1');
+wmStroke.setAttribute('class', 'stroke');
+LETTERS[0].appendChild(wmStroke);
 
 // 标题：逐字拆开，每个字独立入场
 const HLS = HL.map(h => {
@@ -102,6 +109,39 @@ const PH = ['mobile-chat', 'mobile-drawer'].map(name => {
 
 // 功能标签
 const CHIP_EL = CHIPS.map(text => mk('div', 'chip', text, $('#chips')));
+
+// 线条层：间奏的波浪线与手机轮廓。
+const linesSvg = $('#lines');
+const LINE_EL = {};
+for (const id of ['w0', 'w1', 'w2', 'p0', 'p1']) {
+  const p = document.createElementNS(svgNS, 'path');
+  p.setAttribute('pathLength', '1');
+  linesSvg.appendChild(p);
+  LINE_EL[id] = p;
+}
+// 圆角矩形路径，从顶边中点顺时针画一圈。
+function rrect(x, y, w, h, r) {
+  const cx = x + w / 2;
+  return 'M' + cx + ' ' + y + 'H' + (x + w - r) + 'A' + r + ' ' + r + ' 0 0 1 ' + (x + w) + ' ' + (y + r)
+    + 'V' + (y + h - r) + 'A' + r + ' ' + r + ' 0 0 1 ' + (x + w - r) + ' ' + (y + h)
+    + 'H' + (x + r) + 'A' + r + ' ' + r + ' 0 0 1 ' + x + ' ' + (y + h - r)
+    + 'V' + (y + r) + 'A' + r + ' ' + r + ' 0 0 1 ' + (x + r) + ' ' + y + 'Z';
+}
+LINE_EL.p0.setAttribute('d', rrect(1000, 120, 392, 820, 64));
+LINE_EL.p1.setAttribute('d', rrect(1420, 156, 392, 820, 64));
+
+// 第二次高潮的局部特写：每张是一份完整的 1440x900 窗口，再按镜头裁切放大。
+const MONT_EL = MONTAGE.map(m => {
+  const box = mk('div', 'mshot', null, $('#mont'));
+  const im = mk('img', null, null, box);
+  im.src = '../shots/' + m.src + '.png';
+  if (m.toast) {
+    const ti = mk('img', null, null, box);
+    ti.src = '../assets/toast.png';
+    ti.style.cssText = 'left:1045.5px;top:72px;width:377.5px;height:131.5px;filter:drop-shadow(0 18px 30px rgba(0,0,0,.45))';
+  }
+  return { m, box };
+});
 
 // 等所有图片加载完成。隐藏元素的 decode() 在 Chromium 里可能拒绝，所以改用 load 事件。
 const allImgs = [...document.images];

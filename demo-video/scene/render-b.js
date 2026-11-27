@@ -26,7 +26,7 @@ function renderWindow(t, cam) {
 
   // 逐字打字：每个字符都是真实页面的截图条带，只显示最新一张。
   const idx = t < TYPE_START ? 0 : clamp(Math.floor((t - TYPE_START) / TYPE_STEP) + 1, 1, TYPE_N);
-  const stripOp = t < TYPE_START ? 0 : 1 - seg(t, 15.5, 15.75);
+  const stripOp = t < TYPE_START ? 0 : 1 - seg(t, W(15.5), TYPE_END);
   STRIPS.forEach((el, i) => fadeImg(el, i === idx ? stripOp : 0));
 
   // 站内提醒卡片：从右侧滑入，按 iOS 弹层曲线落定。

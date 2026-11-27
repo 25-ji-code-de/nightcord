@@ -16,6 +16,7 @@
       refresh: 'M3 12a9 9 0 0 1 15.36-6.36L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.36 6.36L3 16M8 16H3v5',
       logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
       login: 'M15 5h4v14h-4M8 8l4 4-4 4M3 12h9',
+      message: 'M21 15a3 3 0 0 1-3 3H7l-4 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v9Z',
       chevron: 'm8 10 4 4 4-4',
     };
     const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -202,7 +203,6 @@
       const identity = document.createElement('code'); identity.className = 'profile-id'; identity.textContent = profile.id || '未连接';
       identityContent.append(label, identity);
       details.append(disclosure, identityContent);
-      body.appendChild(details);
       dialog.appendChild(body);
 
       const actions = document.createElement('div'); actions.className = 'profile-actions';
@@ -222,7 +222,7 @@
         return button;
       };
       if (own && profile.authenticated) {
-        const settings = document.createElement('a'); settings.className = 'name-submit profile-action profile-action--primary';
+        const settings = document.createElement('a'); settings.className = 'profile-action profile-action--primary';
         const settingsLabel = document.createElement('span'); settingsLabel.textContent = '编辑 SEKAI Pass 资料';
         settings.append(actionIcon('edit'), settingsLabel);
         settings.href = 'https://id.nightcord.de5.net/settings'; settings.target = '_blank'; settings.rel = 'noopener noreferrer';
@@ -235,17 +235,23 @@
         actions.appendChild(secondary);
       } else if (own && !profile.authenticated) {
         actions.append(
-          action('使用 SEKAI Pass 登录', 'login', () => this.ui.sekaiPassLoginCallback?.(), 'name-submit profile-action--primary'),
+          action('使用 SEKAI Pass 登录', 'login', () => this.ui.sekaiPassLoginCallback?.(), 'profile-action--primary'),
           action('修改访客昵称', 'edit', () => {
             this.ui.showNameChooser({ mode: 'change', currentName: profile.displayName }, (name) => this.ui.onSetUser?.(name), this.ui.sekaiPassLoginCallback);
           }, 'profile-action--quiet'),
         );
       }
       if (!own && profile.authenticated && this.ui.currentUser?.authenticated && this.ui.directMessages?.mode !== 'off' && this.ui.directMessageView) {
-        actions.appendChild(action('发私信', 'chevron', () => this.ui.directMessageView.start(profile), 'profile-action--primary'));
+        actions.appendChild(action('发私信', 'message', () => this.ui.directMessageView.start(profile), 'profile-action--primary'));
       }
-      if (!own) this.ui.alerts?.view.profile(profile, actions);
       if (actions.childElementCount) dialog.appendChild(actions);
+      if (!own) {
+        const preferences = document.createElement('div'); preferences.className = 'profile-preferences';
+        this.ui.alerts?.view.profile(profile, preferences);
+        if (preferences.childElementCount) dialog.appendChild(preferences);
+      }
+      const meta = document.createElement('div'); meta.className = 'profile-meta';
+      meta.appendChild(details); dialog.appendChild(meta);
       dialog.addEventListener('cancel', event => { event.preventDefault(); void dismiss(); });
       let backdropDown = false;
       dialog.addEventListener('pointerdown', event => {

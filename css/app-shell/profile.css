@@ -13,15 +13,15 @@
 .identity-badge--verified { display: inline-flex; align-items: center; justify-content: center; align-self: center; width: 11px; height: 11px; padding: 0; border: 0; border-radius: 0; background: none; color: #fff; vertical-align: -0.1em; transform: translateY(1px); }
 .identity-badge--verified svg { display: block; width: 100%; height: 100%; }
 .profile-trigger { cursor: pointer; }
-.profile-trigger:focus-visible, .user-profile-dialog :is(button, a):focus-visible { outline: 2px solid #d1c1f2; outline-offset: 3px; }
+.profile-trigger:focus-visible, .user-profile-dialog :is(button, a):focus-visible { outline: 2px solid rgb(var(--sekai-accent)); outline-offset: 3px; }
 .voice-user-info { min-width: 0; flex-wrap: wrap; }
-/* Profile cards share the name chooser's raised surface, spacing and motion. */
+/* Profile content, primary actions and supporting details share one inset. */
 .user-profile-dialog {
   --profile-inset: var(--sekai-space-3xl);
   position: fixed;
   inset: 0;
   width: calc(100% - 32px);
-  max-width: 420px;
+  max-width: 400px;
   max-height: calc(100dvh - 32px);
   margin: auto;
   padding: 0;
@@ -73,30 +73,40 @@
 .user-profile-dialog h2 { display: flex; align-items: center; gap: var(--sekai-space-sm); margin: 0; font-size: var(--sekai-text-3xl); font-weight: var(--sekai-weight-bold); line-height: 1.3; letter-spacing: var(--sekai-tracking-tight); }
 .user-profile-dialog h2 > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .profile-handle { margin: var(--sekai-space-xs) 0 0; color: rgb(var(--sekai-fg-muted)); font-size: var(--sekai-text-sm); line-height: var(--sekai-leading); overflow-wrap: anywhere; }
-.profile-body { padding: 0 var(--profile-inset) var(--sekai-space-2xl); }
+.profile-body { padding: 0 var(--profile-inset) var(--sekai-space-xl); }
 .profile-section-label { margin: 0 0 var(--sekai-space-sm); font-size: var(--sekai-text-label); font-weight: var(--sekai-weight-medium); line-height: var(--sekai-leading); color: rgb(var(--sekai-fg-muted)); }
-.profile-bio { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--sekai-text-md); line-height: 1.8; }
+.profile-bio { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--sekai-text-md); line-height: 1.7; }
 .profile-bio--empty { color: rgb(var(--sekai-fg-muted)); }
-.profile-identity { margin-top: var(--sekai-space-2xl); border-top: var(--sekai-hairline); }
-.profile-identity > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--sekai-space-md); min-height: 44px; padding-top: var(--sekai-space-sm); color: rgb(var(--sekai-fg-muted)); font-size: var(--sekai-text-label); line-height: var(--sekai-leading); list-style: none; cursor: pointer; transition: color var(--sekai-dur-fast); }
+.profile-meta { padding: 0 var(--profile-inset) var(--sekai-space-2xl); }
+.profile-identity { border-top: var(--sekai-hairline); }
+.profile-identity > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--sekai-space-md); min-height: 44px; color: rgb(var(--sekai-fg-muted)); font-size: var(--sekai-text-label); line-height: var(--sekai-leading); list-style: none; cursor: pointer; touch-action: manipulation; transition: color var(--sekai-dur-fast); }
 .profile-identity > summary::-webkit-details-marker { display: none; }
 .profile-identity > summary:hover { color: rgb(var(--sekai-fg)); }
 .profile-identity > summary svg { width: 16px; height: 16px; transition: transform var(--sekai-dur) var(--sekai-ease-out); }
 .profile-identity[open] > summary svg { transform: rotate(180deg); }
-.profile-identity-content { margin-top: var(--sekai-space-lg); padding: var(--sekai-space-md) var(--sekai-space-lg); border-radius: var(--sekai-radius-lg); background: rgb(var(--sekai-surface-sunken)); }
+.profile-identity-content { margin-bottom: var(--sekai-space-sm); padding: var(--sekai-space-md) var(--sekai-space-lg); border-radius: var(--sekai-radius-md); background: rgb(var(--sekai-surface-sunken)); }
 .profile-id-label { margin: 0 0 var(--sekai-space-xs); font-size: var(--sekai-text-label); color: rgb(var(--sekai-fg-muted)); }
 .profile-id { display: block; font-family: var(--sekai-font-mono); font-size: var(--sekai-text-label); line-height: var(--sekai-leading-relaxed); overflow-wrap: anywhere; user-select: all; }
-.profile-actions { display: flex; flex-direction: column; gap: var(--sekai-space-sm); padding: var(--sekai-space-2xl) var(--profile-inset); border-top: var(--sekai-hairline); }
-.profile-secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sekai-space-sm); }
-.user-profile-dialog .profile-action { display: flex; align-items: center; justify-content: center; gap: var(--sekai-space-sm); width: 100%; min-height: 44px; box-sizing: border-box; padding: var(--sekai-space-md) var(--sekai-space-lg); border: 1px solid transparent; border-radius: var(--sekai-radius-lg); font: inherit; font-size: var(--sekai-text-md); font-weight: var(--sekai-weight-medium); line-height: var(--sekai-leading); text-decoration: none; cursor: pointer; transition: color var(--sekai-dur-fast), background var(--sekai-dur-fast), box-shadow var(--sekai-dur), transform var(--sekai-dur) var(--sekai-ease-out); }
+.profile-actions { display: flex; flex-direction: column; gap: var(--sekai-space-sm); padding: 0 var(--profile-inset) var(--sekai-space-xl); }
+.profile-secondary-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sekai-space-sm); }
+.user-profile-dialog .profile-action { display: flex; align-items: center; justify-content: center; gap: var(--sekai-space-sm); width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; padding: var(--sekai-space-md) var(--sekai-space-lg); border: 1px solid transparent; border-radius: var(--sekai-radius-lg); font: inherit; font-size: var(--sekai-text-md); font-weight: var(--sekai-weight-medium); line-height: var(--sekai-leading); text-decoration: none; overflow-wrap: anywhere; cursor: pointer; touch-action: manipulation; transition: color var(--sekai-dur-fast), background var(--sekai-dur-fast), border-color var(--sekai-dur-fast); }
 .user-profile-dialog .profile-action svg { width: 18px; height: 18px; flex-shrink: 0; }
 .user-profile-dialog .profile-action:not(.profile-action--primary) { background: var(--sekai-tint-hover); color: rgb(var(--sekai-fg)); }
 .user-profile-dialog .profile-action.profile-action--quiet { background: transparent; color: rgb(var(--sekai-fg-muted)); }
-.user-profile-dialog .profile-action:not(.profile-action--primary):hover { background: var(--sekai-tint-active); color: rgb(var(--sekai-fg)); }
-.user-profile-dialog .profile-action.profile-action--primary { font-weight: var(--sekai-weight-semibold); }
-.user-profile-dialog .profile-action:hover { transform: var(--sekai-lift); }
-.user-profile-dialog .profile-action:active { transform: translateY(0); }
+.user-profile-dialog .profile-action.profile-action--primary { min-height: 48px; background: rgb(var(--sekai-accent)); border-color: rgb(var(--sekai-accent)); color: rgb(var(--sekai-surface-sunken)); font-weight: var(--sekai-weight-semibold); }
+@media (hover: hover) {
+  .user-profile-dialog .profile-action:not(.profile-action--primary):hover { background: var(--sekai-tint-active); color: rgb(var(--sekai-fg)); }
+  .user-profile-dialog .profile-action--primary:hover:not(:disabled) { background: rgb(var(--sekai-accent-hover)); border-color: rgb(var(--sekai-accent-hover)); }
+}
+.user-profile-dialog .profile-action:active:not(:disabled) { background: rgb(var(--sekai-accent) / .16); }
+.user-profile-dialog .profile-action--primary:active:not(:disabled) { background: rgb(var(--sekai-accent)); border-color: rgb(var(--sekai-accent-hover)); }
 .user-profile-dialog .profile-action:disabled { opacity: 0.6; cursor: progress; }
+.profile-preferences { margin: 0 var(--profile-inset); padding: var(--sekai-space-xl) 0 var(--sekai-space-lg); border-top: var(--sekai-hairline); }
+.user-profile-dialog .alert-profile legend { font-size: var(--sekai-text-sm); }
+.user-profile-dialog .alert-profile > .alert-hint { margin: var(--sekai-space-2xs) 0 var(--sekai-space-sm); font-size: var(--sekai-text-label); line-height: var(--sekai-leading-relaxed); }
+.user-profile-dialog .alert-profile > .alert-toggle ~ .alert-hint { margin: var(--sekai-space-sm) 0 0; }
+:root .user-profile-dialog .alert-profile .settings-toggle.alert-toggle { box-sizing: border-box; min-height: 44px; padding: var(--sekai-space-sm) 0; }
+.user-profile-dialog .alert-profile .settings-toggle-title { font-size: var(--sekai-text-sm); }
 .profile-identity > summary:focus-visible { outline: 2px solid rgb(var(--sekai-accent)); outline-offset: 4px; border-radius: var(--sekai-radius-xs); }
 @keyframes profile-dialog-in {
   from { opacity: 0; transform: translateY(16px) scale(0.98); }

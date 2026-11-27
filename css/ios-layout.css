@@ -168,7 +168,7 @@
     border-radius: 28px;
     overscroll-behavior: contain;
   }
-  :root[data-ios-layout="on"] .user-profile-dialog { max-width: 420px; }
+  :root[data-ios-layout="on"] .user-profile-dialog { max-width: 400px; }
   :root[data-ios-layout="on"] .settings-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
   :root[data-ios-layout="on"] :is(.settings-header, .settings-footer) { flex-shrink: 0; }
   :root[data-ios-layout="on"] .settings-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }

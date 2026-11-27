@@ -237,6 +237,10 @@
   height: 225px;
 }
 
+.sekai-image-container.loading .sekai-image-content {
+  visibility: hidden;
+}
+
 .sekai-image-container.loading::after {
   content: '';
   position: absolute;

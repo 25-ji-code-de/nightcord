@@ -86,30 +86,8 @@ class SekaiImageRenderer {
     container.style.height = 'auto';
     container.style.aspectRatio = `${w} / ${h}`;
 
-    // 加载完成后把尺寸交还给浏览器自然排版：
-    // - w/h 正确时自然排版的盒子与预留框逐像素相同，无跳动；
-    // - w/h 被写错（第三方客户端、奇怪浏览器）时，这里会纠正成真实尺寸，
-    //   而不是留下一块比例错误的底色。
-    const img = container.querySelector('img');
-    if (!img) return;
-    const release = () => {
-      container.style.width = '';
-      container.style.height = '';
-      container.style.aspectRatio = '';
-      // 大/小类以真实宽度为准，避免描述与实物不符时两个 class 并存
-      const nw = img.naturalWidth;
-      if (nw > 0) {
-        const isLarge = nw > this.renderer.imageWidthThreshold;
-        container.classList.toggle('sekai-image-large', isLarge);
-        container.classList.toggle('sekai-image-small', !isLarge);
-      }
-    };
-    if (img.complete) {
-      release(); // 缓存命中 / data URI 可能已经解码
-    } else {
-      img.addEventListener('load', release, { once: true });
-      img.addEventListener('error', release, { once: true });
-    }
+    // renderImage releases this box only after decoding (or failure), keeping
+    // the placeholder stable while the downloaded bitmap is not yet ready.
   }
 
   /**
@@ -192,28 +170,45 @@ class SekaiImageRenderer {
 
     const img = document.createElement('img');
     img.className = 'sekai-image-content';
-    img.src = url;
     img.alt = alt || 'Image';
     img.loading = 'lazy';
+    img.decoding = 'async';
 
-    img.onload = () => {
-      container.classList.remove('loading');
-
-      // 根据图片实际宽度调整容器大小类
-      if (img.naturalWidth > this.renderer.imageWidthThreshold) {
-        container.classList.add('sekai-image-large');
-      } else {
-        container.classList.add('sekai-image-small');
-      }
+    const releaseBox = () => {
+      container.style.width = '';
+      container.style.height = '';
+      container.style.aspectRatio = '';
     };
-
-    img.onerror = () => {
+    let failed = false;
+    const showError = () => {
+        if (failed) return;
+        failed = true;
         container.innerHTML = `<div class="sekai-error-placeholder">
             <span class="sekai-error-icon">⚠️</span>
             <span class="sekai-error-text">Failed to load image</span>
         </div>`;
+        releaseBox();
         container.classList.remove('loading');
     };
+
+    img.onload = async () => {
+      try {
+        // load means the response arrived; decode makes the entire bitmap ready
+        // before a lazy/offscreen thumbnail is revealed and painted.
+        if (typeof img.decode === 'function') await img.decode();
+      } catch (_) {
+        showError();
+        return;
+      }
+      if (failed) return;
+      const large = img.naturalWidth > this.renderer.imageWidthThreshold;
+      container.classList.toggle('sekai-image-large', large);
+      container.classList.toggle('sekai-image-small', !large);
+      releaseBox();
+      container.classList.remove('loading');
+    };
+    img.onerror = showError;
+    img.src = url;
 
     // Open in full-screen image viewer (blocked while parent spoiler is unrevealed)
     img.onclick = (e) => {

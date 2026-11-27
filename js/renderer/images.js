@@ -24,16 +24,29 @@ class SekaiImageRenderer {
       container.classList.add('sekai-image-spoiler');
       container.setAttribute('tabindex', '0');
       container.setAttribute('role', 'button');
-      container.setAttribute('aria-label', 'Spoiler image');
+      container.setAttribute('aria-label', '查看剧透图片');
+      // Keep the reveal hint separate from the loading shimmer (::after).
+      const cover = document.createElement('span');
+      cover.className = 'sekai-image-spoiler-cover';
+      cover.setAttribute('aria-hidden', 'true');
+      cover.innerHTML = `<span class="sekai-image-spoiler-label">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.2A10.6 10.6 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3 3.8M6.1 6.1A20 20 0 0 0 2 12s4 7 10 7a11 11 0 0 0 5.9-1.9"/>
+        </svg>
+        <span>查看图片</span>
+      </span>`;
+      container.appendChild(cover);
       // Capture phase so reveal runs before img.onclick opens the viewer
       const reveal = (e) => {
         if (container.classList.contains('revealed')) return;
         e.preventDefault();
         e.stopPropagation();
+        if (container.classList.contains('loading')) return;
         container.classList.add('revealed');
         container.setAttribute('aria-label', `预览图片 ${alt}`);
+        container.removeEventListener('click', reveal, true);
       };
-      container.addEventListener('click', reveal, { capture: true, once: true });
+      container.addEventListener('click', reveal, { capture: true });
       container.addEventListener('keydown', (e) => {
         if ((e.key === 'Enter' || e.key === ' ') && !container.classList.contains('revealed')) {
           reveal(e);

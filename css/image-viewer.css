@@ -59,6 +59,7 @@
 .sekai-viewer-image {
   max-width: 90vw;
   max-height: 90vh;
+  max-height: 90dvh;
   object-fit: contain;
   transition: transform 0.1s linear, opacity 0.3s ease; /* Removed transform 0.3s for smooth wheel zoom */
   user-select: none;
@@ -88,7 +89,7 @@
 /* Toolbar */
 .sekai-viewer-toolbar {
   position: absolute;
-  bottom: 30px;
+  bottom: max(30px, calc(env(safe-area-inset-bottom) + 16px));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -100,7 +101,8 @@
   -webkit-backdrop-filter: blur(12px);
   border-radius: 50px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-  animation: sekai-viewer-slide-up 0.3s ease 0.1s both;
+  /* backwards, not both: a held final keyframe would override .ui-hidden. */
+  animation: sekai-viewer-slide-up 0.3s ease 0.1s backwards;
 }
 
 .sekai-viewer-btn {
@@ -114,13 +116,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background-color 0.2s, transform 0.2s;
   padding: 0;
 }
 
 .sekai-viewer-btn:hover {
   background: rgba(167, 139, 250, 0.3);
-  transform: scale(1.1);
+}
+
+@media (hover: hover) {
+  .sekai-viewer-btn:hover { transform: scale(1.1); }
 }
 
 .sekai-viewer-btn:active {
@@ -140,7 +145,7 @@
 /* Info Bar */
 .sekai-viewer-info {
   position: absolute;
-  top: 20px;
+  top: max(20px, calc(env(safe-area-inset-top) + 8px));
   left: 50%;
   transform: translateX(-50%);
   max-width: 80%;
@@ -149,7 +154,7 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-radius: 20px;
-  animation: sekai-viewer-slide-down 0.3s ease 0.1s both;
+  animation: sekai-viewer-slide-down 0.3s ease 0.1s backwards;
   z-index: 100001;
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
@@ -157,8 +162,8 @@
 /* Standalone Close Button (Top Right) */
 .sekai-viewer-close-fixed {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: max(20px, calc(env(safe-area-inset-top) + 8px));
+  right: max(20px, env(safe-area-inset-right));
   width: 44px;
   height: 44px;
   border: none;
@@ -169,7 +174,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
   z-index: 100002;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
@@ -178,7 +183,10 @@
 .sekai-viewer-close-fixed:hover {
   background: rgba(255, 255, 255, 0.15); /* More subtle hover */
   color: white;
-  transform: rotate(90deg) scale(1.1);
+}
+
+@media (hover: hover) {
+  .sekai-viewer-close-fixed:hover { transform: rotate(90deg) scale(1.1); }
 }
 
 /* Hide UI on Idle */
@@ -260,7 +268,7 @@
 /* Mobile Adjustments */
 @media screen and (max-width: 600px) {
   .sekai-viewer-toolbar {
-    bottom: 20px;
+    bottom: max(20px, calc(env(safe-area-inset-bottom) + 12px));
     padding: 10px 16px;
     gap: 6px;
   }
@@ -281,7 +289,7 @@
   }
 
   .sekai-viewer-info {
-    top: 15px;
+    top: max(15px, calc(env(safe-area-inset-top) + 8px));
     max-width: 90%;
     padding: 8px 16px;
   }
@@ -294,6 +302,7 @@
   .sekai-viewer-image {
     max-width: 95vw;
     max-height: 85vh;
+    max-height: 85dvh;
   }
 }
 

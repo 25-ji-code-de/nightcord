@@ -76,7 +76,7 @@ class ReplyView {
 
       if (messageEl) {
         // 滚动到目标消息
-        messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        messageEl.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' });
 
         // 添加高亮动画
         messageEl.classList.add('message-highlighted');

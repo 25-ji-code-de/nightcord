@@ -218,10 +218,11 @@
     grid-template-columns: var(--navigation-width) minmax(0, 1fr);
     left: 0;
     transform: translateX(-100%);
-    transition: transform 220ms ease;
+    /* Hide after the slide-out finishes, otherwise closing never animates. */
+    transition: transform 220ms ease, visibility 0s linear 220ms;
     visibility: hidden;
   }
-  .sidebar.show { left: 0; transform: translateX(0); visibility: visible; }
+  .sidebar.show { left: 0; transform: translateX(0); visibility: visible; transition-delay: 0s; }
   .navigation-scrim {
     display: block;
     position: fixed;
@@ -232,6 +233,7 @@
     background: rgb(15 12 23 / .55);
     cursor: default;
     touch-action: manipulation;
+    animation: fadeIn 200ms ease-out;
   }
   .navigation-tooltip { display: none; }
   .sidebar-account-action { width: 44px; }
@@ -243,4 +245,5 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .sidebar, .navigation-item, .navigation-tooltip { transition: none; }
+  .navigation-scrim { animation: none; }
 }

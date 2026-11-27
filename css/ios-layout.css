@@ -139,9 +139,9 @@
     overflow: hidden;
     transform: translateX(calc(-100% - var(--nc-ios-safe-left)));
     visibility: hidden;
-    transition: transform 220ms ease;
+    transition: transform 220ms ease, visibility 0s linear 220ms;
   }
-  :root[data-ios-layout="on"] .sidebar.show { transform: translateX(0); visibility: visible; }
+  :root[data-ios-layout="on"] .sidebar.show { transform: translateX(0); visibility: visible; transition-delay: 0s; }
   :root[data-ios-layout="on"] .sidebar > .server-header { height: 48px; box-sizing: border-box; }
   :root[data-ios-layout="on"] .navigation-rail { padding: 8px 0 max(8px, var(--nc-ios-safe-bottom)); overflow-y: auto; scrollbar-width: none; }
   :root[data-ios-layout="on"] .navigation-links { gap: 8px; padding-bottom: 8px; }

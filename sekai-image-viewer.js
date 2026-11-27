@@ -46,6 +46,7 @@ class SekaiImageViewer {
 
     this.idleTimer = null;
     this.idleDelay = 3000;
+    this.keyboardActive = false;
     
     this.wheelTimer = null;
     
@@ -163,7 +164,10 @@ class SekaiImageViewer {
       this.close();
     });
     this.viewer.addEventListener('focusin', () => this.resetIdle());
+    this.viewer.addEventListener('focusout', () => this.resetIdle());
+    this.viewer.addEventListener('pointerdown', this.boundResetIdle);
     this.viewer.addEventListener('keydown', event => {
+      this.resetIdle(event);
       if (event.key !== 'Tab') return;
       const buttons = this.viewer.querySelectorAll('button');
       const first = buttons[0];
@@ -205,6 +209,7 @@ class SekaiImageViewer {
     this.container.addEventListener('wheel', (e) => {
       if (!this.isOpen) return;
       e.preventDefault();
+      this.resetIdle(e);
 
       // Smoother exponential zoom based on delta
       // Smaller factor for smoother control. e.deltaY is usually +-100 or +-53
@@ -282,6 +287,7 @@ class SekaiImageViewer {
         this.isDragging = false;
         this.image.style.cursor = this.scale > 1 ? 'grab' : 'default';
         this.image.style.transition = 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)'; // Restore transition
+        this.resetIdle();
       }
     });
 
@@ -524,6 +530,7 @@ class SekaiImageViewer {
     }
     this.currentImage = imageSrc;
     this.isOpen = true;
+    this.keyboardActive = false;
     this.resetTouchState();
     this.reset();
 
@@ -575,13 +582,18 @@ class SekaiImageViewer {
     this.reset();
   }
 
-  resetIdle() {
+  resetIdle(event) {
     if (!this.isOpen) return;
+    if (event?.type === 'keydown') this.keyboardActive = true;
+    else if (['pointerdown', 'mousemove', 'touchstart', 'wheel'].includes(event?.type)) this.keyboardActive = false;
     this.viewer.classList.remove('ui-hidden');
     clearTimeout(this.idleTimer);
     this.idleTimer = setTimeout(() => {
-      // Don't hide if dragging or hovering toolbar (optional, but good UX)
-      const controlFocused = this.viewer.contains(document.activeElement) && document.activeElement.tagName === 'BUTTON';
+      // Pointer clicks and the initial focus also leave a button focused.
+      // Only active keyboard navigation should keep the controls on screen.
+      // :focus-visible can linger after Escape followed by a pointer reopen.
+      const focused = document.activeElement;
+      const controlFocused = this.keyboardActive && this.viewer.contains(focused) && focused.tagName === 'BUTTON';
       if (this.isOpen && !this.isDragging && !controlFocused) {
         this.viewer.classList.add('ui-hidden');
       }

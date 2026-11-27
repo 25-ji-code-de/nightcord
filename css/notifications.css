@@ -311,7 +311,7 @@ body:has(.navigation-scrim:not([hidden])) .sekai-notice { visibility: hidden; }
   cursor: pointer;
   font-weight: 600;
   font-size: 13px;
-  transition: all 0.2s;
+  transition: filter 0.2s, transform 0.2s, box-shadow 0.2s;
   white-space: nowrap;
 }
 
@@ -377,7 +377,7 @@ body:has(.navigation-scrim:not([hidden])) .sekai-notice { visibility: hidden; }
   /* Visual */
   color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sekai-update-btn-dismiss:hover {

@@ -122,7 +122,7 @@
   margin: 0 2px;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
   font-weight: 500;
   border: 1px solid rgb(var(--sekai-accent) / 0.2);
@@ -176,7 +176,7 @@
   color: #88b3f5;
   text-decoration: none; /* No underline by default to keep clean */
   border-bottom: 1px solid rgba(136, 179, 245, 0.3); /* Subtle hint instead */
-  transition: all 0.2s;
+  transition: color 0.2s, border-color 0.2s;
   padding-bottom: 0px;
 }
 

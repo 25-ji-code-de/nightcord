@@ -149,7 +149,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(35, 39, 42, 0.6);
   color: #e0e0e0;
-  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: background-color 0.2s var(--sekai-ease-out, ease), box-shadow 0.2s var(--sekai-ease-out, ease), transform 0.2s var(--sekai-ease-out, ease), filter 0.2s var(--sekai-ease-out, ease);
   font-family: inherit;
 }
 
@@ -253,7 +253,7 @@
   font-size: 16px;
   outline: none;
   box-sizing: border-box;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   font-family: inherit;
 }
 
@@ -277,7 +277,7 @@
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: background-color 0.2s var(--sekai-ease-out, ease), box-shadow 0.2s var(--sekai-ease-out, ease), transform 0.2s var(--sekai-ease-out, ease);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -307,7 +307,7 @@
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: background-color 0.3s var(--sekai-ease-out, ease), border-color 0.3s var(--sekai-ease-out, ease), color 0.3s var(--sekai-ease-out, ease), box-shadow 0.3s var(--sekai-ease-out, ease);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -416,7 +416,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background-color 0.2s, color 0.2s;
   outline: none;
 }
 

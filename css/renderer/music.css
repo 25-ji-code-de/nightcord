@@ -328,7 +328,7 @@
   color: #888;
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.1s;
+  transition: background 0.1s, color 0.1s, box-shadow 0.1s;
   display: flex;
   align-items: center;
   justify-content: center;

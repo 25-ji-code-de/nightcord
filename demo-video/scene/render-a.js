@@ -75,31 +75,33 @@ function badgeIntro(t) {
   };
 }
 
-// 结尾：手机 → 线框 → 变形成圆 → 勾出内圆与眼睛 → 填色 → 随过门缩到字标的月牙位置，最后一击亮出字标。
+// 结尾：卡片卷进中心的同时勾出外圆 → 内圆与眼睛 → 填色并弹一下 → 移到字标月牙的位置，最后一击交给字标。
 function badgeOutro(t) {
-  if (t < END.morph) return null;
-  const phone = { x: 960 - PHONE.w / 2, y: PHONE.y, w: PHONE.w, h: PHONE.h, r: PHONE.r };
-  const m = EASE.cam(seg(t, END.morph + 0.15, beat(111)));
+  if (t < END.ring - 0.1 || t >= END.hit) return null;
   const R = BADGE_R;
-  const box = {
-    x: lerp(phone.x, 960 - R, m), y: lerp(phone.y, 540 - R, m),
-    w: lerp(phone.w, 2 * R, m), h: lerp(phone.h, 2 * R, m), r: lerp(phone.r, R, m),
-  };
-  // 过门三击：每一拍往目标迈一步，拍与拍之间留一点惯性。
-  let go = 0;
-  for (let k = 0; k < 3; k++) go += EASE.out(seg(t, beat(112 + k), beat(112.8 + k))) / 3;
-  const cx = lerp(960, WM_SYM[0], go), cy = lerp(540, WM_SYM[1], go), r = lerp(R, WM_SYM[2], go);
-  const sc = r / R;
-  const b = {
-    x: cx - (960 - box.x) * sc, y: cy - (540 - box.y) * sc, w: box.w * sc, h: box.h * sc, r: box.r * sc,
-  };
+  const pop = 1 + 0.12 * Math.sin(Math.PI * seg(t, END.filled, END.filled + 0.32));
+  const go = EASE.cam(seg(t, END.move, END.hit - 0.04));
   return {
-    cx, cy, R: r, box: b,
-    outer: 1, inner: EASE.std(seg(t, beat(110.5), beat(111.6))), eyes: EASE.out(seg(t, beat(111.2), beat(111.8))),
-    fill: EASE.std(seg(t, beat(111.6), END.badge)), lineO: 1 - EASE.std(seg(t, END.badge - 0.1, END.badge + 0.4)),
-    rot: Math.sin(Math.PI * m) * -8,
-    o: t < END.hit ? 1 : 0,
+    cx: lerp(960, WM_SYM[0], go), cy: lerp(540, WM_SYM[1], go), R: lerp(R * pop, WM_SYM[2], go),
+    outer: EASE.out(seg(t, END.ring, END.ring + 0.45)),
+    inner: EASE.out(seg(t, END.build, END.build + 0.4)), eyes: EASE.out(seg(t, END.build + 0.25, END.build + 0.45)),
+    fill: EASE.std(seg(t, END.filled - 0.12, END.filled + 0.12)),
+    lineO: 1 - EASE.std(seg(t, END.filled, END.filled + 0.3)),
+    rot: (1 - EASE.out(seg(t, END.ring, END.build + 0.4))) * -160,
   };
+}
+
+// 每拍从徽章扩散出去的一圈涟漪（112、113 拍），给最后几拍一点“鼓点”。
+function renderRipples(t) {
+  const rings = BADGE.ripples;
+  [END.filled, beat(113)].forEach((t0, i) => {
+    const p = seg(t, t0, t0 + 0.75);
+    const el = rings[i];
+    if (p <= 0 || p >= 1) { el.style.opacity = '0'; return; }
+    el.setAttribute('d', circ(960, 540, BADGE_R * lerp(1.05, 2.6, EASE.out(p))));
+    el.style.opacity = (0.7 * (1 - p)).toFixed(3);
+    strokeSpan(el, 0, 1);
+  });
 }
 
 // 片尾字标：最后一击时字母依次弹出，月牙由徽章无缝接替。

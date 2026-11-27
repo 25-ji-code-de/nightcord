@@ -31,7 +31,8 @@ function camera(t) {
   }
   ax /= n; ay /= n;
   // 缩放越接近全景，中心越接近窗口中心；全景时窗口居中偏下（给画面上方留空）。
-  const z = seg(s, S_BASE, S_ZOOM);
+  const span = ZOOM_SPANS.find(([a, , , d]) => t >= a && t <= d);
+  const z = span ? seg(s, S_BASE, span[4]) : 0;
   const fx = lerp(WIN_W / 2, ax, z), fy = lerp(WIN_H / 2, ay, z);
   const baseY = 540 + 50 * (1 - z);
   let x = 960 - fx * s, y = baseY - fy * s;
@@ -106,7 +107,7 @@ function renderCursor(t, cam) {
     if (r > 0 && r < 1) { rip = EASE.out(r); ripO = 0.8 * (1 - r); }
   }
   // 推近时光标也跟着放大一点，和界面比例协调
-  const cs = inWin ? lerp(1, 1.35, seg(cam.s, S_BASE, S_ZOOM)) : 1;
+  const cs = inWin ? lerp(1, 1.35, seg(cam.s, S_BASE, 1.8)) : 1;
   put($('#cursor'), { x, y, s: cs * (1 - press * 0.1), o });
   const rp = $('#ripple');
   rp.style.opacity = ripO.toFixed(3);

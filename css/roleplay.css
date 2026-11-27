@@ -1,0 +1,71 @@
+/* Identity selector shares the composer's panel, hairlines and control rhythm. */
+.roleplay-bar { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 4px 8px; color: rgb(var(--nc-text)); font-size: 13px; }
+.roleplay-bar[hidden], .roleplay-bar [hidden] { display: none; }
+.roleplay-label { flex-shrink: 0; color: rgb(var(--nc-text-muted)); font-size: 12px; }
+.roleplay-bar button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+.roleplay-bar svg { flex-shrink: 0; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.roleplay-trigger { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: min(260px, calc(100% - 60px)); min-height: 36px; padding: 4px 10px 4px 6px; border: 1px solid rgb(var(--nc-line) / .12); border-radius: var(--sekai-radius-control); background: rgb(var(--nc-composer) / .65); transition: background var(--sekai-dur-fast), border-color var(--sekai-dur-fast); }
+.roleplay-trigger[data-roleplay-active="true"] { border-color: rgb(var(--nc-accent) / .4); }
+.roleplay-current-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.roleplay-trigger > svg { width: 14px; height: 14px; margin-left: 4px; color: rgb(var(--nc-text-muted)); transition: transform var(--sekai-dur-fast); }
+.roleplay-trigger[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.roleplay-avatar { display: grid; place-items: center; flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: rgb(var(--nc-line) / .06); color: rgb(var(--nc-icon)); font-size: 13px; }
+.avatar.roleplay-portrait { background: transparent; }
+.roleplay-panel { position: absolute; z-index: 1002; left: 0; bottom: calc(100% + 4px); box-sizing: border-box; width: min(344px, 100%); max-height: min(480px, var(--roleplay-available-height, 65dvh)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgb(var(--nc-accent-fill)) transparent; padding: 12px; border: 1px solid rgb(var(--nc-line) / .14); border-radius: var(--sekai-radius-panel); background: rgb(var(--nc-panel)); box-shadow: var(--sekai-elev-3), inset 0 1px 0 rgb(var(--nc-line) / .035); animation: roleplay-enter var(--sekai-dur-fast) var(--sekai-ease-out); }
+.roleplay-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px -4px 8px 4px; }
+.roleplay-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.roleplay-icon-button { display: grid; place-items: center; flex-shrink: 0; width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--sekai-radius-control); background: transparent; color: rgb(var(--nc-text-muted)); }
+.roleplay-choices { display: grid; gap: 12px; }
+.roleplay-defaults { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.roleplay-option { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 44px; padding: 8px; border: 1px solid transparent; border-radius: var(--sekai-radius-control); background: transparent; text-align: left; transition: background var(--sekai-dur-fast), border-color var(--sekai-dur-fast); }
+.roleplay-option--self { background: rgb(var(--nc-line) / .035); }
+.roleplay-option-name { min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
+.roleplay-option-hint { margin-right: auto; color: rgb(var(--nc-text-muted)); font-size: 12px; }
+.roleplay-option--default { flex-direction: column; justify-content: center; gap: 9px; padding: 12px 3px 10px; }
+.roleplay-option--default .roleplay-avatar { width: 36px; height: 36px; }
+.roleplay-option--default .roleplay-option-name { font-size: 12px; white-space: nowrap; }
+.roleplay-check { display: grid; place-items: center; width: 16px; height: 16px; margin-left: auto; color: rgb(var(--nc-accent)); visibility: hidden; }
+.roleplay-option--default .roleplay-check { position: absolute; top: 4px; right: 4px; width: 15px; height: 15px; border: 2px solid rgb(var(--nc-panel)); border-radius: 50%; background: rgb(var(--nc-accent)); color: rgb(var(--nc-panel)); }
+.roleplay-option--default .roleplay-check svg { width: 11px; height: 11px; stroke-width: 2.5; }
+.roleplay-option[aria-pressed="true"] { border-color: rgb(var(--nc-accent) / .45); background: rgb(var(--nc-accent) / .12); }
+.roleplay-option[aria-pressed="true"] .roleplay-option-name { font-weight: 600; }
+.roleplay-option[aria-pressed="true"] .roleplay-check { visibility: visible; }
+.roleplay-custom { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgb(var(--nc-line) / .1); }
+.roleplay-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 6px; color: rgb(var(--nc-text-muted)); font-size: 12px; }
+.roleplay-count { font-family: var(--sekai-font-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+.roleplay-custom-list { display: grid; gap: 2px; }
+.roleplay-custom-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.roleplay-custom-row .roleplay-option { flex: 1; }
+.roleplay-footer { margin-top: 12px; padding-top: 8px; border-top: 1px solid rgb(var(--nc-line) / .1); }
+.roleplay-add { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 8px; border: 0; border-radius: var(--sekai-radius-control); background: transparent; text-align: left; }
+.roleplay-bar .roleplay-add, .roleplay-bar .roleplay-icon-button { color: rgb(var(--nc-text-muted)); }
+.roleplay-add:disabled { cursor: default; opacity: .65; }
+.roleplay-form { display: grid; gap: 8px; padding: 4px; }
+.roleplay-form label { font-size: 12px; color: rgb(var(--nc-text-muted)); }
+.roleplay-input { box-sizing: border-box; width: 100%; min-width: 0; height: 40px; padding: 8px 10px; border: 1px solid rgb(var(--nc-line) / .18); border-radius: var(--sekai-radius-control); background: rgb(var(--nc-input)); color: rgb(var(--nc-text)); font: inherit; font-size: 16px; }
+.roleplay-input[aria-invalid="true"] { border-color: rgb(var(--sekai-danger)); }
+.roleplay-hint { color: rgb(var(--nc-text-muted)); font-size: 12px; line-height: 1.5; }
+.roleplay-error { margin: 0; color: rgb(var(--sekai-danger)); font-size: 12px; line-height: 1.5; }
+.roleplay-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.roleplay-form-actions button { min-height: 36px; padding: 6px 12px; border: 1px solid transparent; border-radius: var(--sekai-radius-control); background: transparent; }
+.roleplay-form-actions .roleplay-submit { background: rgb(var(--nc-accent) / .16); border-color: rgb(var(--nc-accent) / .25); }
+.roleplay-bar :is(button, input):focus-visible { outline: 2px solid rgb(var(--nc-accent)); outline-offset: -2px; }
+.roleplay-trigger:focus-visible { outline-offset: 2px; }
+.roleplay-bar button:active:not(:disabled) { background: rgb(var(--nc-accent) / .18); }
+@media (hover: hover) {
+  .roleplay-bar button:hover:not(:disabled) { background: rgb(var(--nc-hover)); }
+  .roleplay-option[aria-pressed="true"]:hover { background: rgb(var(--nc-accent) / .18); }
+  .roleplay-bar .roleplay-remove:hover { color: rgb(var(--sekai-danger)); }
+}
+@media (pointer: coarse), (max-width: 768px) {
+  .roleplay-bar { padding-inline: 4px; padding-bottom: 6px; }
+  .roleplay-trigger, .roleplay-add, .roleplay-form-actions button { min-height: 44px; }
+  .roleplay-icon-button { width: 44px; height: 44px; }
+  .roleplay-input { height: 44px; }
+}
+:root[data-ios-layout="on"] .roleplay-panel { border-radius: 20px; }
+@keyframes roleplay-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .roleplay-panel { animation: none; }
+  .roleplay-bar button, .roleplay-trigger > svg { transition: none; }
+}

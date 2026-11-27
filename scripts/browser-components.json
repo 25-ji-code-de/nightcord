@@ -58,7 +58,9 @@
     "js/ui/room-admin.js",
     "js/ui/room-settings.js",
     "js/ui/managed-chat.js",
-    "js/ui/rooms.js"
+    "js/ui/rooms.js",
+    "js/services/roleplay.js",
+    "js/ui/roleplay.js"
   ],
   "nightcord-mgr.js": [
     "js/network/chat-session.js"

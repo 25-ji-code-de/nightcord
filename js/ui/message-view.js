@@ -4,6 +4,12 @@
 class ChatMessageView {
   constructor(ui) { this.ui = ui; }
 
+  renderRoleplayAvatar(element, message) {
+    if (typeof RoleplayView === 'undefined' || this.ui.managedChat
+        || this.ui.currentRoom !== Roleplay.ROOM_ID || message.profile || !message.sender) return;
+    RoleplayView.renderAvatar(element, message.user);
+  }
+
   /**
    * 添加聊天消息到聊天日志
    * @param {string} name - 发送者名称
@@ -135,6 +141,7 @@ class ChatMessageView {
     avatarSpan.className = `avatar ${msg.color}`;
     avatarSpan.innerHTML = msg.avatar;
     this.ui.profileUI.avatar(avatarSpan, msg.profile);
+    this.renderRoleplayAvatar(avatarSpan, msg);
     this.ui.profileUI.makeTrigger(avatarSpan, msg.profile, { fromMessage: true });
 
     // Content

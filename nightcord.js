@@ -39,13 +39,24 @@ class Nightcord {
   /** @param {Object} config - 服务器和 AI 服务配置 */
   constructor(config = {}) {
     this.eventBus = new EventBus();
+    // 语C角色：房间名取自聊天室管理器（创建顺序在其之前，故延迟读取）。
+    this.roleplay = new Roleplay({
+      settings: {
+        getItem: key => localStorage.getItem(key),
+        setItem: (key, value) => localStorage.setItem(key, value)
+      },
+      getRoom: () => this.chatRoom?.roomname,
+      reserved: () => window.AIConfig.getAllDisplayNames()
+    });
     this.chatRoom = new NightcordManager({
       hostname: config.hostname,
       getAccessToken: () => this.identity.getAccessToken(),
       eventBus: this.eventBus,
-      aiConfig: window.AIConfig
+      aiConfig: window.AIConfig,
+      roleplay: this.roleplay
     });
     this.ui = new UIManager(this.eventBus);
+    this.roleplayView = new RoleplayView(this.ui, this.roleplay);
     this.eventBus.on('room:visibility:set', ({ visibility }) => {
       if (this.ui.managedChat) void this.rooms.setVisibility(visibility);
       else this.chatRoom.setVisibility(visibility);
@@ -56,7 +67,8 @@ class Nightcord {
       aiConfig: window.AIConfig,
       mentions: this.ui.mentions,
       spacing: text => typeof pangu !== 'undefined' ? pangu.spacingText(text) : text,
-      typeSource: SekaiRenderer.V2_TYPE_SOURCE
+      typeSource: SekaiRenderer.V2_TYPE_SOURCE,
+      encode: message => this.roleplay.encode(message)
     });
     this.sidebarFeatures = new SidebarFeatures(this.ui);
     this.ui.sidebarFeatures = this.sidebarFeatures;
@@ -217,6 +229,7 @@ class Nightcord {
    * 销毁应用实例
    */
   destroy() {
+    this.roleplayView.destroy();
     this.directMessageView.destroy();
     this.roomsView.destroy(); this.rooms.destroy();
     this.directMessages.destroy();

@@ -54,6 +54,8 @@ class NightcordManager {
     this.roster = new Map();
     this.currentUser = null;
     this.aiConfig = config.aiConfig || { getAllDisplayNames: () => [] };
+    // 语C角色解析器（可选）：decode(message, room) → { name, text } | null
+    this.roleplay = config.roleplay || null;
     this.fetch = config.fetch || ((...args) => globalThis.fetch(...args));
     this.visibilityState = { visibility: null, pending: null, available: false, reason: 'disconnected', error: '' };
     
@@ -334,13 +336,27 @@ class NightcordManager {
         }
       }
 
+      // 语C角色消息（[角色:名字]正文）：与 AI 转发共用「由……转发」显示，
+      // 但不是 AI，因此不参与 Nako 的预览确认与上下文逻辑。AI 前缀优先。
+      let isRoleplayMessage = false;
+      if (!isNakoMessage) {
+        const role = this.roleplay?.decode(message, this.roomname);
+        if (role) {
+          isRoleplayMessage = true;
+          message = role.text;
+          senderName = role.name;
+        }
+      }
+      const forwarded = isNakoMessage || isRoleplayMessage;
+
       this.eventBus.emit('message:received', {
         name: senderName,
         message: message,
         timestamp: data.timestamp,
-        user: isNakoMessage ? null : data.user,
-        sender: isNakoMessage ? data.user : null,
-        isNako: isNakoMessage
+        user: forwarded ? null : data.user,
+        sender: forwarded ? data.user : null,
+        isNako: isNakoMessage,
+        isRoleplay: isRoleplayMessage
       });
     }
   }

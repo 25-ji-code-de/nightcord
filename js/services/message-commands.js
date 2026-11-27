@@ -2,8 +2,8 @@
  * Copyright (C) 2025 The 25-ji-code-de Team */
 /** Validates outgoing chat input and routes local AI commands through events. */
 class MessageCommands {
-  constructor({ eventBus, send, aiConfig, mentions, spacing, typeSource }) {
-    Object.assign(this, { eventBus, send, aiConfig, mentions, spacing, typeSource });
+  constructor({ eventBus, send, aiConfig, mentions, spacing, typeSource, encode }) {
+    Object.assign(this, { eventBus, send, aiConfig, mentions, spacing, typeSource, encode });
   }
 
   error(message) {
@@ -29,8 +29,14 @@ class MessageCommands {
       return true;
     }
     message = this.format(message);
-    if (message.length > 256) return this.error('格式化后的消息超过 256 字符，请缩短后重试。');
-    return this.send(message);
+    // 语C的角色前缀也计入 256 字符上限；encode('') 即前缀本身，非角色发言时为空。
+    const prefix = this.encode?.('') ?? '';
+    if (message.length + prefix.length > 256) {
+      return this.error(prefix
+        ? `角色消息最多 ${256 - prefix.length} 个字符（角色前缀占用 ${prefix.length} 个），请缩短后重试。`
+        : '格式化后的消息超过 256 字符，请缩短后重试。');
+    }
+    return this.send(this.encode ? this.encode(message) : message);
   }
 
   format(message) {

@@ -64,6 +64,7 @@ return class SidebarMessages {
     const fallback = this.sidebar.ui.generateAvatar(message.user);
     avatar.classList.add(fallback.color); avatar.textContent = message.user.slice(0, 1);
     this.sidebar.ui.profileUI.avatar(avatar, message.profile);
+    this.sidebar.ui.messageView.renderRoleplayAvatar(avatar, message);
     const content = element('span', 'tool-message-content');
     content.append(meta, element('span', 'tool-message-preview', this.preview(message)));
     if (unread) meta.append(element('span', 'tool-unread-label', '未读'));

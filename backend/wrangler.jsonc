@@ -13,7 +13,8 @@
     "ROOMS_CREATE": "on",
     "ROOMS_DISCOVERY": "on",
     "ROOMS_OFFICIAL": [
-      { "id": "nightcord-default", "name": "作业", "description": "Nightcord 官方公共聊天室。" }
+      { "id": "nightcord-default", "name": "作业", "description": "Nightcord 官方公共聊天室。" },
+      { "id": "nightcord-roleplay", "name": "语C", "description": "以角色身份发言的官方频道。" }
     ],
     "DM_MAX_BYTES": "52428800",
     "DM_REQUESTS_HOUR": "10",

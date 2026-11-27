@@ -21,13 +21,9 @@ body {
 #wm { left: 0; top: 0; width: 1084px; height: 216px; transform-origin: 107px 90px; z-index: 3; display: none; }
 #wm svg { position: absolute; left: 0; top: 0; width: 1084px; height: 216px; overflow: visible; }
 #wm path { fill: #fff; fill-rule: evenodd; }
-#tag {
-  left: 0; width: 1920px; top: 640px; text-align: center; z-index: 3; display: none;
-  font-size: 30px; letter-spacing: .14em; color: rgba(255,255,255,.6);
-}
 
 #card {
-  left: 1052px; top: 189px; width: 620px; height: 706px; border-radius: 29px; overflow: hidden;
+  left: 0; top: 0; width: 620px; height: 706px; border-radius: 29px; overflow: hidden;
   box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 60px 120px rgba(0,0,0,.55); z-index: 12; display: none;
   background: transparent;
 }
@@ -41,7 +37,6 @@ body {
   box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 50px 120px rgba(0,0,0,.6), 0 12px 30px rgba(0,0,0,.4);
 }
 #win img { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; }
-#toast { position: absolute; left: 1045.5px; top: 72px; width: 377.5px; height: 131.5px; z-index: 5; display: none; filter: drop-shadow(0 18px 30px rgba(0,0,0,.45)); }
 
 #cursor { left: 0; top: 0; width: 0; height: 0; z-index: 60; display: none; }
 #ripple {
@@ -49,5 +44,4 @@ body {
   border: 2px solid rgba(255,255,255,.9); background: rgba(255,255,255,.16); opacity: 0;
 }
 /* 颗粒由 ffmpeg 的 noise 滤镜在合成时统一添加：渲染阶段的全屏混合层太慢，且会随帧抖动。 */
-#grain { display: none !important; }
 #fade { left: 0; top: 0; width: 1920px; height: 1080px; background: #000; opacity: 0; z-index: 100; pointer-events: none; }

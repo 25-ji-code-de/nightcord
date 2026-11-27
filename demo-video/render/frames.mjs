@@ -10,7 +10,7 @@ const outDir = fileURLToPath(new URL('../frames/', import.meta.url));
 mkdirSync(outDir, { recursive: true });
 const sceneUrl = pathToFileURL(fileURLToPath(new URL('../scene/index.html', import.meta.url))).href;
 
-const FPS = 60, DURATION = 58.4; // 与 scene/data.js 的 DUR 一致
+const FPS = 60, DURATION = 59.35; // 与 scene/data.js 的 DUR 一致
 const total = Math.round(FPS * DURATION);
 const start = Number(process.argv[2] ?? 0);
 const end = Math.min(total, Number(process.argv[3] ?? total));

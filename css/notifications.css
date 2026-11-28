@@ -128,6 +128,45 @@
 .chat-unread:focus-visible { outline: 2px solid rgb(var(--nc-accent-hover)); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .chat-unread { transition: none; } }
 
+/* Edge tabs leave the middle of the conversation clear, like WeChat's history hints. */
+.chat-reading-anchor { position: relative; z-index: 21; height: 0; flex: 0 0 0; }
+.managed-chat-policy:not([hidden]) ~ .chat-reading-anchor { display: none; }
+.chat-reading-tab {
+  position: absolute;
+  right: 0;
+  z-index: 21;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  box-sizing: border-box;
+  min-height: 36px;
+  max-width: calc(100% - 24px);
+  padding: 7px 14px 7px 12px;
+  border: 1px solid rgb(var(--nc-accent-hover) / .3);
+  border-right: 0;
+  border-radius: 18px 0 0 18px;
+  background: color-mix(in srgb, rgb(var(--nc-text)) 94%, rgb(var(--nc-accent)));
+  color: rgb(var(--nc-composer));
+  box-shadow: 0 2px 8px rgb(var(--nc-navigation) / .16);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  touch-action: manipulation;
+  transition: background-color 150ms, box-shadow 150ms;
+}
+.chat-reading-tab svg { width: 15px; height: 15px; flex: none; }
+.chat-reading-tab span { min-width: 0; overflow-wrap: anywhere; }
+.chat-reading-resume { top: 12px; }
+.chat-reading-new { bottom: calc(100% + 10px); }
+.chat-reading-tab[hidden] { display: none; }
+.chat-reading-tab:hover { background: color-mix(in srgb, rgb(var(--nc-text)) 80%, rgb(var(--nc-accent))); }
+.chat-reading-tab:active { box-shadow: none; }
+.chat-reading-tab:focus-visible { outline: 2px solid rgb(var(--nc-accent-hover)); outline-offset: 3px; }
+.chat-reading-tab:disabled { cursor: wait; opacity: .75; }
+@media (prefers-reduced-motion: reduce) { .chat-reading-tab { transition: none; } }
+
 /* Message and mention cards share one layout and the active Nightcord palette. */
 .notice-card {
   box-sizing: border-box;

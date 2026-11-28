@@ -460,7 +460,7 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     assert.equal(await page.evaluate(() => Object.keys(features.read().read).length), 2000);
   });
 
-  await t.test('integrated navigation preserves chat draft and position, and notices return to the message', async t => {
+  await t.test('integrated navigation preserves drafts, offers the reading bookmark and notices return to the message', async t => {
     const { page } = await fixture(t);
     await page.evaluate(() => {
       for (let i = 0; i < 60; i++) ui.addChatMessage(peer.displayName, `Chat line ${i}`, Date.now() + i, undefined, undefined, peer);
@@ -474,7 +474,9 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
     await page.locator('#navigation-help').click();
     assert.equal(await page.locator('.navigation-item[aria-current="page"]').count(), 1);
     await page.locator('.tools-back').click();
-    assert.equal(await page.locator('#messages').evaluate(node => node.scrollTop), before);
+    assert.equal(await page.locator('#messages').evaluate(node => Math.abs(node.scrollHeight - node.clientHeight - node.scrollTop) < 2), true);
+    await page.locator('.chat-reading-resume').click();
+    assert.ok(Math.abs(await page.locator('#messages').evaluate(node => node.scrollTop) - before) < 2);
     assert.equal(await page.locator('#messageInput').inputValue(), 'Keep my draft');
     await page.locator('#navigation-search').click();
     await page.locator('#navigation-chat').click();
@@ -590,6 +592,7 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
       for (const kind of ['help', 'search', 'inbox']) {
         features.open(kind); await frame();
         features.close(false); await frame(); await frame();
+        await ui.readingPosition.jumpBack(); await frame();
       }
       // Jump into a previously skipped group, as a search result/reply does.
       const target = ui.messageIndex.get(1700000000000 + 320);

@@ -144,6 +144,7 @@
 
     open(kind) {
       if (!TITLES[kind]) return;
+      this.ui.readingPosition?.leave();
       this.ui.directMessageView?.close(false);
       this.ensurePanel();
       this.ui.closeMentionPicker({ restoreFocus: false });
@@ -170,6 +171,7 @@
       this.panel.hidden = true;
       this.ui.elements.main.classList.remove('tool-view');
       this.ui.elements.chatlog.scrollTop = this.chatScrollTop || 0;
+      this.ui.readingPosition?.open();
       document.querySelector(`#navigation-${this.kind}`)?.classList.remove('is-active');
       document.querySelector(`#navigation-${this.kind}`)?.removeAttribute('aria-current');
       document.querySelector('#navigation-chat')?.setAttribute('aria-current', 'page');

@@ -564,15 +564,15 @@ test('message rendering batches updates without losing or duplicating messages',
       await nextFrame();
       const following = ui.elements.chatlog.scrollTop + ui.elements.chatlog.clientHeight >= ui.elements.chatlog.scrollHeight - 1;
       ui.isAtBottom = false;
-      ui.lastUserActivityTime = Date.now() - ui.interactionTimeWindow - 1;
-      ui.addSystemMessage('idle follow', 1700000010002);
+      ui.lastUserActivityTime = Date.now() - 60_000;
+      ui.addSystemMessage('still reading after idle', 1700000010002);
       await nextFrame();
       return { reading, rebuilt, following, writes: counts.scrollWrites };
     });
     assert.deepEqual(result.reading, { top: 80, writes: 0, reads: 0 });
     assert.deepEqual(result.rebuilt, { top: 80, writes: 0 });
     assert.equal(result.following, true);
-    assert.equal(result.writes, 2);
+    assert.equal(result.writes, 1);
   });
 
   await t.test('empty rooms clear the DOM and reply indexes', async t => {

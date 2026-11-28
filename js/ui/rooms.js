@@ -111,6 +111,7 @@ class RoomsView {
     try { return await action(); } catch (error) { if (gen === this.manager.generation && revision === this.viewRevision && error.name !== 'AbortError') { this.error.textContent = error.message; if (this.panel.hidden) this.ui.setConnectionStatus(error.message); } }
   }
   open() {
+    this.ui.readingPosition?.leave();
     this.ui.directMessageView?.close(false); this.ui.sidebarFeatures?.close(false); this.ui.closeMentionPicker?.({ restoreFocus: false }); this.ui.closeNavigationDrawer?.();
     this.ui.elements.main.classList.add('rooms-view'); this.panel.hidden = false; this.nav?.setAttribute('aria-current', 'page');
     document.querySelector('#navigation-chat')?.removeAttribute('aria-current');
@@ -119,6 +120,7 @@ class RoomsView {
     if (this.panel.hidden && !this.ui.managedChat) return;
     this.settings.admin.reset(); this.chat.deactivate();
     this.viewRevision++; this.showingRoom = false; this.panel.hidden = true; this.manager.disconnect(); this.ui.elements.main.classList.remove('rooms-view');
+    this.ui.readingPosition?.open();
     this.nav?.removeAttribute('aria-current'); RoomDestination.clear(); history.replaceState({}, '', location.pathname);
     document.querySelector('#navigation-chat')?.setAttribute('aria-current', 'page');
   }
@@ -206,6 +208,7 @@ class RoomsView {
     }
     if (!this.panel.hidden) { this.viewRevision++; this.settings.admin.reset(); this.content.replaceChildren(); }
     this.panel.hidden = true; this.ui.elements.main.classList.remove('rooms-view');
+    this.ui.readingPosition?.rendered();
     this.nav?.removeAttribute('aria-current');
     if (!this.ui.elements.main.matches('.tool-view, .dm-view')) document.querySelector('#navigation-chat')?.setAttribute('aria-current', 'page');
     this.input = this.ui.elements.chatInput;

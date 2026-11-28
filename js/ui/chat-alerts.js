@@ -81,13 +81,19 @@ class ChatAlerts {
     if (!reasons.length || this.seen.has(data.timestamp)) return;
     this.seen.add(data.timestamp);
     if (this.seen.size > 2000) this.seen.delete(this.seen.values().next().value);
-    if (!this.viewing()) { this.unread++; this.renderUnread(); }
+    if (!this.viewing()) {
+      this.unread++;
+      this.ui.readingPosition?.receive(data);
+      this.renderUnread();
+    }
     const prefs = this.preferences.read();
     if (this.paused(prefs)) return;
     const important = reasons.filter(kind => kind !== 'message');
     const notice = important.find(kind => prefs[`${kind}Notice`]);
+    const readingChat = this.ui.readingPosition?.visible() && !document.hidden && document.hasFocus()
+      && !document.querySelector('dialog[open]');
     if (notice) this.notice(`${data.name} ${notice === 'reply' ? '回复了你' : notice === 'everyone' ? '提及了所有人' : '提到了你'}`, message, notice);
-    else if (!important.length && (prefs.messageNotice === 'always' || (prefs.messageNotice === 'away' && !this.viewing()))) {
+    else if (!important.length && (prefs.messageNotice === 'always' || (prefs.messageNotice === 'away' && !this.viewing() && !readingChat))) {
       this.notice(`${data.name} 发来新消息`, message, 'message');
     }
     this.sound(reasons, `message:${data.timestamp}`, prefs);
@@ -181,6 +187,7 @@ class ChatAlerts {
       this.unreadButton.addEventListener('click', () => {
         this.ui.sidebarFeatures?.close(false);
         this.ui.directMessageView?.close(false);
+        this.ui.readingPosition?.latest();
         const log = this.ui.elements.chatlog;
         log.scrollTop = log.scrollHeight; this.ui.isAtBottom = true; this.unread = 0;
         this.ui.updateUserActivityTime();
@@ -193,11 +200,13 @@ class ChatAlerts {
     if (this.unreadButton) {
       const log = this.ui.elements.chatlog;
       const atBottom = this.ui.isAtBottom || log.scrollHeight - log.scrollTop - log.clientHeight < this.ui.scrollThreshold;
-      this.unreadButton.hidden = !this.unread && atBottom;
-      this.unreadLabel.textContent = this.unread ? `${this.unread} 条新消息 · 回到最新` : '跳到最新消息';
+      this.unreadButton.hidden = atBottom;
+      this.unreadLabel.textContent = '跳到最新消息';
     }
+    this.ui.readingPosition?.render();
   }
   destroy() {
+    this.ui.readingPosition?.destroy();
     this.reset(); this.delivery.destroy(); this.view.destroy(); this.unreadButton?.remove();
     for (const unsubscribe of this.off) unsubscribe();
     for (const event of ['focus', 'blur']) window.removeEventListener(event, this.attention);

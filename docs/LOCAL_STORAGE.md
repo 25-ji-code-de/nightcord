@@ -71,6 +71,12 @@
   - Key: `nightcord-lastmsg:<roomname>`
   - Value: 字符串化的整数时间戳（ms since epoch）
 
+- 上次阅读位置（按身份、房间类型和房间）：
+  - Key: `nightcord-reading:<userId>:<public|managed>:<roomname>`（身份和房间名使用 URL 编码）
+  - Value: `{ timestamp, offset, seq? }`，只保存可见消息的位置；用户房间另存消息序号，不缓存消息正文。
+  - 重开聊天先到最新；右上角可回到上次阅读的位置。自动跳到底部不会立即覆盖旧位置，开始阅读或主动跳转后再更新。
+  - 记录只保存在当前浏览器。存储不可用时保留本次页面内的记录；旧消息已清除时不显示无法跳转的入口。
+
 - 最后已知资料（跨房间，按唯一用户 ID 区分）：
   - Key: `nightcord-known-profiles`
   - Value: JSON 数组，元素格式为 { profile, observedAt }，`observedAt` 是本浏览器收到在线资料的时间。

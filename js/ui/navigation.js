@@ -68,10 +68,12 @@ class ChatNavigation {
       else { membersCollapsed = !membersCollapsed; sync(); }
     });
     const chat = () => {
+      this.ui.readingPosition?.leave();
       this.ui.closeMentionPicker({ restoreFocus: false });
       if (mobile.matches) close();
       this.ui.isAtBottom = true;
       this.ui.elements.chatlog.scrollTop = this.ui.elements.chatlog.scrollHeight;
+      this.ui.readingPosition?.open();
       if (mobile.matches) toggle.focus({ preventScroll: true });
       else this.ui.elements.chatInput.focus({ preventScroll: true });
     };

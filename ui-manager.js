@@ -82,7 +82,6 @@ class UIManager {
     // 触摸和滚动检测
     this.lastUserActivityTime = Date.now(); // 最后一次用户活动时间（触摸、滚轮、滚动等），初始化为当前时间
     this.scrollThreshold = 150; // 距离底部超过此像素数认为在阅读历史消息
-    this.interactionTimeWindow = 5000; // 5秒内有用户交互活动则不自动滚动
 
     // 未收到服务器确认的 AI 预览；同内容的多次调用分别跟踪。
     this.localNakoMessages = new Map(); // messageId -> { message, senderId, room }
@@ -235,6 +234,7 @@ class UIManager {
     }
     this.mentions = typeof NightcordMentions !== 'undefined' ? new NightcordMentions(this.sekaiRenderer) : null;
     this.alerts = new ChatAlerts(this);
+    if (this.elements.main) this.readingPosition = new ChatReadingPosition(this);
 
     // 监听回复跳转事件
     this.setupReplyJumpListener();

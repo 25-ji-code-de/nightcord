@@ -15,6 +15,8 @@ class ChatRoomView {
   }
 
   setCurrentRoom(roomname) {
+    this.ui.readingPosition?.leave();
+    this.ui.isAtBottom = true;
     // 下方会从缓存重建模型，未确认预览不跨房间/重新加载保留。
     this.ui.localNakoMessages.clear();
     this.ui.currentRoom = roomname;

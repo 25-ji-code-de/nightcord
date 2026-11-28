@@ -209,6 +209,7 @@ class DirectMessageView {
     this.renderList(); this.renderThread(); (filter === 'all' ? this.title : this.listTitle).focus();
   }
   open(id) {
+    this.ui.readingPosition?.leave();
     this.changeView(); this.dismissToast();
     if (this.panel.hidden) { this.returnFocus = document.activeElement; this.scrollTop = this.ui.elements.chatlog.scrollTop; }
     this.ui.sidebarFeatures?.close(false); this.ui.closeMentionPicker({ restoreFocus: false }); this.ui.closeNavigationDrawer?.();
@@ -231,6 +232,7 @@ class DirectMessageView {
     this.nav?.removeAttribute('aria-current'); this.nav?.classList.remove('is-active');
     document.querySelector('#navigation-chat')?.setAttribute('aria-current', 'page');
     this.ui.elements.chatlog.scrollTop = this.scrollTop || 0;
+    this.ui.readingPosition?.open();
     if (restore) {
       const focus = this.returnFocus?.isConnected && this.returnFocus.getClientRects().length ? this.returnFocus
         : this.nav?.getClientRects().length ? this.nav : document.querySelector('.sidebar-toggle');

@@ -135,6 +135,7 @@ const PRECACHE = [
   '/js/ui/alert-banner.js',
   '/js/ui/alert-settings.js',
   '/js/ui/chat-alerts.js',
+  '/js/ui/reading-position.js',
   '/js/ui/events.js',
   '/js/ui/name-chooser.js',
   '/js/ui/room-view.js',

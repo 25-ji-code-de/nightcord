@@ -119,6 +119,7 @@ class MessageListView {
       this.ui.messageBuild = null;
       if (this.shouldAutoScrollToBottom()) this.ui.elements.chatlog.scrollTop = this.ui.elements.chatlog.scrollHeight;
       this.ui.alerts?.renderUnread();
+      this.ui.readingPosition?.rendered();
       PerformanceOptimizer.mark('renderMessages-end');
       PerformanceOptimizer.measure('renderMessages', 'renderMessages-start', 'renderMessages-end');
       return;
@@ -148,6 +149,7 @@ class MessageListView {
     if (shouldAutoScroll) chatlog.scrollTop = chatlog.scrollHeight;
     // Replacing history can remove overflow without dispatching a scroll event.
     if (rebuild) this.ui.alerts?.renderUnread();
+    this.ui.readingPosition?.rendered();
 
     if (measureRender) {
       PerformanceOptimizer.mark('renderMessages-end');
@@ -156,16 +158,11 @@ class MessageListView {
   }
 
   /**
-   * 判断是否应该自动滚动到底部
-   * 条件：
-   * 1. 用户当前在底部附近 (距离底部 < scrollThreshold 像素)
-   * 2. 或者用户最近没有触摸/滚动操作（超过指定时间窗口）
+   * 仅在用户停在最新消息时跟随新消息，阅读历史不会因停顿而中断。
    * @returns {boolean}
    */
   shouldAutoScrollToBottom() {
-    const timeSinceLastTouch = Date.now() - this.ui.lastUserActivityTime;
-    // 如果用户在底部附近，或者已经很久没有交互，就自动滚动
-    return this.ui.isAtBottom || timeSinceLastTouch > this.ui.interactionTimeWindow;
+    return this.ui.isAtBottom;
   }
 
   /**

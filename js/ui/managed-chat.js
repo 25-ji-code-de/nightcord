@@ -10,13 +10,15 @@ class ManagedChatView {
     this.older = view.button('加载更早消息', () => void view.attempt(() => this.manager.older()));
     this.sync = view.button('同步消息', () => void view.attempt(() => this.manager.sync()));
     this.history.append(this.older, this.sync);
-    this.ui.elements.chatlog.before(this.history);
+    const historyStart = this.ui.readingPosition?.anchor || this.ui.elements.chatlog;
+    historyStart.before(this.history);
     this.policy = view.element('section', 'managed-chat-policy'); this.policy.hidden = true;
     this.policy.setAttribute('aria-label', '确认房间显示规则');
-    this.ui.elements.chatlog.before(this.policy);
+    historyStart.before(this.policy);
   }
   activate(id) {
     const ui = this.ui;
+    ui.readingPosition?.leave();
     if (!ui.managedChat) this.previous = { room: ui.currentRoom, userId: ui.currentUser?.id, draft: ui.elements.chatInput.value, send: ui.onSendMessage };
     ui.managedChat = this;
     ui.currentRoom = id; ui.localNakoMessages.clear();
@@ -44,6 +46,7 @@ class ManagedChatView {
   }
   deactivate() {
     if (this.ui.managedChat !== this) return;
+    this.ui.readingPosition?.leave();
     this.clear();
     const ui = this.ui;
     ui.managedChat = null; ui.currentRoom = this.previous?.room;
@@ -144,7 +147,7 @@ class ManagedChatView {
       ui.sidebarFeatures?.scheduleRefresh();
       if (this.wasReady && m.ready) for (const item of messages.filter(item => item.seq > latest)) {
         const message = this.message(item);
-        ui.alerts?.receive({ name: message.user, user: message.profile, message: message.text, timestamp: message.timestamp });
+        ui.alerts?.receive({ name: message.user, user: message.profile, message: message.text, timestamp: message.timestamp, seq: message.seq });
       }
     }
     this.wasReady = m.ready;

@@ -9,7 +9,7 @@ Private messages share its alarm; room messages use bounded, coalesced room-loca
 tasks and the existing room alarm, with a limit of 500 delivery attempts per room
 per UTC day. No polling is added. Room push is opt-in per device and message category.
 Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` using Wrangler secrets;
-it stays disabled until all three exist and `DM_MODE=on`. No new binding or migration
+Web Push stays disabled until all three exist and `DM_MODE=on`. No new binding or migration
 is needed. See [PWA setup, endpoints and delivery limits](../docs/PWA.md).
 
 Optional room voice uses a separate SQLite `VoiceRoom` with Cloudflare Realtime
@@ -35,12 +35,14 @@ participants after 120 cumulative daily minutes without interrupting the call.
 The `v3-voice-quota`
 migration adds its binding. These time limits do not constitute a billing cap.
 
-Private messages use separate SQLite `DirectRoom` and `UserInbox` objects, added
-by migration `v4-direct-messages`. `DM_MODE=on` enables them, `read-only` preserves
+Private messaging is enabled in the checked-in configuration (`DM_MODE=on`).
+It uses separate SQLite `DirectRoom` and `UserInbox` objects, added by migration
+`v4-direct-messages`. Setting `DM_MODE=read-only` preserves
 history and personal read/hide/refusal controls while stopping new conversations,
 messages and request decisions; `off` disables access without deleting data.
-An absent or unrecognized mode defaults to off. The checked-in configuration is
-on. See [private messaging](../docs/DIRECT_MESSAGES.md) for the API, limits,
+Only an absent or unrecognized mode falls back to `off`. VAPID credentials and
+device opt-in are required for Web Push, while in-app private messaging works
+without them. See [private messaging](../docs/DIRECT_MESSAGES.md) for the API, limits,
 storage behavior and local verification.
 
 ## Managed rooms

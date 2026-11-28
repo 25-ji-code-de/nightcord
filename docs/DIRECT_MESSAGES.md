@@ -13,14 +13,18 @@
 
 ## 部署与存储
 
+仓库的 `backend/wrangler.jsonc` 已设置 `DM_MODE=on`，按此配置部署会开启私信。
+
 `backend/wrangler.jsonc` 的 `v4-direct-messages` 迁移注册 `DM_ROOMS` / `DirectRoom` 和 `DM_INBOXES` / `UserInbox`，使用 SQLite Durable Objects，不需要新增密钥。
 
-| 配置 | 默认值 | 含义 |
+| 配置 | 仓库配置值 | 含义 |
 | --- | --- | --- |
-| `DM_MODE` | `off` | `on` 开放；`read-only` 允许读取及已读、隐藏、拒收管理，禁止发信、创建会话和接受/拒绝请求；`off` 禁止访问但保留数据。仓库配置为 `on`。 |
+| `DM_MODE` | `on` | 已开启私信。`read-only` 允许读取及已读、隐藏、拒收管理，禁止发信、创建会话和接受/拒绝请求；`off` 禁止访问但保留数据。 |
 | `DM_MAX_BYTES` | `52428800` | 每个会话按消息 UTF-8 载荷加固定开销估算的容量上限；不是 SQLite 实际占用或账单上限。达到上限后禁止新消息，历史保留。 |
 | `DM_REQUESTS_HOUR` | `10` | 每个账号在过去一小时首次发起会话的不同对象数。 |
 | `DM_REQUESTS_DAY` | `30` | 每个账号在上海时区当天首次发起会话的不同对象数。重复打开同一对象不重复计数。 |
+
+只有未设置 `DM_MODE` 或设置了无法识别的值时，服务端才回退为 `off`。后台推送另需配置 VAPID 密钥并由用户开启，不影响页面内收发私信。
 
 每次 HTTP 请求经 SEKAI Pass 验证。每个账号使用一个 WebSocket 接收会话元数据，正文按需经 HTTP 分页读取。WebSocket 认证租期为五分钟，在四分钟左右续期；租期过期会重连，明确的登录失效才触发重新登录提示。重新连接和事件版本缺口会同步会话列表。
 

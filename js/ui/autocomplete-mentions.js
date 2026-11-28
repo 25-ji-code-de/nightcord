@@ -41,7 +41,13 @@ class AutocompleteMentions {
       groups[key].members.push(candidate);
     }
     const sections = Object.values(groups).filter(group => group.members.length);
-    for (const { members } of sections) members.sort((a, b) => a.name.localeCompare(b.name));
+    for (const group of sections) {
+      group.members.sort((a, b) => {
+        const accountOrder = group === groups.offline
+          ? Number(b.profile?.authenticated === true) - Number(a.profile?.authenticated === true) : 0;
+        return accountOrder || a.name.localeCompare(b.name);
+      });
+    }
     return sections;
   }
 

@@ -19,6 +19,7 @@ async function auditFixture(options = {}) {
   script = script.replace(pattern, match => match + `
     async fetch(request) {
       const action = new URL(request.url).pathname;
+      if (action === '/testGetAlarm') return Response.json(await this.ctx.storage.getAlarm());
       if (action === '/getPresence') return Response.json(this.getPresence());
       if (action === '/testCleanup') { await this.cleanup(); return Response.json(null); }
       if (action === '/testAlarm' || action === '/testReschedule') {
@@ -41,7 +42,7 @@ async function inspect(f) {
   // HTTP requests end their reference at response completion. Retaining a called
   // external RPC stub pins the object in Miniflare and prevents real eviction.
   const call = async action => (await ns.get(ns.idFromString(id)).fetch(`http://voice-test/${action}`)).json();
-  const room = Object.fromEntries(['testCleanup', 'testAlarm', 'testReschedule', 'getPresence'].map(action => [action, () => call(action)]));
+  const room = Object.fromEntries(['testGetAlarm', 'testCleanup', 'testAlarm', 'testReschedule', 'getPresence'].map(action => [action, () => call(action)]));
   return { id, room, storage, quota,
     members: () => rows('voice_members'), sessions: () => rows('voice_sessions'), turns: () => rows('voice_turn_cleanup'),
     lease: async memberId => JSON.parse((await quota.exec('SELECT data FROM voice_quota_leases WHERE id=?', memberId))[0].data),
@@ -191,6 +192,50 @@ test('rate-limited cleanup honors Retry-After and prolonged uncertainty backs of
   await f.runtime.unsafeEvictDurableObject('nightcord-chat', 'VoiceRoom', { id: a.id });
   const calls = f.provider.calls.length; await a.room.testCleanup();
   assert.equal((await a.sessions())[0].cleanup.nextAttemptAt, retryAt); assert.equal(f.provider.calls.length, calls);
+});
+
+test('completed cleanup schedules the persisted retry, not its temporary in-flight wake-up', async t => {
+  const f = await auditFixture({ intercept: ({ path }) => {
+    if (path.endsWith('/tracks/close')) return new Response(null, { status: 429, headers: { 'Retry-After': '1200' } });
+  } }); t.after(() => f.close());
+  const member = await f.join(await f.connect()); await publish(f, member);
+  const a = await inspect(f);
+  await f.api('leave', member.credential);
+  await until(async () => (await a.sessions())[0]?.cleanup?.attempts === 1);
+  // Remove independent short-lived records so only the cleanup retry is due.
+  await a.storage.exec('DELETE FROM voice_operations');
+  await a.storage.exec('DELETE FROM voice_tickets');
+  await a.dueMedia();
+  await a.room.testAlarm();
+  const retryAt = (await a.sessions())[0].cleanup.nextAttemptAt;
+  assert.equal(await a.room.testGetAlarm(), retryAt, 'the in-flight watchdog must be replaced after a failed attempt');
+  const calls = f.provider.calls.length;
+  await a.room.testCleanup();
+  assert.equal(f.provider.calls.length, calls, 'ordinary cleanup requests cannot skip backoff');
+  await f.runtime.unsafeEvictDurableObject('nightcord-chat', 'VoiceRoom', { id: a.id });
+  assert.equal(await a.room.testGetAlarm(), retryAt, 'eviction preserves the deferred wake-up');
+});
+
+test('long-lived failures on known media back off without forgetting live forwarding', async t => {
+  const f = await auditFixture(); t.after(() => f.close());
+  const member = await f.join(await f.connect()); await publish(f, member);
+  f.provider.failClose = true;
+  const a = await inspect(f);
+  await f.api('leave', member.credential);
+  await until(async () => (await a.sessions())[0]?.cleanup?.attempts === 1);
+  assert.equal((await a.sessions())[0].uncertain, false);
+  await a.storage.exec("UPDATE voice_sessions SET data=json_set(data,'$.cleanup.nextAttemptAt',0,'$.cleanup.firstFailedAt',?,'$.cleanup.attempts',8)", Date.now() - 3600000);
+  await a.room.testCleanup();
+  const retryAt = (await a.sessions())[0].cleanup.nextAttemptAt;
+  assert.ok(retryAt > Date.now() + 890000, 'known allocations must also leave minute-by-minute retries');
+  assert.equal((await a.lease(member.memberId)).closed, undefined, 'backoff does not assert media closure');
+  await f.runtime.unsafeEvictDurableObject('nightcord-chat', 'VoiceRoom', { id: a.id });
+  const calls = f.provider.calls.length; await a.room.testCleanup();
+  assert.equal(f.provider.calls.length, calls);
+  assert.equal((await a.sessions())[0].cleanup.nextAttemptAt, retryAt);
+  f.provider.failClose = false; await a.dueMedia(); await a.room.testCleanup();
+  assert.equal((await a.sessions()).length, 0);
+  assert.equal((await a.lease(member.memberId)).closed, true);
 });
 
 test('partial media close retries only unresolved mids and does not release live forwarding', async t => {

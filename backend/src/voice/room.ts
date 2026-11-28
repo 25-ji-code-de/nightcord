@@ -122,9 +122,11 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
       if (operation !== null) deadlines.push(operation);
       if (!deadlines.length) { if (alarm !== null) await txn.deleteAlarm(); return; }
       const deadline = Math.max(now + 1, Math.min(...deadlines));
-      // Retain an already earlier wake-up; never let concurrent request handlers
-      // postpone an authentication or quota deadline.
-      if (alarm === null || alarm > deadline) await txn.setAlarm(deadline);
+      // Recompute from current persisted work inside the transaction. A completed
+      // attempt may have moved its retry beyond the in-flight watchdog. Keeping
+      // that old alarm wakes an idle room before anything can make progress.
+      // Authentication, quota and concurrent tasks are all included above.
+      if (alarm !== deadline) await txn.setAlarm(deadline);
     });
   }
   async issueTicket(room: string, chatId: string, connectionId: string, user: Profile, authUntil: number): Promise<{ ticket?: string; code?: string }> {

@@ -46,6 +46,8 @@ class WebSocketManager {
   constructor(config = {}) {
     this.hostname = config.hostname;
     this.reconnectDelay = config.reconnectDelay || 10000;
+    this.maxReconnectDelay = Math.max(this.reconnectDelay, config.maxReconnectDelay || 120000);
+    this._reconnectAttempts = 0;
     this.ws = null;
     this.rejoined = false;
     // Whether disconnection should attempt to reconnect. When user intentionally
@@ -76,6 +78,7 @@ class WebSocketManager {
    * @param {string} [username] - 可选的协议连接参数
    */
   connect(roomname, username) {
+    if (roomname !== this.roomname) this._reconnectAttempts = 0;
     this.roomname = roomname;
     this.username = username;
     this.rejoined = false;
@@ -119,7 +122,7 @@ class WebSocketManager {
     ws.addEventListener('open', async (event) => {
       if (gen !== this._gen || this.ws !== ws) return;
       if (this.protocol) this.protocol.open(ws, prepared, username);
-      else this.ready = true;
+      else this.markReady();
       this.onOpen(event);
     });
 
@@ -132,7 +135,10 @@ class WebSocketManager {
         console.warn('WebSocketManager: invalid JSON message', e);
         return;
       }
-      if (this.protocol?.message(data, ws) === false) return;
+      const accepted = this.protocol?.message(data, ws);
+      if (gen !== this._gen || this.ws !== ws) return;
+      if (this.ready) this._reconnectAttempts = 0;
+      if (accepted === false) return;
       this.onMessage(data);
     });
 
@@ -160,29 +166,28 @@ class WebSocketManager {
    * 重新连接到服务器
    * @private
    */
-  async rejoin() {
+  rejoin() {
     if (this.rejoined || !this.shouldReconnect) return;
     if (!this.roomname) return;
 
     this.rejoined = true;
     this.ws = null;
+    const gen = this._gen;
     this.onReconnect();
-
-    const timeSinceLastJoin = Date.now() - (this.startTime || 0);
-    const wait = Math.max(0, this.reconnectDelay - timeSinceLastJoin);
-
-    if (wait > 0) {
-      await new Promise((resolve) => {
-        this._reconnectTimer = setTimeout(() => {
-          this._reconnectTimer = null;
-          resolve();
-        }, wait);
-      });
-    }
-
-    if (!this.shouldReconnect) return;
-    this.connect(this.roomname, this.username);
+    if (gen !== this._gen || !this.shouldReconnect) return;
+    const delay = Math.min(this.maxReconnectDelay, this.reconnectDelay * 2 ** Math.min(this._reconnectAttempts++, 20));
+    // Non-security jitter spreads reconnects after an outage. Always wait after
+    // failure, including slow handshakes and formerly long-lived connections.
+    const wait = Math.round(delay * (0.75 + Math.random() * 0.25));
+    const timer = setTimeout(() => {
+      if (this._reconnectTimer !== timer || gen !== this._gen || !this.shouldReconnect) return;
+      this._reconnectTimer = null;
+      void this.connect(this.roomname, this.username);
+    }, wait);
+    this._reconnectTimer = timer;
   }
+
+  markReady() { this.ready = true; this._reconnectAttempts = 0; }
 
   /**
    * 发送消息到服务器

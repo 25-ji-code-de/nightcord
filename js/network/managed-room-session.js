@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 class ManagedRoomProtocol {
-  constructor(manager) { this.manager = manager; this.attempt = 0; }
+  constructor(manager) { this.manager = manager; }
   attach(connection) { this.connection = connection; }
   url(id) { return this.manager.base.replace(/^http/, 'ws') + '/rooms/' + id + '/websocket'; }
   reset() { clearTimeout(this.timer); clearTimeout(this.leaseTimer); this.authWork = null; this.expiresAt = 0; }
@@ -15,14 +15,13 @@ class ManagedRoomProtocol {
     }
   }
   open(ws, { token }) {
-    this.connection.reconnectDelay = Math.min(30000, 1000 * 2 ** this.attempt++) * (0.75 + Math.random() * 0.25);
     ws.send(JSON.stringify({ type: 'auth', requestId: crypto.randomUUID(), accessToken: token,
       ...(this.manager.loaded ? { afterSeq: this.manager.syncedSeq } : {}) }));
     this.timer = setTimeout(() => ws.close(1013, 'Authentication timeout'), 12000);
   }
   message(data, ws) {
     if (data.type === 'ready' || data.type === 'room:visibility-required') {
-      this.authWork = null; this.attempt = 0; this.connection.ready = true; this.expiresAt = data.authExpiresAt;
+      this.authWork = null; this.connection.ready = true; this.expiresAt = data.authExpiresAt;
       clearTimeout(this.timer); clearTimeout(this.leaseTimer);
       this.timer = setTimeout(() => this.refreshAuthentication(), Math.max(1000, this.expiresAt - Date.now() - 60000));
       this.leaseTimer = setTimeout(() => { this.manager.messages.clear(); this.manager.ready = false; this.manager.update(); ws.close(4001); }, Math.max(0, this.expiresAt - Date.now()));

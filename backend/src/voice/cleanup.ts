@@ -19,7 +19,10 @@ export function retryAfter(previous: RetryState | undefined, kind: CleanupKind, 
   const code = upstream ? `${upstream.httpStatus}:${upstream.publicCode}:${upstream.timedOut ? 'timeout' : 'response'}`
     : error instanceof VoiceError ? error.code : 'cleanup_failed';
   let delays = kind === 'turn' ? [5000, 15000, 60000, 300000] : [2000, 5000, 15000, 30000, 60000];
-  if (kind === 'uncertain' && now - firstFailedAt >= 300000) delays = [120000, 300000, 900000];
+  // Known allocations can also remain unreachable for days (e.g. SFU timeouts).
+  // Keep their closure records, but stop paying for one request per minute per
+  // session once the initial recovery window has passed.
+  if ((kind === 'uncertain' || kind === 'media') && now - firstFailedAt >= 300000) delays = [120000, 300000, 900000];
   let delay = delays[Math.min(attempts - 1, delays.length - 1)];
   if (upstream && [400, 401, 403, 404].includes(upstream.httpStatus)) delay = Math.max(delay, 300000);
   delay = Math.max(delay, Math.min(upstream?.retryAfterMs || 0, 3600000));

@@ -30,9 +30,8 @@
   "services": [
     { "binding": "SEKAI_PASS", "service": "sekai-pass" }
   ],
-  "routes": [
-    { "pattern": "chat.nightcord.de5.net", "custom_domain": true }
-  ],
+  // The custom domain is temporarily disabled. Keep deploys from restoring it.
+  "routes": [],
   "durable_objects": {
     "bindings": [
       { "name": "MANAGED_ROOMS", "class_name": "ManagedRoom" },

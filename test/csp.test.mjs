@@ -111,14 +111,27 @@ describe('HTML CSP and Cloudflare compatibility', () => {
 describe('CSP reporting receiver', () => {
   async function receive(payload, contentType = 'application/csp-report', init = {}) {
     const entries = [];
-    const sandbox = { Request, Response, URL, TextDecoder, Uint8Array, RangeError, SyntaxError, console: { warn: line => entries.push(JSON.parse(line)) } };
+    const sandbox = { Request, Response, URL, TextDecoder, Uint8Array, RangeError, SyntaxError, AbortSignal, console: { warn: line => entries.push(JSON.parse(line)) } };
     vm.runInNewContext(read('functions/csp-report.js').replace('export async function onRequest', 'async function onRequest'), sandbox);
     const request = new Request('https://nightcord.de5.net/csp-report', {
       method: 'POST', headers: { 'Content-Type': contentType },
       body: typeof payload === 'string' ? payload : JSON.stringify(payload), ...init,
     });
-    const response = await sandbox.onRequest({ request });
-    return { response, entries };
+    const saved = [];
+    const response = await sandbox.onRequest({ request, env: {
+      CSP_REPORT_TOKEN: 'test-internal-secret'.repeat(3),
+      CSP_STORAGE: { async fetch(input) {
+        assert.equal(input.url, 'https://storage.nightcord.de5.net/internal/csp-reports');
+        assert.equal(input.headers.get('Authorization'), `Bearer ${'test-internal-secret'.repeat(3)}`);
+        const batch = await input.json();
+        assert.equal(batch.origin, 'https://nightcord.de5.net');
+        assert.equal(batch.version, 1);
+        saved.push(...batch.reports);
+        return new Response('{}', { status: 201 });
+      } },
+    } });
+    assert.deepEqual(entries, [], 'reports are stored, not emitted to transient console logs');
+    return { response, entries: saved };
   }
 
   test('legacy reports arrive with URL secrets, samples and policies removed', async () => {
@@ -158,6 +171,29 @@ describe('CSP reporting receiver', () => {
       assert.deepEqual(entries, []);
       assert.equal(response.headers.get('Cache-Control'), 'no-store');
     }
+  });
+
+  test('does not acknowledge reports until persistent storage succeeds', async () => {
+    const { onRequest } = await importFunction('functions/csp-report.js');
+    const createRequest = () => new Request('https://nightcord.de5.net/csp-report', {
+      method: 'POST', headers: { 'Content-Type': 'application/csp-report' },
+      body: JSON.stringify({ 'csp-report': { 'document-uri': 'https://nightcord.de5.net/', 'effective-directive': 'img-src', 'blocked-uri': 'https://external.example/image.png' } }),
+    });
+    for (const env of [undefined, {}, { CSP_REPORT_TOKEN: 'x'.repeat(48), CSP_STORAGE: { fetch: async () => new Response(null, { status: 503 }) } },
+      { CSP_REPORT_TOKEN: 'x'.repeat(48), CSP_STORAGE: { fetch: async () => { throw new Error('network unavailable'); } } }]) {
+      const response = await onRequest({ request: createRequest(), env });
+      assert.equal(response.status, 503);
+      assert.equal(response.headers.get('Retry-After'), '60');
+    }
+    let complete;
+    const storage = new Promise(resolve => { complete = resolve; });
+    let acknowledged = false;
+    const pending = onRequest({ request: createRequest(), env: { CSP_REPORT_TOKEN: 'x'.repeat(48), CSP_STORAGE: { fetch: () => storage } } })
+      .then(response => { acknowledged = true; return response; });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(acknowledged, false);
+    complete(new Response(null, { status: 201 }));
+    assert.equal((await pending).status, 204);
   });
 });
 

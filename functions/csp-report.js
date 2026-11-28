@@ -11,6 +11,7 @@ function reply(status, message = null) {
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
       ...(status === 405 ? { Allow: 'POST' } : {}),
+      ...(status === 503 ? { 'Retry-After': '60' } : {}),
     },
   });
 }
@@ -48,7 +49,7 @@ function safeUrl(value) {
   if (['inline', 'eval', 'wasm-eval'].includes(value)) return value;
   try {
     const url = new URL(value);
-    if (url.protocol === 'https:' || url.protocol === 'http:') {
+    if (['https:', 'http:', 'wss:', 'ws:'].includes(url.protocol)) {
       return (url.origin + url.pathname).slice(0, 512);
     }
     return url.protocol;
@@ -78,6 +79,7 @@ export async function onRequest(context) {
   }];
   if (reports.length > MAX_REPORTS) return reply(413, 'Too many reports');
   const origin = new URL(request.url).origin;
+  const sanitized = [];
   for (const report of reports) {
     if (!report || typeof report !== 'object' || !('type' in report) || report.type !== 'csp-violation') continue;
     if (!('body' in report) || !report.body || typeof report.body !== 'object') continue;
@@ -86,13 +88,31 @@ export async function onRequest(context) {
     if (!/^https?:\/\//.test(documentUrl) || new URL(documentUrl).origin !== origin) continue;
     const directive = body.effectiveDirective ?? body['effective-directive'];
     if (typeof directive !== 'string' || !/^[a-z-]{1,64}$/.test(directive)) continue;
-    console.warn(JSON.stringify({
+    sanitized.push({
       event: 'csp-violation',
       documentUrl,
       directive,
       blockedUrl: safeUrl(body.blockedURL ?? body['blocked-uri']),
       disposition: body.disposition === 'enforce' ? 'enforce' : 'report',
+    });
+  }
+  if (!sanitized.length) return reply(204);
+  const { CSP_STORAGE, CSP_REPORT_TOKEN } = context.env || {};
+  if (!CSP_STORAGE || typeof CSP_REPORT_TOKEN !== 'string' || CSP_REPORT_TOKEN.length < 32) {
+    return reply(503, 'Report storage unavailable');
+  }
+  try {
+    // Await durable storage before acknowledging; no successful response on data loss.
+    const stored = await CSP_STORAGE.fetch(new Request('https://storage.nightcord.de5.net/internal/csp-reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CSP_REPORT_TOKEN}` },
+      body: JSON.stringify({ version: 1, origin, reports: sanitized }),
+      signal: AbortSignal.timeout(10000),
     }));
+    await stored.body?.cancel();
+    if (stored.status !== 201) return reply(503, 'Report storage unavailable');
+  } catch {
+    return reply(503, 'Report storage unavailable');
   }
   return reply(204);
 }

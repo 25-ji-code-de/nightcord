@@ -184,10 +184,18 @@ Pages 构建命令为 `node scripts/build-pages.mjs`、输出目录为 `dist`，
 本地连同 CSP 验证请运行 `npx wrangler@latest pages dev dist --compatibility-date=2026-11-05`；
 普通静态服务器不会运行 Functions，也不会应用 `_headers`。
 
-违规经 `report-to`（及旧浏览器的 `report-uri`）送到 `/csp-report`，以 `csp-violation`
-结构化日志输出。可在 Pages 部署的实时日志或
-`npx wrangler pages deployment tail --project-name=nightcord-web` 中查看；当前不保存历史报告。
-接收器限制请求大小和批量数量，不记录 URL 查询参数、片段、脚本样本或 nonce。
+违规经 `report-to`（及旧浏览器的 `report-uri`）送到 `/csp-report`。接收器清洗报告后，
+通过 `CSP_STORAGE` Service binding 调用 storage Worker 的 `/internal/csp-reports`，
+写入 storage 管理的私有 R2 桶 `nightcord-csp-reports`，路径为
+`CSPReports/nightcord/YYYY-MM-DD/<uuid>.json`（UTC 日期）。
+Pages 的生产和预览环境都需要绑定 `CSP_STORAGE → storage`，并设置与 storage 相同的
+`CSP_REPORT_TOKEN` secret。只有存储成功才返回 204；配置缺失或写入失败返回 503，
+不会把丢失的数据伪装成接收成功。
+
+接收器限制请求大小和批量数量，不记录 URL 查询参数、片段、URL 内凭据、脚本样本、
+nonce、Cookie 或 IP。日志桶不开放公共 URL，与上传媒体分开。可在 Cloudflare R2 控制台
+按日期查看，也可用 storage-worker 仓库的 `scripts/export-csp-reports.mjs` 带内部密钥
+导出并按违规规则/资源汇总。此前只输出 Pages 实时日志，未保存的旧报告无法补回。
 上线后还应核对 Cloudflare 处理后的 HTML：检测脚本的 nonce 要与响应头一致，
 统计脚本应能加载并向本站 `/cdn-cgi/rum` 发出请求，不能只检查仓库内的 HTML。
 

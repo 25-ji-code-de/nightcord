@@ -1,35 +1,40 @@
 // 并行逐帧渲染：render(t) 是纯函数，所以每帧只依赖 t，多个页面并行结果一致。
 // 用法：node render/frames.mjs [起始帧] [结束帧(不含)] [并行数]
-import { createRequire } from 'node:module';
-import { mkdirSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+// DEMO_PROFILE=preview（默认）或 final；使用 PNG 无损中间帧，分别存放。
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { chromium, executablePath } from './browser.mjs';
+import { getProfile, VIEWPORT, FPS, DURATION, TOTAL_FRAMES } from './config.mjs';
 
-const require = createRequire('/root/.nvm/versions/node/v22.13.1/lib/node_modules/');
-const { chromium } = require('playwright-core');
-const outDir = fileURLToPath(new URL('../frames/', import.meta.url));
-mkdirSync(outDir, { recursive: true });
-const sceneUrl = pathToFileURL(fileURLToPath(new URL('../scene/index.html', import.meta.url))).href;
-
-const FPS = 60, DURATION = 59.35; // 与 scene/data.js 的 DUR 一致
-const total = Math.round(FPS * DURATION);
+const profile = getProfile();
+const outDir = profile.framesDir;
 const start = Number(process.argv[2] ?? 0);
-const end = Math.min(total, Number(process.argv[3] ?? total));
-const workers = Number(process.argv[4] ?? 12);
+const end = Number(process.argv[3] ?? TOTAL_FRAMES);
+const workers = Number(process.argv[4] ?? process.env.DEMO_WORKERS ?? profile.workers);
+if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start >= end || end > TOTAL_FRAMES) {
+  throw new Error(`帧范围必须满足 0 <= 起始帧 < 结束帧 <= ${TOTAL_FRAMES}。`);
+}
+if (!Number.isInteger(workers) || workers < 1 || workers > 32) throw new Error('并行数必须为 1–32 的整数。');
+mkdirSync(outDir, { recursive: true });
 
-const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--allow-file-access-from-files', '--force-color-profile=srgb', '--font-render-hinting=none'] });
+const browser = await chromium.launch({ executablePath, args: ['--no-sandbox', '--allow-file-access-from-files', '--force-color-profile=srgb', '--font-render-hinting=none'] });
 let next = start, done = 0;
 const t0 = Date.now();
+console.log(`${profile.name}：${profile.width}×${profile.height} / ${FPS} fps / PNG，${workers} 个并行页面`);
 
 async function worker() {
-  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
-  page.on('pageerror', e => { console.error('pageerror', e.message); process.exit(1); });
-  await page.goto(sceneUrl);
+  const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: profile.scale });
+  let pageError;
+  page.on('pageerror', error => { pageError = error; });
+  await page.goto(profile.sceneUrl);
   await page.evaluate(() => window.READY);
+  if (pageError) throw pageError;
   while (true) {
     const i = next++;
     if (i >= end) break;
     await page.evaluate(t => window.render(t), i / FPS);
-    await page.screenshot({ path: `${outDir}f${String(i).padStart(5, '0')}.jpg`, type: 'jpeg', quality: 96 });
+    await page.screenshot({ path: join(outDir, `f${String(i).padStart(5, '0')}.png`), type: 'png', scale: 'device' });
+    if (pageError) throw pageError;
     if (++done % 120 === 0) {
       const rate = done / ((Date.now() - t0) / 1000);
       console.log(`  ${done}/${end - start} 帧，${rate.toFixed(1)} 帧/秒，预计剩余 ${(((end - start) - done) / rate).toFixed(0)} 秒`);
@@ -37,6 +42,12 @@ async function worker() {
   }
   await page.close();
 }
-await Promise.all(Array.from({ length: workers }, worker));
-await browser.close();
+try {
+  await Promise.all(Array.from({ length: Math.min(workers, end - start) }, worker));
+} finally {
+  await browser.close();
+}
+writeFileSync(join(outDir, 'render.json'), JSON.stringify({
+  profile: profile.name, width: profile.width, height: profile.height, fps: FPS, duration: DURATION, total: TOTAL_FRAMES, format: 'png',
+}, null, 2) + '\n');
 console.log(`完成：${end - start} 帧，用时 ${((Date.now() - t0) / 1000).toFixed(1)} 秒`);

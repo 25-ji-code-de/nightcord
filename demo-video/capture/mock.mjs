@@ -33,12 +33,11 @@ export const NOW = at(23, 46, 30);
 export const T_ASK = at(23, 45);       // Amia：有人在吗——？
 export const T_REPLY = at(23, 46);     // K：我在
 
-const avatarSvg = (a, b, glyph) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="64" height="64" fill="url(#g)"/><text x="32" y="43" text-anchor="middle" font-family="Noto Sans CJK SC, sans-serif" font-weight="700" font-size="30" fill="#fff" fill-opacity=".92">${glyph}</text></svg>`;
-// 头像只用首字与配色，不使用任何角色图片。
+// 图片从 origin/main 的 icons/roleplay/ 同步；保留 HTTPS 地址以通过前端头像校验，实际由本地文件响应。
 const AVATARS = {
-  k: ['#a06bd6', '#5b2d8e', 'K'], yuki: ['#b9a6f0', '#6d5bc4', '雪'], ena: ['#5fd0c4', '#2a8a8f', 'え'], amia: ['#f3a6cf', '#c25d97', 'A'],
+  k: 'k.png', yuki: 'yuki.png', ena: 'enanan.png', amia: 'amia.png',
 };
-const avatar = key => `https://avatars.nightcord.invalid/${key}.svg`;
+const avatar = key => `https://avatars.nightcord.invalid/${AVATARS[key]}`;
 const user = (key, displayName, extra = {}) => ({ id: `sekai:${key}`, displayName, authenticated: true, avatarUrl: avatar(key), ...extra });
 
 export const USERS = {
@@ -47,7 +46,7 @@ export const USERS = {
   ena: user('ena', 'えななん'),
 };
 // 视角是 Amia：游客身份进入；语音需要 SEKAI Pass，那一场用 ME_PASS。
-export const ME = { id: 'guest:7c2f9b1e-2d44-4f3a-9a6e-0b5d1c8a77e1', displayName: 'Amia', authenticated: false };
+export const ME = { id: 'guest:7c2f9b1e-2d44-4f3a-9a6e-0b5d1c8a77e1', displayName: 'Amia', authenticated: false, avatarUrl: avatar('amia') };
 export const ME_PASS = { id: 'sekai:amia', displayName: 'Amia', authenticated: true, avatarUrl: avatar('amia') };
 export const ASK = '有人在吗——？';
 
@@ -95,9 +94,9 @@ export async function installMock(page, { port, authenticated = false, voiceMemb
     const url = new URL(route.request().url());
     if (url.hostname === '127.0.0.1') return route.continue();
     if (url.hostname === 'avatars.nightcord.invalid') {
-      const key = url.pathname.replace(/^\/|\.svg$/g, '');
-      const [a, b, g] = AVATARS[key] || AVATARS.amia;
-      return route.fulfill({ status: 200, contentType: 'image/svg+xml', headers: { 'access-control-allow-origin': '*' }, body: avatarSvg(a, b, g) });
+      const filename = url.pathname.slice(1);
+      if (!Object.values(AVATARS).includes(filename)) return route.abort();
+      return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, path: join(ROOT, 'icons/roleplay', filename) });
     }
     if (url.hostname === 'chat.nightcord.de5.net') {
       const p = url.pathname;

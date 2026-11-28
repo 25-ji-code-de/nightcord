@@ -1,9 +1,9 @@
-// 把 build/preview/ 里指定时刻的静帧拼成一张联系表，便于一次检查多帧。
+// 把 build/<版本>/stills/ 里指定时刻的静帧拼成一张联系表，便于一次检查多帧。
 // 用法：node render/sheet.mjs 输出.png 1.5 7.8 13.9 ...
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { getProfile } from './config.mjs';
 
-const dir = fileURLToPath(new URL('../build/preview/', import.meta.url));
+const dir = `${getProfile().buildDir}stills/`;
 const [out, ...times] = process.argv.slice(2);
 const cols = 4, rows = Math.ceil(times.length / cols);
 const inputs = times.flatMap(t => ['-i', `${dir}t${Number(t).toFixed(2).padStart(6, '0')}.png`]);

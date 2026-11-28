@@ -1,23 +1,22 @@
-// 用真实前端截取演示素材（2x 分辨率），输出到 demo-video/shots/。
-import { createRequire } from 'node:module';
+// 用真实前端截取演示素材：preview 为 2x，final 为 4x，按版本存到 build/。
 import { mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { startServer, installMock, USERS, NOW, ASK, K_REPLY } from './mock.mjs';
+import { getProfile } from '../render/config.mjs';
+import { chromium, executablePath } from '../render/browser.mjs';
 
-const require = createRequire('/root/.nvm/versions/node/v22.13.1/lib/node_modules/');
-const { chromium } = require('playwright-core');
-const OUT = fileURLToPath(new URL('../shots/', import.meta.url));
+const profile = getProfile();
+const OUT = profile.shotsDir;
 mkdirSync(OUT, { recursive: true });
 
 const only = process.argv.slice(2);
 const want = name => !only.length || only.includes(name);
 
-const { port } = await startServer();
-const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--force-color-profile=srgb', '--font-render-hinting=none'] });
+const browser = await chromium.launch({ executablePath, args: ['--no-sandbox', '--force-color-profile=srgb', '--font-render-hinting=none'] });
+const { server, port } = await startServer();
 
 async function open({ width = 1440, height = 900, mobile = false, authenticated = false, guestName = 'Amia', voiceMembers = [], palette, search = '', extraLive = [], withMine = false } = {}) {
   const context = await browser.newContext({
-    viewport: { width, height }, deviceScaleFactor: 2, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', serviceWorkers: 'block',
+    viewport: { width, height }, deviceScaleFactor: profile.captureScale, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', serviceWorkers: 'block',
     ...(mobile ? { isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' } : {}),
   });
   const page = await context.newPage();
@@ -35,7 +34,15 @@ async function open({ width = 1440, height = 900, mobile = false, authenticated 
   return { page, context };
 }
 const settle = (page, ms = 900) => page.waitForTimeout(ms);
-const shot = async (page, name, opts = {}) => { await page.screenshot({ path: `${OUT}${name}.png`, ...opts }); console.log('  ✓', name); };
+const shot = async (page, name, opts = {}) => {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    const avatars = [...document.images].filter(image => image.src.startsWith('https://avatars.nightcord.invalid/') && image.getClientRects().length);
+    await Promise.all(avatars.map(async image => { image.loading = 'eager'; await image.decode(); }));
+  });
+  await page.screenshot({ path: `${OUT}${name}.png`, scale: 'device', ...opts });
+  console.log('  ✓', name);
+};
 
 try {
   if (want('chooser')) {
@@ -168,11 +175,11 @@ try {
     await page.waitForSelector('.message'); await settle(page, 900);
     await page.click('#messageInput'); await settle(page, 500);
     const clip = { x: 340, y: 810, width: 1100, height: 90 };
-    await page.screenshot({ path: `${OUT}strip-0.png`, clip });
+    await shot(page, 'strip-0', { clip });
     const text = ASK;
     for (let i = 1; i <= [...text].length; i++) {
       await page.keyboard.type([...text][i - 1]); await settle(page, 160);
-      await page.screenshot({ path: `${OUT}strip-${i}.png`, clip });
+      await shot(page, `strip-${i}`, { clip });
     }
     console.log('  ✓ strips', [...text].length);
     await context.close();
@@ -231,6 +238,6 @@ try {
     await context.close();
   }
 } finally {
-  await browser.close();
-  process.exit(0);
+  try { await browser.close(); }
+  finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 }

@@ -1,5 +1,11 @@
 // 构建 DOM：一次性创建所有元素，之后每帧只改样式。
 const svgNS = 'http://www.w3.org/2000/svg';
+const sourceProfile = new URLSearchParams(location.search).get('profile');
+if (sourceProfile && !['preview', 'final'].includes(sourceProfile)) throw new Error('未知素材版本：' + sourceProfile);
+// 不带参数时仍可查看仓库中的原始截图；正式导出始终使用各版本重新生成的素材。
+const source = (folder, name) => `../${sourceProfile ? `build/${sourceProfile}/` : ''}${folder}/${name}.png`;
+$('#card-a').src = source('assets', 'card-chooser');
+$('#card-b').src = source('assets', 'card-chooser-typed');
 function svg(tag, parent, attrs = {}) {
   const el = document.createElementNS(svgNS, tag);
   for (const k in attrs) el.setAttribute(k, attrs[k]);
@@ -44,15 +50,15 @@ const BADGE = {
 
 // 窗口：真实前端截图的叠放
 const win = $('#win');
-const STATE_EL = STATES.map(s => ({ s, el: img(`../shots/${s.src}.png`, win) }));
+const STATE_EL = STATES.map(s => ({ s, el: img(source('shots', s.src), win) }));
 const toastEl = mk('img', null, null, win);
-toastEl.src = '../assets/toast.png';
+toastEl.src = source('assets', 'toast');
 // 行内样式：#win img 的通用规则（整窗尺寸）优先级更高，不能靠 id 选择器覆盖。
 const TOAST_CSS = `left:${TOAST.x}px;top:${TOAST.y}px;width:${TOAST.w}px;height:${TOAST.h}px;filter:drop-shadow(0 14px 26px rgba(0,0,0,.4))`;
 toastEl.style.cssText = `position:absolute;z-index:5;display:none;${TOAST_CSS}`;
 const STRIPS = [];
 for (let i = 0; i <= TYPE_N; i++) {
-  const el = img(`../shots/strip-${i}.png`, win);
+  const el = img(source('shots', `strip-${i}`), win);
   el.style.cssText = `display:none;left:${STRIP.x}px;top:${STRIP.y}px;width:${STRIP.w}px;height:${STRIP.h}px`;
   STRIPS.push(el);
 }
@@ -61,7 +67,7 @@ for (let i = 0; i <= TYPE_N; i++) {
 const card = $('#card');
 const cardB = $('#card-b'), cardP = $('#card-press');
 const cardM = mk('img', null, null, card);
-cardM.src = '../assets/card-chooser-typed-1.png';
+cardM.src = source('assets', 'card-chooser-typed-1');
 cardM.style.opacity = 0;
 card.insertBefore(cardM, cardB);
 
@@ -70,7 +76,7 @@ const PH = ['mobile-chat', 'mobile-drawer'].map((name, i) => {
   const el = mk('div', 'phone', null, $('#phones'));
   el.style.zIndex = 2 - i;
   const scr = mk('div', 'scr', null, el);
-  mk('img', null, null, scr).src = `../shots/${name}.png`;
+  mk('img', null, null, scr).src = source('shots', name);
   mk('i', 'isl', null, scr);
   return el;
 });
@@ -84,17 +90,17 @@ PHONE.x.forEach((x, i) => LINE_EL['p' + i].setAttribute('d', rrect(x, PHONE.y, P
 // 局部特写：每张是一份完整的 1440x900 窗口，再按镜头裁切放大。
 const MONT_EL = MONTAGE.map(m => {
   const box = mk('div', 'mshot', null, $('#mont'));
-  mk('img', null, null, box).src = `../shots/${m.src}.png`;
+  mk('img', null, null, box).src = source('shots', m.src);
   if (m.toast) {
     const ti = mk('img', null, null, box);
-    ti.src = '../assets/toast.png';
+    ti.src = source('assets', 'toast');
     ti.style.cssText = TOAST_CSS;
   }
   return { m, box };
 });
 
 // 等所有图片加载完成。隐藏元素的 decode() 在 Chromium 里可能拒绝，所以改用 load 事件。
-const loaded = i => i.complete && i.naturalWidth > 0 ? Promise.resolve() : new Promise((ok, no) => {
+const loaded = i => i.complete ? (i.naturalWidth > 0 ? Promise.resolve() : Promise.reject(new Error('图片加载失败：' + i.src))) : new Promise((ok, no) => {
   i.addEventListener('load', ok, { once: true });
   i.addEventListener('error', () => no(new Error('图片加载失败：' + i.src)), { once: true });
 });

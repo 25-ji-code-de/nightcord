@@ -43,5 +43,4 @@ body {
   position: absolute; left: -20px; top: -20px; width: 40px; height: 40px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,.9); background: rgba(255,255,255,.16); opacity: 0;
 }
-/* 颗粒由 ffmpeg 的 noise 滤镜在合成时统一添加：渲染阶段的全屏混合层太慢，且会随帧抖动。 */
 #fade { left: 0; top: 0; width: 1920px; height: 1080px; background: #000; opacity: 0; z-index: 100; pointer-events: none; }

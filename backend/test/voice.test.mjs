@@ -7,6 +7,106 @@ import { quotaPeriods } from '../src/voice/quota-policy.ts';
 
 import { fixture, origin, offer, answer, token } from './voice-fixture.mjs';
 
+async function cachedPresence(f) {
+  const storage = await f.runtime.unsafeGetDurableObjectStorage('nightcord-chat', 'ChatRoom', { name: 'voice-test' });
+  const read = async () => {
+    const [row] = await storage.exec('SELECT data FROM voice_presence WHERE id=1');
+    return row ? JSON.parse(row.data) : undefined;
+  };
+  return { storage, read };
+}
+async function eventually(check) {
+  for (let i = 0; i < 100; i++) { const value = await check(); if (value) return value; await delay(20); }
+  assert.fail('Expected presence update');
+}
+
+test('text connections, reconnects, configuration and messages never instantiate voice objects', async t => {
+  const f = await fixture(); t.after(() => f.close());
+  const config = await fetch(`${f.base}/api/room/voice-test/voice/config`, { headers: { Origin: origin } });
+  assert.equal((await config.json()).enabled, true);
+  const one = await f.connect('one'), two = await f.connect('two'), guest = await f.connect(null);
+  for (const client of [one, two, guest]) assert.deepEqual(client.messages.find(frame => frame.type === 'voice:state').snapshot.members, []);
+  one.socket.send(JSON.stringify({ message: 'Only using text' }));
+  await two.wait(frame => frame.message === 'Only using text');
+  one.socket.terminate(); await f.connect('one');
+  assert.deepEqual(await f.runtime.listDurableObjectIds('VOICE_ROOMS'), []);
+  assert.deepEqual(await f.runtime.listDurableObjectIds('VOICE_QUOTAS'), []);
+  assert.equal(f.provider.calls.length, 0);
+});
+
+test('voice presence reaches new text users after chat eviction and clears on leave', async t => {
+  const f = await fixture(); t.after(() => f.close());
+  const speaker = await f.connect('one'), watcher = await f.connect('two');
+  const member = await f.join(speaker);
+  assert.equal((await f.runtime.listDurableObjectIds('VOICE_ROOMS')).length, 1, 'explicit voice use creates the object');
+  await watcher.wait(frame => frame.type === 'voice:state' && frame.snapshot.members.some(m => m.memberId === member.memberId));
+  const [chatId] = await f.runtime.listDurableObjectIds('ROOMS');
+  await f.runtime.unsafeEvictDurableObject('nightcord-chat', 'ChatRoom', { id: chatId });
+  const late = await f.connect('three');
+  const snapshot = late.messages.find(frame => frame.type === 'voice:state').snapshot;
+  assert.equal(snapshot.members[0].memberId, member.memberId, 'hibernation retains pushed presence');
+  const isolated = await f.connect('two', 'other-test');
+  assert.deepEqual(isolated.messages.find(frame => frame.type === 'voice:state').snapshot.members, []);
+  assert.equal((await f.runtime.listDurableObjectIds('VOICE_ROOMS')).length, 1, 'an unused room cannot create another voice object');
+  await f.api('leave', member.credential);
+  await watcher.wait(frame => frame.type === 'voice:state' && frame.snapshot.revision > snapshot.revision && !frame.snapshot.members.length);
+  const after = await f.connect(null);
+  assert.deepEqual(after.messages.find(frame => frame.type === 'voice:state').snapshot.members, []);
+});
+
+test('voice heartbeats renew cached leases without rebroadcasting, and stale cache expires without polling', async t => {
+  const f = await fixture(); t.after(() => f.close());
+  const speaker = await f.connect('one'), member = await f.join(speaker);
+  const cache = await cachedPresence(f);
+  await eventually(async () => (await cache.read())?.snapshot.members.length);
+  const watcher = await f.connect('two');
+  const original = await cache.read(), count = watcher.messages.filter(frame => frame.type === 'voice:state').length;
+  original.expiresAt[member.memberId] = Date.now() + 5000;
+  await cache.storage.exec('UPDATE voice_presence SET data=? WHERE id=1', JSON.stringify(original));
+  assert.equal((await f.api('heartbeat', member.credential)).status, 200);
+  const renewed = await eventually(async () => { const value = await cache.read(); return value.expiresAt[member.memberId] > Date.now() + 80000 && value; });
+  assert.equal(renewed.snapshot.revision, original.snapshot.revision);
+  assert.equal(watcher.messages.filter(frame => frame.type === 'voice:state').length, count);
+  const late = await f.connect('three');
+  assert.equal(late.messages.find(frame => frame.type === 'voice:state').snapshot.members[0].memberId, member.memberId);
+  renewed.expiresAt[member.memberId] = 1;
+  await cache.storage.exec('UPDATE voice_presence SET data=? WHERE id=1', JSON.stringify(renewed));
+  const [voiceId] = await f.runtime.listDurableObjectIds('VOICE_ROOMS');
+  const voice = await f.runtime.unsafeGetDurableObjectStorage('nightcord-chat', 'VoiceRoom', { id: voiceId });
+  // Detect any accidental getPresence() fallback by making the stored membership
+  // appear live. Expired display leases must still be resolved in ChatRoom alone.
+  assert.equal(JSON.parse((await voice.exec('SELECT data FROM voice_members'))[0].data).leaving, false);
+  const stale = await f.connect(null);
+  assert.deepEqual(stale.messages.find(frame => frame.type === 'voice:state').snapshot.members, []);
+  await delay(3050);
+  assert.equal((await f.api('heartbeat', member.credential)).status, 200);
+  const recovered = await stale.wait(frame => frame.type === 'voice:state' && frame.snapshot.members.some(m => m.memberId === member.memberId));
+  assert.equal(recovered.snapshot.revision, renewed.snapshot.revision, 'lease recovery restores presence without needing a membership change');
+});
+
+test('delayed presence updates cannot resurrect departed members or shorten a renewed lease', async t => {
+  const f = await fixture(); t.after(() => f.close());
+  const speaker = await f.connect('one'), member = await f.join(speaker), cache = await cachedPresence(f);
+  const joined = await eventually(async () => { const value = await cache.read(); return value?.snapshot.members.length && value; });
+  const ns = await f.runtime.getDurableObjectNamespace('ROOMS'), room = ns.get(ns.idFromName('voice-test'));
+  await room.voiceChanged(joined.snapshot, { observedAt: joined.observedAt - 1, expiresAt: { [member.memberId]: 1 } });
+  assert.equal((await cache.read()).expiresAt[member.memberId], joined.expiresAt[member.memberId]);
+  await f.api('leave', member.credential);
+  const left = await eventually(async () => { const value = await cache.read(); return value?.snapshot.revision > joined.snapshot.revision && value; });
+  await room.voiceChanged(joined.snapshot, { observedAt: Date.now(), expiresAt: joined.expiresAt });
+  assert.equal((await cache.read()).snapshot.revision, left.snapshot.revision);
+  const late = await f.connect('two');
+  assert.deepEqual(late.messages.find(frame => frame.type === 'voice:state').snapshot.members, []);
+});
+
+test('disabled voice ticket requests do not create a voice object', async t => {
+  const f = await fixture({ bindings: { VOICE_MODE: 'off' } }); t.after(() => f.close());
+  const one = await f.connect('one');
+  assert.equal((await one.ticketResult()).code, 'voice_disabled');
+  one.socket.terminate(); await f.connect('one');
+  assert.deepEqual(await f.runtime.listDurableObjectIds('VOICE_ROOMS'), []);
+});
+
 test('voice authorization, join idempotency, SFU publish/subscribe ordering, and cleanup', { timeout: 30000 }, async () => {
   const f = await fixture();
   try {

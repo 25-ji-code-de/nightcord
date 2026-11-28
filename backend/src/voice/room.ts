@@ -91,9 +91,13 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
     this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_events (revision INTEGER PRIMARY KEY AUTOINCREMENT)');
     this.ctx.storage.sql.exec('INSERT INTO voice_events DEFAULT VALUES');
     this.ctx.storage.sql.exec('DELETE FROM voice_events WHERE revision < (SELECT MAX(revision) FROM voice_events)');
+    this.publishPresence();
+  }
+  private publishPresence() {
     const snapshot = this.snapshot();
-    const chatId = this.members()[0]?.chatId;
-    if (chatId) this.ctx.waitUntil(this.env.ROOMS.get(this.env.ROOMS.idFromString(chatId)).voiceChanged(snapshot).catch(() => {}));
+    const members = this.members(), chatId = members[0]?.chatId;
+    const lease = { observedAt: Date.now(), expiresAt: Object.fromEntries(members.filter(member => !member.leaving).map(member => [member.id, this.expiry(member)])) };
+    if (chatId) this.ctx.waitUntil(this.env.ROOMS.get(this.env.ROOMS.idFromString(chatId)).voiceChanged(snapshot, lease).catch(() => {}));
   }
   private async schedule() {
     await this.ctx.storage.transaction(async txn => {
@@ -239,13 +243,14 @@ export class VoiceRoom extends DurableObject<ChatEnv> {
         member.authUntil = ticket.authUntil; member.chatConnectionId = ticket.chatConnectionId; member.user = ticket.user;
         delete member.disconnectUntil;
         member.expiresAt = Date.now() + 90000; this.save(member); member = await this.quota(member); await this.schedule();
+        this.publishPresence();
         return { ok: true, value: this.state(member) };
       }
       if (action === 'heartbeat') {
         if (Date.now() - member.heartbeatAt < 3000) return fail('rate_limited', 429);
         member.heartbeatAt = Date.now(); member.expiresAt = Date.now() + 90000; this.save(member);
         member = await this.quota(member);
-        await this.schedule(); return { ok: true, value: this.state(member) };
+        await this.schedule(); this.publishPresence(); return { ok: true, value: this.state(member) };
       }
       if (!member.quotaUntil) member = await this.quota(member);
       this.valid(member);

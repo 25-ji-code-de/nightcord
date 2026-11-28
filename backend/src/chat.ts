@@ -40,6 +40,9 @@ interface Session {
 type StoredMessage = { name: string; message: string; timestamp: number; profile: string };
 type ChatMessage = { name: string; message: string; timestamp: number; user: Profile };
 type Visibility = 'online' | 'offline' | 'hidden';
+type VoiceSnapshot = ReturnType<import('./voice/room').VoiceRoom['getPresence']>;
+type VoicePresenceLease = { observedAt: number; expiresAt: Record<string, number> };
+type CachedVoicePresence = VoicePresenceLease & { snapshot: VoiceSnapshot };
 type Presence = { joined: string; user: Profile; silent?: boolean } | { quit: string; userId: string; silent?: boolean }
   | { type: 'profile'; user: Profile } | { type: 'room:members'; users: Profile[] };
 
@@ -137,6 +140,7 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS room_visibility (
       id TEXT PRIMARY KEY, visibility TEXT NOT NULL CHECK (visibility IN ('online', 'offline', 'hidden'))
     )`);
+    this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS voice_presence (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL)');
     if (!hasMembers) {
       // Retain the latest verified identity from rooms that predate the member list.
       this.ctx.storage.sql.exec(`INSERT OR IGNORE INTO room_members (id, profile)
@@ -193,6 +197,7 @@ export class ChatRoom extends DurableObject<ChatEnv> {
       const authUntil = user?.authenticated ? initial.authExpiresAt
         : user && initial.guest?.id === user.id ? initial.guest.expiresAt : 0;
       if (!user || authUntil <= Date.now() || (!user.authenticated && this.env.VOICE_REQUIRE_PASS !== 'false')) { send({ code: 'login_required' }); return; }
+      if (!configuration(this.env, initial.roomName || '').enabled && this.env.VOICE_MODE !== 'drain') { send({ code: 'voice_disabled' }); return; }
       if (Date.now() - (initial.voiceTicketAt || 0) < 1000) { send({ code: 'rate_limited' }); return; }
       ws.serializeAttachment({ ...initial, voiceTicketAt: Date.now(), voiceUsed: true });
       try {
@@ -289,11 +294,9 @@ export class ChatRoom extends DurableObject<ChatEnv> {
         if (visibility === 'offline' && user.authenticated) this.broadcast({ type: 'room:members', users });
         ws.send(JSON.stringify({ type: 'room:members', users }));
         if (configuration(this.env, initial.roomName || '').enabled || this.env.VOICE_MODE === 'drain') {
-          try {
-            const snapshot = await this.env.VOICE_ROOMS.getByName(`voice:${this.ctx.id}`).getPresence();
-            if ((ws.deserializeAttachment() as Session).closed) return;
-            ws.send(JSON.stringify({ type: 'voice:state', snapshot }));
-          } catch { /* Voice discovery must not prevent joining text chat. */ }
+          // Voice users publish their presence here. Merely joining text chat
+          // must not instantiate or wake a VoiceRoom, even when the cache is cold.
+          ws.send(JSON.stringify({ type: 'voice:state', snapshot: this.cachedVoiceSnapshot() }));
         }
         ws.send(JSON.stringify({ ready: true, user, authExpiresAt, guestExpiresAt }));
         return;
@@ -412,7 +415,27 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     if (!anotherConnection) this.broadcast({ quit: session.user.displayName, userId: session.user.id });
     else this.broadcast({ type: 'profile', user: this.presenceProfile((anotherConnection.deserializeAttachment() as Session).user!) });
   }
-  voiceChanged(snapshot: { revision: number; members: unknown[] }): void {
+  private voicePresence(): CachedVoicePresence | undefined {
+    const row = this.ctx.storage.sql.exec<{ data: string }>('SELECT data FROM voice_presence WHERE id = 1').toArray()[0];
+    return row ? JSON.parse(row.data) : undefined;
+  }
+  private cachedVoiceSnapshot(cached = this.voicePresence()): VoiceSnapshot {
+    if (!cached) return { revision: 0, departures: [], members: [] };
+    // Expire stale display data locally if a departure update was lost. Reading
+    // an expired lease never polls the voice backend or schedules a refresh.
+    return { ...cached.snapshot, members: cached.snapshot.members.filter(member => cached.expiresAt[member.memberId] > Date.now()) };
+  }
+  voiceChanged(snapshot: VoiceSnapshot, lease?: VoicePresenceLease): void {
+    const cached = this.voicePresence();
+    if (cached && (snapshot.revision < cached.snapshot.revision
+      || snapshot.revision === cached.snapshot.revision && (!lease || lease.observedAt < cached.observedAt))) return;
+    // The optional lease keeps rolling deployments compatible with older voice
+    // instances. Unleased updates still broadcast but are not kept indefinitely.
+    if (lease) this.ctx.storage.sql.exec('INSERT INTO voice_presence VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data', JSON.stringify({ snapshot, ...lease }));
+    // Ordinary heartbeats only renew the lease. If it previously expired,
+    // restore presence for text users who joined while the cache was stale.
+    if (cached?.snapshot.revision === snapshot.revision
+      && JSON.stringify(this.cachedVoiceSnapshot(cached).members) === JSON.stringify(snapshot.members)) return;
     const text = JSON.stringify({ type: 'voice:state', snapshot });
     for (const ws of this.ctx.getWebSockets()) {
       const session = ws.deserializeAttachment() as Session;

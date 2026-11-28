@@ -23,10 +23,11 @@ class ChatAlerts {
     ];
     this.attention = () => {
       if (this.viewing()) {
-        if (this.unread) { this.unread = 0; this.renderUnread(); }
+        this.unread = 0;
         if (this.banner.kindName === 'message' && this.preferences.read().messageNotice !== 'always'
           && !this.banner.node?.contains(document.activeElement)) this.banner.dismiss();
       }
+      this.renderUnread();
       this.delivery.announce();
       void this.ui.pushNotifications?.roomAttention();
     };
@@ -173,16 +174,28 @@ class ChatAlerts {
     if (!this.unreadButton && this.ui.elements.main) {
       this.unreadButton = document.createElement('button'); this.unreadButton.type = 'button';
       this.unreadButton.className = 'chat-unread';
+      this.unreadButton.setAttribute('aria-controls', this.ui.elements.chatlog.id);
+      this.unreadLabel = document.createElement('span');
+      this.unreadButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14m-5-5 5 5 5-5"/></svg>';
+      this.unreadButton.prepend(this.unreadLabel);
       this.unreadButton.addEventListener('click', () => {
         this.ui.sidebarFeatures?.close(false);
         this.ui.directMessageView?.close(false);
         const log = this.ui.elements.chatlog;
         log.scrollTop = log.scrollHeight; this.ui.isAtBottom = true; this.unread = 0;
-        this.renderUnread(); this.delivery.announce(); this.ui.elements.chatInput?.focus();
+        this.ui.updateUserActivityTime();
+        this.renderUnread(); this.delivery.announce(); this.ui.elements.chatInput?.focus({ preventScroll: true });
       });
-      this.ui.elements.main.append(this.unreadButton);
+      // Anchor above the composer so multiline drafts never sit under the button.
+      const container = this.ui.elements.chatInput?.closest('.input-area') || this.ui.elements.main;
+      container.append(this.unreadButton);
     }
-    if (this.unreadButton) { this.unreadButton.hidden = !this.unread; this.unreadButton.textContent = `${this.unread} 条新消息 · 回到最新`; }
+    if (this.unreadButton) {
+      const log = this.ui.elements.chatlog;
+      const atBottom = this.ui.isAtBottom || log.scrollHeight - log.scrollTop - log.clientHeight < this.ui.scrollThreshold;
+      this.unreadButton.hidden = !this.unread && atBottom;
+      this.unreadLabel.textContent = this.unread ? `${this.unread} 条新消息 · 回到最新` : '跳到最新消息';
+    }
   }
   destroy() {
     this.reset(); this.delivery.destroy(); this.view.destroy(); this.unreadButton?.remove();

@@ -92,9 +92,41 @@
   .alert-volume input { appearance: auto; }
 }
 .tool-alert-kind { color: rgb(var(--nc-text)); }
-.chat-unread { position: absolute; z-index: 20; bottom: max(90px, calc(env(safe-area-inset-bottom) + 80px)); right: 24px; max-width: calc(100% - 48px); min-height: 44px; border: 1px solid rgb(var(--nc-accent)); border-radius: 20px; padding: 10px 16px; background: rgb(var(--nc-panel)); color: rgb(var(--nc-text)); box-shadow: 0 4px 16px rgb(0 0 0 / .25); cursor: pointer; font: inherit; }
+.chat-unread {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: max-content;
+  min-width: 200px;
+  max-width: calc(100% - 32px);
+  min-height: 32px;
+  padding: 5px 20px;
+  border: 1px solid rgb(var(--nc-accent-hover) / .22);
+  border-radius: 999px;
+  background: color-mix(in srgb, rgb(var(--nc-composer)) 90%, rgb(var(--nc-accent-fill)));
+  color: rgb(var(--nc-text));
+  box-shadow: 0 3px 12px rgb(var(--nc-navigation) / .18), inset 0 1px 0 rgb(var(--nc-line) / .04);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  touch-action: manipulation;
+  transition: background-color 150ms, border-color 150ms, box-shadow 150ms;
+}
+.chat-unread svg { width: 14px; height: 14px; flex: none; color: rgb(var(--nc-accent-hover)); }
 .chat-unread[hidden], .tool-view .chat-unread { display: none; }
-.chat-unread:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.chat-unread:hover { border-color: rgb(var(--nc-accent-hover) / .4); background: color-mix(in srgb, rgb(var(--nc-composer)) 75%, rgb(var(--nc-accent-fill))); }
+.chat-unread:active { background: color-mix(in srgb, rgb(var(--nc-composer)) 65%, rgb(var(--nc-accent-fill))); box-shadow: none; }
+.chat-unread:focus-visible { outline: 2px solid rgb(var(--nc-accent-hover)); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .chat-unread { transition: none; } }
 
 /* Message and mention cards share one layout and the active Nightcord palette. */
 .notice-card {
@@ -139,7 +171,6 @@
 .notice-card__close:is(:hover, :focus-visible) svg { color: rgb(var(--nc-text, 255 255 255)); }
 .notice-card button:focus-visible { outline: 2px solid rgb(var(--nc-accent-hover, 196 181 253)); outline-offset: -2px; }
 .chat-alert-live { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.chat-unread { border-color: rgb(var(--nc-accent-hover)); background: rgb(var(--nc-accent-fill)); color: rgb(var(--nc-text)); font-weight: 600; }
 body:has(.navigation-scrim:not([hidden])) .notice-card, body:has(dialog[open]) .notice-card { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) { .notice-card, .notice-card button { animation: none; transition: none; } }
 

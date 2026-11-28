@@ -118,6 +118,7 @@ class MessageListView {
       this.ui.elements.chatlog.replaceChildren(this.groupMessages(build.fragment), ...streams);
       this.ui.messageBuild = null;
       if (this.shouldAutoScrollToBottom()) this.ui.elements.chatlog.scrollTop = this.ui.elements.chatlog.scrollHeight;
+      this.ui.alerts?.renderUnread();
       PerformanceOptimizer.mark('renderMessages-end');
       PerformanceOptimizer.measure('renderMessages', 'renderMessages-start', 'renderMessages-end');
       return;
@@ -145,6 +146,8 @@ class MessageListView {
     // Read the final height once per batch so new messages are visible without
     // delaying the scroll until another frame.
     if (shouldAutoScroll) chatlog.scrollTop = chatlog.scrollHeight;
+    // Replacing history can remove overflow without dispatching a scroll event.
+    if (rebuild) this.ui.alerts?.renderUnread();
 
     if (measureRender) {
       PerformanceOptimizer.mark('renderMessages-end');

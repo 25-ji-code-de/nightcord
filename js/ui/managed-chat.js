@@ -147,7 +147,7 @@ class ManagedChatView {
       ui.sidebarFeatures?.scheduleRefresh();
       if (this.wasReady && m.ready) for (const item of messages.filter(item => item.seq > latest)) {
         const message = this.message(item);
-        ui.alerts?.receive({ name: message.user, user: message.profile, message: message.text, timestamp: message.timestamp, seq: message.seq });
+        ui.alerts?.receive({ name: message.user, user: message.profile, message: message.text, timestamp: message.timestamp, seq: message.seq, repeated: item.repeated });
       }
     }
     this.wasReady = m.ready;

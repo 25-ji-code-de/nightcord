@@ -147,6 +147,7 @@ class ChatReadingPosition {
   }
   jump(node, offset = 12) {
     if (!node) return false;
+    this.ui.messageFolds?.reveal(node);
     const log = this.ui.elements.chatlog;
     this.engaged = true;
     log.scrollTop += node.getBoundingClientRect().top - log.getBoundingClientRect().top - offset;

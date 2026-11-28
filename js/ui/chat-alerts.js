@@ -75,7 +75,8 @@ class ChatAlerts {
     this.delivery.announce();
   }
   receive(data) {
-    if (!this.ready || !this.ui.mentionsReady || data.isNako) return;
+    if (!this.ready || !this.ui.mentionsReady || data.isNako || data.repeated
+        || this.ui.messageFolds?.repeated({ timestamp: data.timestamp, seq: data.seq })) return;
     const message = { text: data.message, profile: data.user, sender: data.sender, timestamp: data.timestamp, user: data.name };
     const reasons = this.reasons(message);
     if (!reasons.length || this.seen.has(data.timestamp)) return;
@@ -174,6 +175,7 @@ class ChatAlerts {
       const key = SidebarHelpers.messageKey(message);
       this.ui.sidebarFeatures.saveRead(read => { read[key] = true; });
     }
+    this.ui.messageFolds?.reveal(target);
     target.scrollIntoView({ block: 'center' }); target.tabIndex = -1; target.focus({ preventScroll: true });
   }
   renderUnread() {

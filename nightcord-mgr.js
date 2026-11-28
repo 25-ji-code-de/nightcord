@@ -199,7 +199,8 @@ class NightcordManager {
       this.eventBus.emit('message:error', { error: '消息不能为空或超过 256 字符。' });
       return false;
     }
-    if (this.wsManager.send({ message })) {
+    const clientMessageId = globalThis.crypto?.randomUUID?.();
+    if (this.wsManager.send({ message, ...(clientMessageId ? { clientMessageId } : {}) })) {
       this.eventBus.emit('message:sent', { message });
       return true;
     }
@@ -295,7 +296,7 @@ class NightcordManager {
       if (this.roster.has(data.user.id)) this.roster.set(data.user.id, data.user);
       this.eventBus.emit('user:profile', { user: data.user });
     } else if (data.error) {
-      this.eventBus.emit('message:error', { error: data.error });
+      this.eventBus.emit('message:error', { error: data.error, code: data.code, retryAfter: data.retryAfter });
     } else if (data.joined) {
       this.roster.set(data.user?.id || data.joined, data.user || { displayName: data.joined });
       this.eventBus.emit('user:joined', { username: data.joined, user: data.user, silent: data.silent === true });
@@ -356,7 +357,8 @@ class NightcordManager {
         user: forwarded ? null : data.user,
         sender: forwarded ? data.user : null,
         isNako: isNakoMessage,
-        isRoleplay: isRoleplayMessage
+        isRoleplay: isRoleplayMessage,
+        repeated: data.repeated === true
       });
     }
   }

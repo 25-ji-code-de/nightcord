@@ -624,3 +624,50 @@ test('malformed guest frames cannot bypass the per-connection flood limit', { sk
   assert.ok(guest.messages.some(v => v.code === 'rate_limited'));
   assert.ok(guest.messages.filter(v => v.error === 'Invalid JSON.').length <= 19);
 });
+
+test('personal repeats survive renamed tabs and hibernation; retries never create extra messages', { skip: !!process.env.CHAT_BASE_URL, timeout: 30000 }, async () => {
+  await runtime.dispose();
+  runtime = createRuntime(state, { inspectDurableObjects: true });
+  base = String(await runtime.ready).replace(/\/$/, '');
+  const room = 'repeat-check';
+  const alice = await connect(room, '', { accessToken: 'local-test-token' }, { ip: 'repeat-alice' });
+  const id = crypto.randomUUID();
+  alice.send({ message: '6767', clientMessageId: id });
+  const first = await alice.waitFor(value => value.message === '6767');
+  const receipt = once(alice.socket, 'message');
+  alice.send({ message: '6767', clientMessageId: id });
+  assert.equal(JSON.parse(String((await receipt)[0])).timestamp, first.timestamp);
+  alice.send({ message: 'different text', clientMessageId: id });
+  await alice.waitFor(value => value.code === 'message_id_conflict');
+  state.name = 'Renamed';
+  const tab = await connect(room, '', { accessToken: 'local-test-token' }, { ip: 'repeat-tab' });
+  tab.send({ message: '⑥⑦！', clientMessageId: crypto.randomUUID() });
+  await tab.waitFor(value => value.message === '⑥⑦！');
+  const [roomId] = await runtime.listDurableObjectIds('ROOMS');
+  const storage = await runtime.unsafeGetDurableObjectStorage('nightcord-chat', 'ChatRoom', { id: roomId });
+  assert.equal((await storage.exec('SELECT id FROM messages')).length, 2);
+  await runtime.unsafeEvictDurableObject('nightcord-chat', 'ChatRoom', { id: roomId });
+  tab.send({ message: '6...7', clientMessageId: crypto.randomUUID() });
+  const denied = await tab.waitFor(value => value.code === 'message_repeated');
+  assert.ok(denied.retryAfter > 0 && denied.retryAfter <= 60);
+  assert.equal((await storage.exec('SELECT id FROM messages')).length, 2);
+  assert.equal((await storage.exec('SELECT id FROM chat_moderation')).length, 2);
+  const other = await connect(room, 'Other', undefined, { ip: 'repeat-other' });
+  other.send({ message: '67' });
+  await other.waitFor(value => value.message === '67');
+  // Expiring the recorded window makes the same content eligible again.
+  await storage.exec('UPDATE chat_moderation SET timestamp=?', Date.now() - 60001);
+  tab.send({ message: '676767', clientMessageId: crypto.randomUUID() });
+  await tab.waitFor(value => value.message === '676767');
+});
+
+test('group-repeat metadata starts at eight messages from four identities', { skip: !!process.env.CHAT_BASE_URL, timeout: 30000 }, async () => {
+  const peers = [];
+  for (let i = 0; i < 4; i++) peers.push(await connect('repeat-group', `Same name`, undefined, { ip: `repeat-group-${i}` }));
+  for (let i = 0; i < 8; i++) {
+    const peer = peers[Math.floor(i / 2)], message = '67'.repeat(i + 1);
+    peer.send({ message, clientMessageId: crypto.randomUUID() });
+    const entry = await peer.waitFor(value => value.message === message);
+    assert.equal(entry.repeated === true, i === 7);
+  }
+});

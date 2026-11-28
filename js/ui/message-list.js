@@ -17,7 +17,9 @@ class MessageListView {
         fragment.appendChild(batch);
       }
       batch.appendChild(rows.firstChild);
-      batch.style.setProperty('--message-batch-height', `${batch.childElementCount * 72}px`);
+      batch.hidden = false;
+      const visible = [...batch.children].filter(node => !node.hidden).length;
+      batch.style.setProperty('--message-batch-height', `${visible * 72}px`);
     }
     return fragment;
   }
@@ -116,6 +118,7 @@ class MessageListView {
       this.ui.messageIndex = build.index;
       this.ui.messageMeta = build.meta;
       this.ui.elements.chatlog.replaceChildren(this.groupMessages(build.fragment), ...streams);
+      this.ui.messageFolds?.apply();
       this.ui.messageBuild = null;
       if (this.shouldAutoScrollToBottom()) this.ui.elements.chatlog.scrollTop = this.ui.elements.chatlog.scrollHeight;
       this.ui.alerts?.renderUnread();
@@ -144,6 +147,7 @@ class MessageListView {
       chatlog.insertBefore(this.groupMessages(fragment, previous), stream);
     }
 
+    this.ui.messageFolds?.apply();
     // Read the final height once per batch so new messages are visible without
     // delaying the scroll until another frame.
     if (shouldAutoScroll) chatlog.scrollTop = chatlog.scrollHeight;

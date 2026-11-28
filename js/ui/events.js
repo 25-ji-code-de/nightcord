@@ -45,8 +45,9 @@ class ChatUIEvents {
       if (data.isNako && this.ui.confirmLocalNakoMessage(data)) return;
 
       this.ui.addChatMessage(data.name, data.message, data.timestamp, undefined, undefined, data.user, data.sender);
+      const repeated = data.repeated || this.ui.messageFolds?.repeated({ timestamp: data.timestamp });
       // 提醒路由：同一条消息既回复我又 @ 我时，@ 赢 —— 一个人点一下给两条提醒是噪音。
-      if (this.ui.mentionsReady && !data.isNako && this.ui.currentUser?.id && data.user?.id
+      if (!repeated && this.ui.mentionsReady && !data.isNako && this.ui.currentUser?.id && data.user?.id
           && data.user.id !== this.ui.currentUser.id) {
         const kind = this.noticeFor(data.message);
         if (kind === 'mention') {
@@ -57,7 +58,7 @@ class ChatUIEvents {
           this.ui.eventBus.emit('message:replied', data);
         }
       }
-      this.ui.alerts?.receive(data);
+      this.ui.alerts?.receive({ ...data, repeated });
     });
     this.onPublic('message:error', (data) => this.ui.showError(data.error));
     this.onPublic('message:sent', () => this.ui.clearChatInput());

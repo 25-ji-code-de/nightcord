@@ -128,6 +128,8 @@ const PRECACHE = [
   '/ui-autocomplete.js',
   '/composer-format.js',
   '/user-profile.js',
+  '/js/services/message-policy.js',
+  '/js/ui/message-folds.js',
   '/js/services/message-alerts.js',
   '/js/ui/alert-preferences.js',
   '/js/ui/alert-delivery.js',

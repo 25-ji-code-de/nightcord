@@ -5,13 +5,14 @@ import { readJson } from '../voice/protocol';
 export type Payload = { kind: 'text' | 'sticker'; text: string; replyTo?: number };
 export type Reply = { status: number; data: Record<string, unknown> };
 export class MessagingError extends Error {
-  constructor(public code: string, public status = 400) { super(code); }
+  constructor(public code: string, public status = 400, public retryAfter?: number) { super(code); }
 }
 export const fail = (code: string, status = 400): never => { throw new MessagingError(code, status); };
 export async function reply(action: () => Record<string, unknown> | Promise<Record<string, unknown>>): Promise<Reply> {
   try { return { status: 200, data: await action() }; }
   catch (error) {
-    if (error instanceof MessagingError) return { status: error.status, data: { code: error.code } };
+    if (error instanceof MessagingError) return { status: error.status, data: { code: error.code,
+      ...(error.retryAfter ? { retryAfter: error.retryAfter } : {}) } };
     console.error(JSON.stringify({ event: 'messaging_error', code: 'service_unavailable' }));
     return { status: 503, data: { code: 'service_unavailable' } };
   }

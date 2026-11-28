@@ -86,6 +86,15 @@ test('history, self, duplicate, AI and reconnect messages never produce live fee
   h.alerts.destroy();
 });
 
+test('grouped repeats suppress sounds, banners and unread counts even when mentioning someone', async () => {
+  const h = harness(); h.bus.emit('room:synced');
+  h.alerts.receive({ name: peer.displayName, user: peer, message: atMe, timestamp: 1, repeated: true });
+  h.ui.messageFolds = { repeated: () => true };
+  h.receive(atMe, 2); await flush();
+  assert.equal(h.plays.length, 0); assert.equal(h.notices.length, 0); assert.equal(h.alerts.unread, 0);
+  h.alerts.destroy();
+});
+
 test('one message plays the highest enabled cue, and away-only checks other tabs', async () => {
   const h = harness(); h.bus.emit('room:synced');
   h.ui.messages = [h.message('mine', 10, me)];

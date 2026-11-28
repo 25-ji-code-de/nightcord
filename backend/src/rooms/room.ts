@@ -200,7 +200,7 @@ export class ManagedRoom extends DurableObject<ChatEnv> {
         const actor = s.user;
         const saved = await this.ctx.storage.transaction(async () => {
           const saved = send(this.store, this.env, actor, input);
-          if (!saved.duplicate && this.roomPush.enqueue(actor.id, saved.message.text, seq => this.store.sql.exec<{ sender_id: string }>(
+          if (!saved.duplicate && !saved.message.repeated && this.roomPush.enqueue(actor.id, saved.message.text, seq => this.store.sql.exec<{ sender_id: string }>(
             'SELECT sender_id FROM messages WHERE seq=?', seq).toArray()[0]?.sender_id, saved.message.replyTo)) await this.roomPush.schedule();
           return saved;
         });

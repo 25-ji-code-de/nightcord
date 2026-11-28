@@ -193,7 +193,7 @@ class ChatMessageView {
       }
 
       p.appendChild(frag);
-      contentDiv.appendChild(p);
+      contentDiv.appendChild(this.ui.messageFolds?.decorate(msg, p) || p);
     }
 
     if (msg.sticker) {

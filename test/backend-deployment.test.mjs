@@ -93,7 +93,8 @@ test('config, dependency, migration, workflow and deleted source changes trigger
   let baseline = f.initial;
   for (const path of ['backend/wrangler.jsonc', 'backend/package.json', 'backend/package-lock.json',
     'backend/tsconfig.json', 'backend/migrations/0002.sql', '.github/workflows/deploy-backend.yml',
-    '.github/scripts/backend-changes.cjs', 'backend/src/chat.ts']) {
+    '.github/scripts/backend-changes.cjs', 'js/services/message-policy.js',
+    'js/renderer/parser.js', 'js/renderer/resources.js', 'backend/src/chat.ts']) {
     const sha = f.commit({ [path]: path.endsWith('chat.ts') ? null : 'changed' });
     assert.equal((await f.decide({ sha, deployments: f.success(baseline) })).outputs.deploy, 'true', path);
     baseline = sha;

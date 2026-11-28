@@ -75,6 +75,7 @@ class ReplyView {
       const messageEl = this.ui.messageIndex.get(timestamp);
 
       if (messageEl) {
+        this.ui.messageFolds?.reveal(messageEl);
         // 滚动到目标消息
         messageEl.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' });
 

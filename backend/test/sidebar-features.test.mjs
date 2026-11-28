@@ -142,7 +142,7 @@ test('sidebar tools use real chat state and preserve scoped preferences', { time
   await t.test('search filters, safe previews, keyboard focus and original message jumps', async t => {
     const { page } = await fixture(t);
     await seed(page);
-    assert.equal(await page.locator('.navigation-links > button:disabled').count(), 1);
+    assert.equal(await page.locator('#navigation-search').isEnabled(), true);
     await page.locator('#messageInput').fill('Keep this draft');
     await page.keyboard.press('Control+k');
     assert.equal(await page.locator('#tools-search-query').evaluate(node => node === document.activeElement), true);

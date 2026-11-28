@@ -40,7 +40,8 @@ module.exports = async ({ context, core, github, exec }) => {
       const diff = await exec.getExecOutput('git', ['diff', '--quiet', baseline, sha, '--',
         'backend/src/', 'backend/migrations/', 'backend/package.json', 'backend/package-lock.json',
         'backend/wrangler.jsonc', 'backend/tsconfig.json', '.github/workflows/deploy-backend.yml',
-        '.github/scripts/backend-changes.cjs',
+        '.github/scripts/backend-changes.cjs', 'js/services/message-policy.js',
+        'js/renderer/parser.js', 'js/renderer/resources.js',
       ], { ignoreReturnCode: true });
       if (diff.exitCode > 1) throw new Error('Unable to compare backend changes.');
       changed = diff.exitCode === 1;

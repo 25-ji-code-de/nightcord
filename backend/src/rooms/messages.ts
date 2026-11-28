@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import type { Profile } from '../identity';
-import { available, fail, identifier, payload, positive, sequence, type RoomSettings } from './protocol';
+import { available, fail, identifier, MessagingError, payload, positive, sequence, type RoomSettings } from './protocol';
 import { RoomStore } from './schema';
 import { requireMember } from './membership';
 type Row = { seq: number; sender_id: string; client_id: string; payload: string; profile: string; timestamp: number };
@@ -33,10 +33,12 @@ export function send(store: RoomStore, env: RoomSettings, actor: Profile, input:
     const profile = JSON.stringify(actor), bytes = new TextEncoder().encode(encoded + profile).length + 128;
     if (s.bytes + bytes > positive(env.ROOMS_MAX_BYTES, 8388608)) return fail('room_capacity', 507);
     if (content.replyTo && !store.sql.exec('SELECT 1 FROM messages WHERE seq=?', content.replyTo).toArray().length) return fail('invalid_reply');
+    const moderation = store.moderation.accept(actor.id, content.kind === 'sticker' ? `[sticker:${content.text}]` : content.text);
+    if (!moderation.allowed) throw new MessagingError('message_repeated', 429, moderation.retryAfter);
     const row = { seq: ++s.lastSeq, sender_id: actor.id, client_id: id, payload: encoded, profile, timestamp: Date.now() };
     store.sql.exec('INSERT INTO messages VALUES(?,?,?,?,?,?)', row.seq, actor.id, id, encoded, profile, row.timestamp);
     store.sql.exec('UPDATE members SET next_send_at=? WHERE account_id=?', Date.now() + 750, actor.id);
     s.bytes += bytes; s.sentToday++; store.save(s);
-    return { message: message(row), duplicate: false };
+    return { message: { ...message(row), repeated: moderation.repeated }, duplicate: false };
   });
 }

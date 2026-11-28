@@ -15,6 +15,7 @@ import { pushRoute } from './push';
 import { RoomPush, pushDeviceKey, type RoomPushPreferences } from './room-push';
 import { reply } from './messaging/protocol';
 import { consumeRate, type RateDecision, type RatePolicy } from './rate-limit';
+import { ChatModeration } from './messaging/moderation';
 export { VoiceRoom } from './voice/room';
 export { VoiceQuota } from './voice/quota';
 export { DirectRoom } from './dm/room';
@@ -42,7 +43,7 @@ interface Session {
   guestDenials?: number;
 }
 type StoredMessage = { name: string; message: string; timestamp: number; profile: string };
-type ChatMessage = { name: string; message: string; timestamp: number; user: Profile };
+type ChatMessage = { name: string; message: string; timestamp: number; user: Profile; repeated?: boolean };
 type Visibility = 'online' | 'offline' | 'hidden';
 type VoiceSnapshot = ReturnType<import('./voice/room').VoiceRoom['getPresence']>;
 type VoicePresenceLease = { observedAt: number; expiresAt: Record<string, number> };
@@ -136,6 +137,7 @@ export default {
 
 export class ChatRoom extends DurableObject<ChatEnv> {
   private roomPush: RoomPush;
+  private moderation: ChatModeration;
   async roomPushSettings(actor: Profile, room: string, endpoint: string, preferences: RoomPushPreferences) {
     const result = await reply(async () => {
       const id = room.length === 64 ? this.env.ROOMS.idFromString(room) : this.env.ROOMS.idFromName(room);
@@ -159,6 +161,11 @@ export class ChatRoom extends DurableObject<ChatEnv> {
       id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, message TEXT NOT NULL,
       timestamp INTEGER NOT NULL, profile TEXT NOT NULL
     )`);
+    if (!ctx.storage.sql.exec<{ name: string }>('PRAGMA table_info(messages)').toArray().some(column => column.name === 'client_id')) {
+      ctx.storage.sql.exec('ALTER TABLE messages ADD COLUMN client_id TEXT');
+    }
+    ctx.storage.sql.exec("CREATE UNIQUE INDEX IF NOT EXISTS messages_receipt ON messages(json_extract(profile,'$.id'),client_id)");
+    this.moderation = new ChatModeration(ctx.storage.sql);
     const hasMembers = this.ctx.storage.sql.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'room_members'").toArray().length;
     this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room_members (id TEXT PRIMARY KEY, profile TEXT NOT NULL)');
     this.ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS room_visibility (
@@ -242,6 +249,13 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     if (initial.user && frame.type !== 'auth' && (typeof frame.message !== 'string' || frame.message.length > 256)) {
       return this.reject(ws, 'Message must be a string of at most 256 characters.');
     }
+    if (initial.user && frame.type !== 'auth' && frame.clientMessageId !== undefined
+        && (typeof frame.clientMessageId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(frame.clientMessageId))) {
+      return this.reject(ws, 'Invalid client message ID.', 'invalid_message_id');
+    }
+    // An acknowledged retry must not spend another rate/duplicate allowance.
+    const lease = initial.user?.authenticated ? initial.authExpiresAt : initial.guest?.expiresAt || 0;
+    if (initial.user && lease > Date.now() && frame.type !== 'auth' && this.replayMessage(ws, initial.user, frame)) return;
     if (initial.user && !initial.user.authenticated && frame.type !== 'auth' && (initial.guestBlockedUntil || 0) > Date.now()) {
       this.guestLimited(ws, { allowed: false, retryAfter: Math.ceil((initial.guestBlockedUntil! - Date.now()) / 1000) }); return;
     }
@@ -342,21 +356,34 @@ export class ChatRoom extends DurableObject<ChatEnv> {
       if ((ws.deserializeAttachment() as Session).closed) return;
       if (initial.user.authenticated && Date.now() >= initial.authExpiresAt) return this.reject(ws, 'Please refresh your SEKAI Pass session.', 'auth_required');
       if (!initial.user.authenticated && (!initial.guest || Date.now() >= initial.guest.expiresAt)) return this.guestFailure(ws);
-      const previous = this.ctx.storage.sql.exec<{ timestamp: number }>('SELECT timestamp FROM messages ORDER BY id DESC LIMIT 1').toArray()[0];
-      const entry: ChatMessage = {
-        name: initial.user.displayName, message: frame.message as string, user: { ...initial.user, isMobile: initial.user.isMobile === true },
-        timestamp: Math.max(Date.now(), (previous?.timestamp || 0) + 1),
-      };
-      await this.ctx.storage.transaction(async () => {
+      // Another tab may have committed the same request while the limiter ran.
+      if (this.replayMessage(ws, initial.user, frame)) return;
+      const user = initial.user;
+      const saved = this.ctx.storage.transactionSync(() => {
+        const decision = this.moderation.accept(user.id, frame.message as string);
+        if (!decision.allowed) return { decision };
+        const previous = this.ctx.storage.sql.exec<{ timestamp: number }>('SELECT timestamp FROM messages ORDER BY id DESC LIMIT 1').toArray()[0];
+        const entry: ChatMessage = {
+          name: user.displayName, message: frame.message as string, user: { ...user, isMobile: user.isMobile === true },
+          timestamp: Math.max(Date.now(), (previous?.timestamp || 0) + 1),
+          ...(decision.repeated ? { repeated: true } : {}),
+        };
         const inserted = this.ctx.storage.sql.exec<{ id: number }>(
-          'INSERT INTO messages (name, message, timestamp, profile) VALUES (?, ?, ?, ?) RETURNING id',
-          entry.name, entry.message, entry.timestamp, JSON.stringify(entry.user),
+          'INSERT INTO messages (name, message, timestamp, profile, client_id) VALUES (?, ?, ?, ?, ?) RETURNING id',
+          entry.name, entry.message, entry.timestamp, JSON.stringify(entry.user), frame.clientMessageId as string || null,
         ).one();
         this.ctx.storage.sql.exec('DELETE FROM messages WHERE id <= ?', inserted.id - STORED_MESSAGE_LIMIT);
-        if (this.roomPush.enqueue(entry.user.id, entry.message, timestamp => this.ctx.storage.sql.exec<{ owner: string }>(
-          "SELECT json_extract(profile,'$.id') AS owner FROM messages WHERE timestamp=? LIMIT 1", timestamp).toArray()[0]?.owner)) await this.roomPush.schedule();
+        const push = !decision.repeated && this.roomPush.enqueue(entry.user.id, entry.message, timestamp => this.ctx.storage.sql.exec<{ owner: string }>(
+          "SELECT json_extract(profile,'$.id') AS owner FROM messages WHERE timestamp=? LIMIT 1", timestamp).toArray()[0]?.owner);
+        return { decision, entry, push };
       });
-      this.broadcast(entry);
+      if (!saved.entry) {
+        ws.send(JSON.stringify({ code: 'message_repeated', retryAfter: saved.decision.retryAfter,
+          error: `相似内容发送过于频繁，请在 ${saved.decision.retryAfter} 秒后再试。` }));
+        return;
+      }
+      this.broadcast(saved.entry);
+      if (saved.push) await this.roomPush.schedule();
     } catch (error) {
       console.error('Chat event failed', error instanceof Error ? error.message : 'Unknown error');
       this.reject(ws, 'Unable to process action; please reconnect and try again.', !initial.user || frame.type === 'auth' ? 'auth_unavailable' : undefined);
@@ -372,6 +399,16 @@ export class ChatRoom extends DurableObject<ChatEnv> {
   }
   webSocketError(ws: WebSocket): void { this.removeSession(ws); ws.close(1011, 'Connection error'); }
   private reject(ws: WebSocket, error: string, code?: string): void { ws.send(JSON.stringify({ error, code })); }
+  private replayMessage(ws: WebSocket, user: Profile, frame: Record<string, unknown>): boolean {
+    if (!frame.clientMessageId) return false;
+    const saved = this.ctx.storage.sql.exec<StoredMessage>(
+      "SELECT name,message,timestamp,profile FROM messages WHERE json_extract(profile,'$.id')=? AND client_id=?", user.id, frame.clientMessageId as string,
+    ).toArray()[0];
+    if (!saved) return false;
+    if (saved.message !== frame.message) this.reject(ws, 'Message ID already used for different content.', 'message_id_conflict');
+    else ws.send(JSON.stringify({ name: saved.name, message: saved.message, timestamp: saved.timestamp, user: JSON.parse(saved.profile) }));
+    return true;
+  }
   private async guestLimit(session: Session, id: string, action: 'join' | 'message'): Promise<RateDecision> {
     const limits = await Promise.all([
       this.env.LIMITERS.get(this.env.LIMITERS.idFromString(session.limiterId)).enforce(`guest-ip-${action}`),

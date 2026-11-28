@@ -1,12 +1,18 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { visibilityAllowed, type Member, type State, type Visibility } from './protocol';
 import type { Profile } from '../identity';
+import { ChatModeration } from '../messaging/moderation';
 export class RoomStore {
-  constructor(public storage: DurableObjectStorage) {}
+  private contentModeration?: ChatModeration;
+  constructor(public storage: DurableObjectStorage) {
+    if (this.exists()) this.contentModeration = new ChatModeration(this.sql);
+  }
+  get moderation() { return this.contentModeration ||= new ChatModeration(this.sql); }
   get sql() { return this.storage.sql; }
   exists() { return !!this.sql.exec("SELECT 1 FROM sqlite_master WHERE type='table' AND name='room_meta'").toArray().length; }
   initialize() {
     this.initializeVisibility();
+    this.contentModeration = new ChatModeration(this.sql);
     this.sql.exec('CREATE TABLE IF NOT EXISTS room_meta (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS members (account_id TEXT PRIMARY KEY, profile TEXT NOT NULL, status TEXT NOT NULL, version INTEGER NOT NULL, joined_at INTEGER NOT NULL, next_send_at INTEGER NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS messages (seq INTEGER PRIMARY KEY, sender_id TEXT NOT NULL, client_id TEXT NOT NULL, payload TEXT NOT NULL, profile TEXT NOT NULL, timestamp INTEGER NOT NULL, UNIQUE(sender_id,client_id))');

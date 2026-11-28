@@ -116,6 +116,21 @@ test('WS sends stay local; dedupe, conflicts, replies, history, archive and rene
   assert.equal((await room.handle(profiles.eve,'join',{})).status,404);
   await delay(1000); const renewed=await a.command('auth',{accessToken:'alice'}); assert.equal(renewed.type,'ready'); assert.equal(renewed.messages,undefined);
 });
+
+test('managed rooms reject the third repeat and preserve idempotent retries', async t => {
+  const f = await fixture(t), id = await f.create();
+  const a = await f.connect(id, 'alice');
+  const input = { clientMessageId: crypto.randomUUID(), text: '6767' };
+  assert.equal((await a.command('send', input)).type, 'ack');
+  assert.equal((await a.command('send', input)).message.seq, 1);
+  await delay(800);
+  assert.equal((await a.command('send', { clientMessageId: crypto.randomUUID(), text: '⑥⑦' })).type, 'ack');
+  await delay(800);
+  const denied = await a.command('send', { clientMessageId: crypto.randomUUID(), text: '6...7' });
+  assert.equal(denied.code, 'message_repeated');
+  assert.ok(denied.retryAfter > 0 && denied.retryAfter <= 60);
+  assert.equal((await a.command('history')).messages.length, 2);
+});
 test('managed visibility persists per room, synchronizes tabs and filters rosters without hiding moderation or messages', async t => {
   const f = await fixture(t), id = await f.create(), room = f.room(id);
   await room.handle(profiles.bob, 'join', {});
@@ -236,7 +251,7 @@ test('unknown objects create no schema and expired passive sockets cannot receiv
   assert.equal((await (await f.storage(unknown)).exec("SELECT name FROM sqlite_master WHERE name='room_meta'")).length,0);
   const id=await f.create(), a=await f.connect(id,'alice'); await f.room(id).testExpire(); await f.room(id).testAlarm(); await until(()=>a.ws.readyState>=2);
 });
-test('100 sends cost four SQL writes each at 1, 10 and 50 members, with no external calls',async t=>{
+test('100 distinct sends have bounded moderation costs at 1, 10 and 50 members, with no external calls',async t=>{
   let script=await readFile('dist/chat.js','utf8');
   script=script.replace('return this.storage.sql;',`return {exec: (...args) => {
     const cursor=this.storage.sql.exec(...args), rows=cursor.toArray();
@@ -251,8 +266,9 @@ test('100 sends cost four SQL writes each at 1, 10 and 50 members, with no exter
     const id=await f.create(),room=f.room(id);
     for(let n=1;n<count;n++)await room.handle({...profiles.bob,id:'sekai:member'+n},'join',{});
     const a=await f.connect(id,'alice'); await room.testCosts(true); const pass=f.state.passCalls;
-    for(let n=0;n<100;n++)assert.equal((await a.command('send',{clientMessageId:crypto.randomUUID(),text:'budget'})).type,'ack');
-    const costs=await room.testCosts(); assert.equal(costs.write,400); assert.equal(f.state.passCalls,pass);
+    for(let n=0;n<100;n++)assert.equal((await a.command('send',{clientMessageId:crypto.randomUUID(),text:`budget ${n}`})).type,'ack');
+    const costs=await room.testCosts(); assert.equal(costs.write,600); assert.equal(f.state.passCalls,pass);
+    if (results.length) assert.equal(costs.write, results[0].rowsWritten, 'cost does not grow with member count');
     const storage=await f.storage(id);assert.equal((await storage.exec('SELECT * FROM outbox')).length,0);
     results.push({members:count,messages:100,rowsRead:costs.read,rowsWritten:costs.write,passCalls:0}); a.ws.close();
   }

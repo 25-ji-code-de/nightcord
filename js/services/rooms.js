@@ -158,7 +158,9 @@ class RoomManager {
     const request = this.requests.get(data.requestId);
     if (request) {
       clearTimeout(request.timer); this.requests.delete(data.requestId);
-      if (data.type === 'error') request.reject(Object.assign(new Error(RoomManager.error(data.code)), { code: data.code })); else request.resolve(data);
+      if (data.type === 'error') request.reject(Object.assign(new Error(data.code === 'message_repeated'
+        ? `相似内容发送过于频繁，请在 ${data.retryAfter || 60} 秒后再试。` : RoomManager.error(data.code)),
+        { code: data.code, retryAfter: data.retryAfter })); else request.resolve(data);
     } else if (data.type === 'error') this.status = RoomManager.error(data.code);
     if (this.ready && ((data.type === 'presence' && presenceChanged && !data.members) || data.type === 'changed' || data.type === 'ready' && data.cursor)) void this.refreshMembers();
     this.update();

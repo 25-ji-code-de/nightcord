@@ -69,6 +69,7 @@ class UIManager {
     });
   }
   get messageView() { return this._messageView ||= new ChatMessageView(this); }
+  get messageFolds() { return this._messageFolds ||= new MessageFoldView(this); }
   get replies() { return this._replies ||= new ReplyView(this); }
   get notifications() { return this._notifications ||= new ChatNotifications(this); }
   get mentionPicker() { return this._mentionPicker ||= new MentionPickerView(this); }

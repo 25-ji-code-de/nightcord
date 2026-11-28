@@ -101,6 +101,7 @@ return class SidebarMessages {
     this.sidebar.returnFocus = null;
     this.sidebar.close(); this.sidebar.ui.closeNavigationDrawer?.();
     this.sidebar.ui.isAtBottom = false; this.sidebar.ui.updateUserActivityTime();
+    this.sidebar.ui.messageFolds?.reveal(target);
     target.tabIndex = -1; target.focus({ preventScroll: true });
     target.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     target.classList.add('message-highlighted');

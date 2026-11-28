@@ -162,12 +162,17 @@ return class SidebarMessages {
   buildInbox() {
     this.sidebar.content.append(element('p', 'tools-description', '回复与提及你的消息，都在这里。'));
     const toolbar = element('div', 'tools-inbox-toolbar');
-    toolbar.append(this.filters([['all', '全部提醒'], ['unread', '只看未读']], this.sidebar.inboxFilter, value => { this.sidebar.inboxFilter = value; this.sidebar.refresh(); }));
-    toolbar.append(this.filters([['all', '所有类型'], ['mention', '@ 我'], ['reply', '回复我'], ['everyone', '全体提及']], this.sidebar.inboxKind || 'all', value => { this.sidebar.inboxKind = value; this.sidebar.refresh(); }));
+    const header = element('div', 'tools-inbox-header');
+    const status = this.filters([['all', '全部提醒'], ['unread', '只看未读']], this.sidebar.inboxFilter, value => { this.sidebar.inboxFilter = value; this.sidebar.refresh(); });
+    status.setAttribute('role', 'group'); status.setAttribute('aria-label', '阅读状态');
+    const kinds = this.filters([['all', '所有类型'], ['mention', '@ 我'], ['reply', '回复我'], ['everyone', '全体提及']], this.sidebar.inboxKind || 'all', value => { this.sidebar.inboxKind = value; this.sidebar.refresh(); });
+    kinds.classList.add('tools-inbox-kinds');
+    kinds.setAttribute('role', 'group'); kinds.setAttribute('aria-label', '提醒类型');
     this.sidebar.markAll = button('全部标为已读', () => this.sidebar.saveRead((read, mentions) => {
       for (const message of mentions) read[messageKey(message)] = true;
     }));
-    toolbar.append(this.sidebar.markAll); this.sidebar.content.append(toolbar); this.resultsList();
+    header.append(status, this.sidebar.markAll); toolbar.append(header, kinds);
+    this.sidebar.content.append(toolbar); this.resultsList();
   }
 
   renderInbox(state, mentions, unread) {

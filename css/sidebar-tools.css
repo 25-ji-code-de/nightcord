@@ -55,13 +55,21 @@ body:has(.main.tool-view) :is(.notice-card, .reply-notice) { top: auto; bottom: 
 .tool-message-preview { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; margin-top: 5px; font-size: 14px; line-height: 1.65; color: rgb(var(--nc-text)); }
 .tool-unread-label { font-size: 10px; color: rgb(var(--nc-accent)); }
 .tool-message > .tool-button { margin: -8px 0 8px 48px; min-height: 28px; font-size: 11px; }
-.tools-inbox-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid rgb(var(--nc-line) / .12); }
+.tools-inbox-toolbar { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tools-inbox-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; border-bottom: 1px solid rgb(var(--nc-line) / .12); }
+.tools-inbox-header > .tool-button { margin-left: auto; }
 .tools-filter-buttons { display: flex; gap: 20px; margin: 0; border-bottom: 1px solid rgb(var(--nc-line) / .12); }
 .tools-filter-buttons .tool-button { position: relative; min-height: 40px; padding: 8px 0; border-radius: 0; font-size: 13px; }
 .tools-filter-buttons .tool-button:hover { background: transparent; }
 .tools-filter-buttons [aria-pressed="true"] { color: rgb(var(--nc-text)); }
 .tools-filter-buttons [aria-pressed="true"]::after { content: ''; position: absolute; inset: auto 0 -1px; height: 2px; background: rgb(var(--nc-accent)); }
-.tools-inbox-toolbar .tools-filter-buttons { border: 0; }
+.tools-inbox-toolbar .tools-filter-buttons { flex-wrap: wrap; min-width: 0; gap: 8px 20px; border: 0; }
+.tools-inbox-toolbar .tool-button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.tools-inbox-toolbar .tools-inbox-kinds { gap: 8px; }
+.tools-inbox-kinds .tool-button { min-height: 32px; padding: 6px 10px; border-radius: 3px; background: rgb(var(--nc-line) / .04); }
+.tools-inbox-kinds .tool-button:hover { background: rgb(var(--nc-line) / .08); }
+.tools-inbox-kinds [aria-pressed="true"] { background: rgb(var(--nc-accent) / .14); }
+.tools-inbox-kinds [aria-pressed="true"]::after { display: none; }
 .tools-warning { margin: 16px 28px 0; padding: 10px 12px; border-left: 2px solid rgb(var(--nc-accent)); background: rgb(var(--nc-accent) / .08); color: rgb(var(--nc-text)); font-size: 13px; }
 .tools-help { margin-top: 24px; }
 .tools-help details { border-bottom: 1px solid rgb(var(--nc-line) / .12); }
@@ -89,5 +97,6 @@ body:has(.main.tool-view) :is(.notice-card, .reply-notice) { top: auto; bottom: 
   .tools-back { min-height: 44px; }
   .tool-field input { font-size: 16px; min-height: 40px; }
   .tool-button { min-height: 40px; }
+  .tools-inbox-toolbar .tool-button { min-width: 44px; min-height: 44px; }
   .tools-warning { margin-inline: 20px; }
 }

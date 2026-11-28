@@ -3,6 +3,30 @@ import assert from 'node:assert/strict';
 import { createHmac, createHash } from 'node:crypto';
 import test from 'node:test';
 import { guestSession, verifyGuest, allowedOrigin } from '../src/guest.ts';
+import { consumeRate } from '../src/rate-limit.ts';
+
+test('guest message limits enforce rolling burst, minute and hour windows with precise recovery', () => {
+  let events = [];
+  for (const now of [0, 0, 10000, 10000, 20000, 20000]) {
+    const result = consumeRate('guest-message', events, now);
+    assert.equal(result.allowed, true); events = result.events;
+  }
+  const denied = consumeRate('guest-message', events, 30000);
+  assert.equal(denied.allowed, false); assert.equal(denied.retryAfter, 30);
+  assert.deepEqual(denied.events, events, 'denials cannot prolong the cooldown');
+  assert.equal(consumeRate('guest-message', events, 59999).retryAfter, 1);
+  assert.equal(consumeRate('guest-message', events, 60000).allowed, true);
+  events = [];
+  for (let i = 0; i < 120; i++) {
+    const result = consumeRate('guest-message', events, i * 30000);
+    assert.equal(result.allowed, true); events = result.events;
+  }
+  assert.equal(consumeRate('guest-message', events, 3580000).retryAfter, 20);
+  const recovered = consumeRate('guest-message', events, 3600000);
+  assert.equal(recovered.allowed, true); assert.equal(recovered.events.length, 120);
+  assert.equal(consumeRate('guest-message', recovered.events, 3600001).retryAfter, 30);
+  assert.deepEqual(consumeRate('guest-message', recovered.events, 7200001).events, [7200001]);
+});
 
 const origin = 'https://nightcord.de5.net';
 const secret = 'ac'.repeat(32);

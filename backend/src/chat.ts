@@ -14,6 +14,7 @@ import { dmRoute } from './dm/routes';
 import { pushRoute } from './push';
 import { RoomPush, pushDeviceKey, type RoomPushPreferences } from './room-push';
 import { reply } from './messaging/protocol';
+import { consumeRate, type RateDecision, type RatePolicy } from './rate-limit';
 export { VoiceRoom } from './voice/room';
 export { VoiceQuota } from './voice/quota';
 export { DirectRoom } from './dm/room';
@@ -36,6 +37,9 @@ interface Session {
   voiceUsed?: boolean;
   pushDevice?: string;
   pushViewing?: boolean;
+  guestFrames?: number[];
+  guestBlockedUntil?: number;
+  guestDenials?: number;
 }
 type StoredMessage = { name: string; message: string; timestamp: number; profile: string };
 type ChatMessage = { name: string; message: string; timestamp: number; user: Profile };
@@ -51,6 +55,12 @@ function response(body: string, status = 200): Response {
     status,
     headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
   });
+}
+
+function limitedResponse(limit: RateDecision, headers: Record<string, string>): Response {
+  return Response.json({ code: 'rate_limited', retryAfter: limit.retryAfter,
+    error: `操作过于频繁，请在 ${limit.retryAfter} 秒后重试。` },
+  { status: 429, headers: { ...headers, 'Retry-After': String(limit.retryAfter), 'Access-Control-Expose-Headers': 'Retry-After' } });
 }
 
 export default {
@@ -90,10 +100,20 @@ export default {
       if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers });
       if (url.pathname === '/api/guest/session') {
         const limiter = env.LIMITERS.get(env.LIMITERS.idFromName(`bootstrap:${request.headers.get('CF-Connecting-IP') || 'local'}`));
-        if (!await limiter.check()) return Response.json({ error: 'Please retry later.', code: 'rate_limited' }, { status: 429, headers });
-        try { return await guestSession(request, env, origin); }
+        try {
+          const requestLimit = await limiter.enforce('guest-session');
+          if (!requestLimit.allowed) return limitedResponse(requestLimit, headers);
+          // A valid cookie can be reused without spending the new-identity budget.
+          if (!await verifyGuest(request, env)) {
+            const identityLimit = await limiter.enforce('guest-identity');
+            if (!identityLimit.allowed) return limitedResponse(identityLimit, headers);
+          }
+          return await guestSession(request, env, origin);
+        }
         catch { return Response.json({ error: 'Guest identity is temporarily unavailable.', code: 'guest_unavailable' }, { status: 503, headers }); }
       }
+      const roomLimit = await env.LIMITERS.getByName(`room-create:${request.headers.get('CF-Connecting-IP') || 'local'}`).enforce('guest-room');
+      if (!roomLimit.allowed) return limitedResponse(roomLimit, headers);
       return new Response(env.ROOMS.newUniqueId().toString(), { headers });
     }
     const match = /^\/api\/room\/([a-z0-9-]{1,32}|[0-9a-f]{64})\/websocket$/.exec(url.pathname);
@@ -106,6 +126,10 @@ export default {
     } catch {
       return response('Unknown private room; create a new room on this server', 404);
     }
+    // Identity arrives in the first WebSocket frame. Bound all upgrades before
+    // waking/creating rooms, then apply guest-specific admission after verification.
+    const connectionLimit = await env.LIMITERS.getByName(`connect:${request.headers.get('CF-Connecting-IP') || 'local'}`).enforce('connection');
+    if (!connectionLimit.allowed) return limitedResponse(connectionLimit, corsHeaders(origin));
     return env.ROOMS.get(id).fetch(request);
   },
 } satisfies ExportedHandler<ChatEnv>;
@@ -174,13 +198,20 @@ export class ChatRoom extends DurableObject<ChatEnv> {
   }
 
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
+    let initial = ws.deserializeAttachment() as Session;
+    if (initial.closed) return;
+    // Count even malformed/control frames, before parsing or issuing RPCs.
+    if (!initial.user?.authenticated) {
+      const frameLimit = consumeRate('guest-frame', initial.guestFrames || [], Date.now());
+      if (!frameLimit.allowed) { this.guestLimited(ws, frameLimit, true); return; }
+      initial = { ...initial, guestFrames: frameLimit.events };
+      ws.serializeAttachment(initial);
+    }
     if (typeof raw !== 'string' || raw.length > 8192) return this.reject(ws, 'Invalid message frame.');
     let data: unknown;
     try { data = JSON.parse(raw); } catch { return this.reject(ws, 'Invalid JSON.'); }
     if (!data || typeof data !== 'object' || Array.isArray(data)) return this.reject(ws, 'Expected a JSON object.');
     const frame = data as Record<string, unknown>;
-    const initial = ws.deserializeAttachment() as Session;
-    if (initial.closed) return;
     if (frame.type === 'push:attention') {
       if (initial.user?.authenticated && initial.authExpiresAt > Date.now() && typeof frame.device === 'string' && /^[a-f0-9]{64}$/.test(frame.device) && typeof frame.viewing === 'boolean') {
         ws.serializeAttachment({ ...initial, pushDevice: frame.device, pushViewing: frame.viewing });
@@ -211,16 +242,21 @@ export class ChatRoom extends DurableObject<ChatEnv> {
     if (initial.user && frame.type !== 'auth' && (typeof frame.message !== 'string' || frame.message.length > 256)) {
       return this.reject(ws, 'Message must be a string of at most 256 characters.');
     }
+    if (initial.user && !initial.user.authenticated && frame.type !== 'auth' && (initial.guestBlockedUntil || 0) > Date.now()) {
+      this.guestLimited(ws, { allowed: false, retryAfter: Math.ceil((initial.guestBlockedUntil! - Date.now()) / 1000) }); return;
+    }
     ws.serializeAttachment({ ...initial, busy: true });
     try {
-      const limiterIds = !initial.user || frame.type === 'auth' ? [initial.limiterId]
-        : initial.user.authenticated ? [initial.userLimiterId || initial.limiterId]
-        : [initial.limiterId, initial.userLimiterId || this.env.LIMITERS.idFromName(`user:${initial.user.id}`).toString()];
-      const checks = await Promise.all(limiterIds.map(id => this.env.LIMITERS.get(this.env.LIMITERS.idFromString(id)).check()));
-      if (checks.some(allowed => !allowed)) {
-        this.reject(ws, 'Your IP or account is being rate-limited, please try again later.', 'rate_limited');
-        if (!initial.user || frame.type === 'auth') ws.close(1013, 'Please retry later');
-        return;
+      if (initial.user && !initial.user.authenticated && frame.type !== 'auth') {
+        const limit = await this.guestLimit(initial, initial.user.id, 'message');
+        if (!limit.allowed) { this.guestLimited(ws, limit); return; }
+      } else {
+        const limiterId = !initial.user || frame.type === 'auth' ? initial.limiterId : initial.userLimiterId || initial.limiterId;
+        if (!await this.env.LIMITERS.get(this.env.LIMITERS.idFromString(limiterId)).check()) {
+          this.reject(ws, 'Your IP or account is being rate-limited, please try again later.', 'rate_limited');
+          if (!initial.user || frame.type === 'auth') { this.removeSession(ws); ws.close(1013, 'Please retry later'); }
+          return;
+        }
       }
       if (!initial.user || frame.type === 'auth') {
         let user: Profile;
@@ -244,12 +280,14 @@ export class ChatRoom extends DurableObject<ChatEnv> {
           if (frame.type === 'auth' || initial.user?.authenticated) return this.authFailure(ws);
           if (!initial.guest || initial.guest.expiresAt <= Date.now()) return this.guestFailure(ws);
           if (typeof frame.name !== 'string' || !frame.name.trim() || frame.name.length > 32) return this.reject(ws, 'Name must contain 1 to 32 characters.');
+          const limit = await this.guestLimit(initial, initial.guest.id, 'join');
+          if (!limit.allowed) { this.guestLimited(ws, limit, true); return; }
           user = guestProfile(frame.name.trim(), initial.guest.id, isMobile);
         }
         if ((ws.deserializeAttachment() as Session).closed) return;
         if (initial.user && initial.user.id !== user.id) this.removeSession(ws);
         ws.serializeAttachment({
-          ...initial, user, authExpiresAt, isMobile, busy: true, closed: false,
+          ...ws.deserializeAttachment(), user, authExpiresAt, isMobile, busy: true, closed: false,
           userLimiterId: this.env.LIMITERS.idFromName(`user:${user.id}`).toString(),
         } satisfies Session);
         if (user.authenticated) {
@@ -334,6 +372,24 @@ export class ChatRoom extends DurableObject<ChatEnv> {
   }
   webSocketError(ws: WebSocket): void { this.removeSession(ws); ws.close(1011, 'Connection error'); }
   private reject(ws: WebSocket, error: string, code?: string): void { ws.send(JSON.stringify({ error, code })); }
+  private async guestLimit(session: Session, id: string, action: 'join' | 'message'): Promise<RateDecision> {
+    const limits = await Promise.all([
+      this.env.LIMITERS.get(this.env.LIMITERS.idFromString(session.limiterId)).enforce(`guest-ip-${action}`),
+      this.env.LIMITERS.getByName(`user:${id}`).enforce(`guest-${action}`),
+    ]);
+    return { allowed: limits.every(limit => limit.allowed), retryAfter: Math.max(...limits.map(limit => limit.retryAfter)) };
+  }
+  private guestLimited(ws: WebSocket, limit: RateDecision, close = false): void {
+    const current = ws.deserializeAttachment() as Session;
+    if (current.closed) return;
+    const denials = (current.guestBlockedUntil || 0) > Date.now() ? (current.guestDenials || 0) + 1 : 0;
+    const closing = close || denials >= 3;
+    ws.serializeAttachment({ ...current, guestBlockedUntil: denials ? current.guestBlockedUntil : Date.now() + limit.retryAfter * 1000, guestDenials: denials });
+    ws.send(JSON.stringify({ code: 'rate_limited', retryAfter: limit.retryAfter,
+      ...(closing ? { reconnectAfter: limit.retryAfter } : {}),
+      error: `访客操作过于频繁，请在 ${limit.retryAfter} 秒后重试，或使用 SEKAI Pass 登录。` }));
+    if (closing) { this.removeSession(ws); ws.close(1013, 'Guest rate limit exceeded'); }
+  }
   private authFailure(ws: WebSocket): void {
     this.reject(ws, 'SEKAI Pass session is invalid or expired. Please sign in again.', 'auth_invalid');
     this.removeSession(ws);
@@ -457,6 +513,15 @@ export class RateLimiter extends DurableObject<ChatEnv> {
   constructor(ctx: DurableObjectState, env: ChatEnv) {
     super(ctx, env);
     this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS rate_limit (id INTEGER PRIMARY KEY CHECK (id = 1), next_allowed INTEGER NOT NULL)');
+    this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS rate_windows (policy TEXT PRIMARY KEY, events TEXT NOT NULL)');
+  }
+  enforce(policy: RatePolicy): RateDecision {
+    const row = this.ctx.storage.sql.exec<{ events: string }>('SELECT events FROM rate_windows WHERE policy=?', policy).toArray()[0];
+    const result = consumeRate(policy, row ? JSON.parse(row.events) : [], Date.now());
+    // Synchronous read/check/write: concurrent connections cannot overspend.
+    // Rejected attempts neither write nor extend the original waiting time.
+    if (result.allowed) this.ctx.storage.sql.exec('INSERT INTO rate_windows VALUES (?,?) ON CONFLICT(policy) DO UPDATE SET events=excluded.events', policy, JSON.stringify(result.events));
+    return { allowed: result.allowed, retryAfter: result.retryAfter };
   }
   check(): boolean {
     const now = Date.now();

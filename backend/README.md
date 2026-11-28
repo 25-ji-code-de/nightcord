@@ -203,11 +203,27 @@ Frontend publication continues through the existing Cloudflare Pages integration
   Messages, history and active voice participants remain visible. The table is
   created on first use without a namespace migration; deploy the backend before
   the frontend, and refresh old clients to support silent transitions correctly.
-- Limits are shared across rooms: five initial actions, then one per five
-  seconds. Joining uses the IP limit; verified sessions use their account limit.
-  Guest messages use both IP and stable guest-ID limits; reconnects and changing
-  rooms cannot reset the latter. Cookie initialization has a separate IP bucket.
-  SQLite preserves limits across eviction.
+- Limits are shared across rooms and stored in SQLite, including after eviction.
+  Verified account messages retain five initial actions, then one per five seconds.
+  Guest limits use exact rolling windows, keyed by the signed guest identity and
+  server-supplied `CF-Connecting-IP`; names and client-supplied profile IDs are ignored:
+  - Guest messages: 2 per 10 seconds, 6 per minute and 120 per hour per identity;
+    additionally 4 per 10 seconds, 12 per minute and 240 per hour per IP.
+  - Guest joins: 6 per minute / 40 per hour per identity, and 12 per minute /
+    120 per hour per IP. The existing IP authentication throttle also applies.
+  - Guest session requests: 12 per minute / 120 per hour per IP. Issuing a new
+    identity additionally permits only 3 per minute / 20 per hour; reusing a
+    valid signed cookie does not consume the new-identity allowance.
+  - Legacy anonymous room IDs: 2 per minute / 10 per hour per IP.
+  - All WebSocket upgrades: 20 per minute per IP, checked before accessing the
+    room because account authentication happens in the first socket frame.
+  A guest/unverified socket sending more than 20 frames in 10 seconds is closed,
+  including malformed frames and control requests. Repeatedly sending during a
+  message cooldown also closes the socket, without further limiter RPCs.
+  HTTP 429 and socket errors include `retryAfter` seconds; HTTP also returns
+  `Retry-After`. Automatic reconnects honor the server's waiting time. These
+  application checks reduce downstream work; an HTTP request that reaches the
+  Worker still counts as a Worker request.
 - `npm test` starts a disposable local runtime. Identity tests use an isolated
   userinfo fixture and cover forged claims, same-name guests, multiple tabs and
   token revocation. Browser tests exercise the real frontend and local WebSockets;

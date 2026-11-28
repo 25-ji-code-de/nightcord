@@ -65,6 +65,47 @@ function retryFixture(config = {}) {
   };
 }
 
+test('chat rate-limit frames postpone automatic reconnects until the server cooldown ends', async () => {
+  const f = retryFixture();
+  const Protocol = vm.runInContext(`${readBrowserScript('js/network/chat-session.js')}\nChatSessionProtocol`, f.context);
+  const protocol = new Protocol({ getAccessToken: async () => 'test-token' });
+  f.connection.protocol = protocol; protocol.attach(f.connection);
+  await f.connection.connect('room', 'Guest'); f.connection.ws.open();
+  f.connection.ws.message({ ready: true });
+  f.connection.ws.message({ code: 'rate_limited', retryAfter: 60, reconnectAfter: 60 });
+  f.advanceClock(5000); f.connection.ws.close();
+  assert.equal(await f.retry(), 55000);
+  f.connection.disconnect();
+});
+
+test('a guest message quota does not prevent reconnecting to continue reading', async () => {
+  const f = retryFixture();
+  const Protocol = vm.runInContext(`${readBrowserScript('js/network/chat-session.js')}\nChatSessionProtocol`, f.context);
+  const protocol = new Protocol({ getAccessToken: async () => 'test-token' });
+  f.connection.protocol = protocol; protocol.attach(f.connection);
+  await f.connection.connect('room', 'Guest'); f.connection.ws.open();
+  f.connection.ws.message({ ready: true });
+  f.connection.ws.message({ code: 'rate_limited', retryAfter: 3600 });
+  f.connection.ws.close(); assert.equal(await f.retry(), 8750);
+  f.connection.disconnect();
+});
+
+test('guest session HTTP 429 honors Retry-After before requesting another cookie or socket', async () => {
+  const f = retryFixture(); f.context.AbortSignal = AbortSignal;
+  const Protocol = vm.runInContext(`${readBrowserScript('js/network/chat-session.js')}\nChatSessionProtocol`, f.context);
+  let calls = 0;
+  const protocol = new Protocol({ fetch: async () => {
+    calls++;
+    return { ok: false, json: async () => ({ code: 'rate_limited', retryAfter: 120, error: 'Please wait' }) };
+  } });
+  f.connection.protocol = protocol; protocol.attach(f.connection);
+  await f.connection.connect('room', 'Guest');
+  assert.equal(calls, 1); assert.equal(f.sockets.length, 0);
+  assert.equal(await f.retry(), 120000);
+  assert.equal(calls, 2); assert.equal(f.sockets.length, 0);
+  f.connection.disconnect();
+});
+
 test('outages back off with bounded jitter and a protocol ready frame resets the delay', async () => {
   const protocol = { attach(c) { this.c = c; }, reset() {}, prepare: async () => ({}), url: x => x,
     open() {}, close() {}, message(data) { if (data.ready) this.c.ready = true; } };

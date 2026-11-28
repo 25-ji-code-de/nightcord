@@ -48,6 +48,7 @@ class WebSocketManager {
     this.reconnectDelay = config.reconnectDelay || 10000;
     this.maxReconnectDelay = Math.max(this.reconnectDelay, config.maxReconnectDelay || 120000);
     this._reconnectAttempts = 0;
+    this._retryNotBefore = 0;
     this.ws = null;
     this.rejoined = false;
     // Whether disconnection should attempt to reconnect. When user intentionally
@@ -178,7 +179,7 @@ class WebSocketManager {
     const delay = Math.min(this.maxReconnectDelay, this.reconnectDelay * 2 ** Math.min(this._reconnectAttempts++, 20));
     // Non-security jitter spreads reconnects after an outage. Always wait after
     // failure, including slow handshakes and formerly long-lived connections.
-    const wait = Math.round(delay * (0.75 + Math.random() * 0.25));
+    const wait = Math.max(Math.round(delay * (0.75 + Math.random() * 0.25)), this._retryNotBefore - Date.now());
     const timer = setTimeout(() => {
       if (this._reconnectTimer !== timer || gen !== this._gen || !this.shouldReconnect) return;
       this._reconnectTimer = null;
@@ -188,6 +189,12 @@ class WebSocketManager {
   }
 
   markReady() { this.ready = true; this._reconnectAttempts = 0; }
+
+  deferReconnect(seconds) {
+    if (Number.isFinite(seconds) && seconds > 0) {
+      this._retryNotBefore = Math.max(this._retryNotBefore, Date.now() + Math.min(seconds, 3600) * 1000);
+    }
+  }
 
   /**
    * 发送消息到服务器

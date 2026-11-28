@@ -23,6 +23,7 @@ async function bootstrap(cookie = '', ip = '') {
 beforeEach(async () => {
   if (process.env.CHAT_BASE_URL) return;
   state.revoked = false;
+  state.passCalls = 0;
   delete state.name;
   runtime = createRuntime(state);
   base = String(await runtime.ready).replace(/\/$/, '');
@@ -115,8 +116,10 @@ test('chat protocol, private-room isolation, replay, validation, IP limiting, an
     // Exact bucket exhaustion is deterministic locally; WAN latency may refill
     // a token between actions during production smoke tests.
     if (!process.env.CHAT_BASE_URL) {
+      alice.send({ message: 'second guest message' });
+      await alice.waitFor((value) => value.message === 'second guest message');
       alice.send({ message: 'rate-limit-check' });
-      await alice.waitFor((value) => value.error?.includes('rate-limited'));
+      await alice.waitFor((value) => value.code === 'rate_limited');
       assert.ok(!bob.messages.some((value) => value.message === 'rate-limit-check'));
     }
 
@@ -125,7 +128,7 @@ test('chat protocol, private-room isolation, replay, validation, IP limiting, an
     await alice.waitFor((value) => value.quit === 'verification-bob');
     // Let one shared-IP action refill before reconnecting to replay history.
     await delay(5500);
-    const reconnected = await connect(room, 'verification-bob');
+    const reconnected = await connect(room, 'verification-bob', null, { cookie: bob.cookie });
     assert.ok(reconnected.messages.some((value) => value.message === text && value.timestamp === received.timestamp));
     assert.ok(!reconnected.messages.some((value) => value.message === privateText));
   } finally {
@@ -401,6 +404,7 @@ test('guest rename preserves device flags across mixed-device connections', { sk
   const identity = await bootstrap('', 'mobile-guest-bootstrap');
   const room = `mobile-guest-${crypto.randomUUID().slice(0, 12)}`;
   const mobile = await connect(room, 'Original', null, { cookie: identity.cookie, ip: 'mobile-guest', headers: { 'User-Agent': 'Android 15' } });
+  const firstMessageAt = Date.now();
   mobile.send({ message: 'before rename' });
   await mobile.waitFor(v => v.message === 'before rename');
   const observer = await connect(room, 'Observer', null, { ip: 'mobile-guest-observer' });
@@ -410,6 +414,8 @@ test('guest rename preserves device flags across mixed-device connections', { sk
   assert.equal((await observer.waitFor(v => v.type === 'profile' && v.user.displayName === 'Renamed')).user.isMobile, true);
   desktop.send({ message: 'guest desktop' });
   assert.equal((await mobile.waitFor(v => v.message === 'guest desktop')).user.isMobile, false);
+  // The two tabs share a guest identity and its two-message burst allowance.
+  await delay(Math.max(0, firstMessageAt + 10100 - Date.now()));
   mobile.send({ message: 'guest mobile' });
   assert.equal((await desktop.waitFor(v => v.message === 'guest mobile')).user.isMobile, true);
   assert.equal(desktop.messages.find(v => v.message === 'before rename').user.isMobile, true);
@@ -489,14 +495,132 @@ test('foreign origins cannot initialize cookies or open cookie-bearing WebSocket
 });
 
 test('reconnects and different rooms cannot reset a guest ID message budget', { skip: !!process.env.CHAT_BASE_URL, timeout: 25_000 }, async () => {
+  await runtime.dispose();
+  runtime = createRuntime(state, { inspectDurableObjects: true });
+  base = String(await runtime.ready).replace(/\/$/, '');
   const identity = await bootstrap();
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 3; i++) {
+    if (i === 2) await runtime.unsafeEvictDurableObject('nightcord-chat', 'RateLimiter', { name: `user:${identity.id}` });
     const peer = await connect(`budget-${i}`, 'Same visitor', null, { cookie: identity.cookie, ip: `budget-ip-${i}` });
     peer.send({ message: `budget-message-${i}` });
-    if (i < 5) await peer.waitFor(v => v.message === `budget-message-${i}`);
+    if (i < 2) await peer.waitFor(v => v.message === `budget-message-${i}`);
     else {
-      await peer.waitFor(v => v.code === 'rate_limited');
+      const limit = await peer.waitFor(v => v.code === 'rate_limited');
+      assert.ok(limit.retryAfter > 0 && limit.retryAfter <= 10);
       assert.ok(!peer.messages.some(v => v.message === `budget-message-${i}`));
     }
   }
+});
+
+test('new guest identities are limited atomically while a valid cookie can still be reused', { skip: !!process.env.CHAT_BASE_URL }, async () => {
+  const ip = 'identity-budget';
+  const responses = await Promise.all(Array.from({ length: 6 }, (_, i) => apiFetch(`${base}/api/guest/session`, {
+    method: 'POST', headers: { 'CF-Connecting-IP': ip, 'X-Forwarded-For': `forged-${i}` },
+  })));
+  assert.equal(responses.filter(r => r.status === 200).length, 3);
+  for (const limited of responses.filter(r => r.status !== 200)) {
+    assert.equal(limited.status, 429);
+    const body = await limited.json();
+    assert.equal(body.code, 'rate_limited');
+    assert.ok(body.retryAfter > 0 && body.retryAfter <= 60);
+    assert.equal(limited.headers.get('retry-after'), String(body.retryAfter));
+    assert.equal(limited.headers.get('set-cookie'), null);
+  }
+  const issued = responses.find(r => r.status === 200);
+  const cookie = issued.headers.get('set-cookie').split(';')[0];
+  assert.equal((await bootstrap(cookie, ip)).id, (await issued.json()).id);
+  for (let i = 0; i < 5; i++) await bootstrap(cookie, ip);
+  const exhausted = await apiFetch(`${base}/api/guest/session`, { method: 'POST', headers: { Cookie: cookie, 'CF-Connecting-IP': ip } });
+  assert.equal(exhausted.status, 429, 'valid-cookie requests also have a bounded budget');
+  await bootstrap('', 'another-network');
+});
+
+test('legacy anonymous room creation has a separate IP budget', { skip: !!process.env.CHAT_BASE_URL }, async () => {
+  const headers = { 'CF-Connecting-IP': 'room-create-budget' };
+  const results = await Promise.all(Array.from({ length: 3 }, () => apiFetch(`${base}/api/room`, { method: 'POST', headers })));
+  assert.equal(results.filter(r => r.status === 200).length, 2);
+  const denied = results.find(r => r.status === 429);
+  assert.ok(denied); assert.ok(Number(denied.headers.get('retry-after')) > 0);
+  assert.equal((await apiFetch(`${base}/api/room`, { method: 'OPTIONS', headers })).status, 204);
+});
+
+test('guest IP budgets survive switching cookies without consuming verified account message limits', { skip: !!process.env.CHAT_BASE_URL }, async () => {
+  const ip = 'shared-guest-network';
+  for (let i = 0; i < 3; i++) {
+    const guest = await connect('guest-ip-budget', `Guest ${i}`, null, { ip });
+    for (let j = 0; j < 2; j++) {
+      const message = `guest-${i}-${j}`;
+      guest.send({ message, user: { authenticated: true, id: 'sekai:forged' } });
+      if (i < 2) await guest.waitFor(v => v.message === message);
+      else {
+        await guest.waitFor(v => v.code === 'rate_limited');
+        assert.ok(!guest.messages.some(v => v.message === message));
+      }
+    }
+  }
+  const account = await connect('guest-ip-budget', '', { accessToken: 'local-test-token' }, { ip });
+  for (let i = 0; i < 5; i++) {
+    account.send({ message: `verified-${i}` });
+    await account.waitFor(v => v.message === `verified-${i}` && v.user.authenticated);
+  }
+});
+
+test('connection floods are rejected before creating another room and limits survive eviction', { skip: !!process.env.CHAT_BASE_URL }, async () => {
+  await runtime.dispose(); runtime = createRuntime(state, { inspectDurableObjects: true });
+  base = String(await runtime.ready).replace(/\/$/, '');
+  const headers = { Origin: origin, Upgrade: 'websocket', 'CF-Connecting-IP': 'upgrade-budget' };
+  for (let i = 0; i < 20; i++) {
+    const result = await runtime.dispatchFetch(`${base}/api/room/connection-source/websocket`, { headers });
+    assert.equal(result.status, 101);
+    result.webSocket.accept(); result.webSocket.close(1000);
+  }
+  assert.equal((await runtime.listDurableObjectIds('ROOMS')).length, 1);
+  await runtime.unsafeEvictDurableObject('nightcord-chat', 'RateLimiter', { name: 'connect:upgrade-budget' });
+  const denied = await runtime.dispatchFetch(`${base}/api/room/never-created/websocket`, { headers });
+  assert.equal(denied.status, 429);
+  assert.ok(Number(denied.headers.get('retry-after')) > 0);
+  assert.equal((await runtime.listDurableObjectIds('ROOMS')).length, 1);
+  assert.equal(state.passCalls || 0, 0);
+});
+
+test('guest join budgets follow the signed identity across IPs, nicknames and rooms', { skip: !!process.env.CHAT_BASE_URL }, async () => {
+  const identity = await bootstrap('', 'join-bootstrap');
+  for (let i = 0; i < 6; i++) await connect(`join-${i}`, `Guest ${i}`, null, { cookie: identity.cookie, ip: `join-${i}` });
+  const socket = new WebSocket(`${base.replace('http', 'ws')}/api/room/join-7/websocket`, {
+    headers: { Origin: origin, Cookie: identity.cookie, 'CF-Connecting-IP': 'join-7' },
+  });
+  sockets.push(socket);
+  const messages = []; socket.on('message', raw => messages.push(JSON.parse(String(raw))));
+  await once(socket, 'open'); const closed = once(socket, 'close');
+  socket.send(JSON.stringify({ name: 'Another nickname', user: { authenticated: true, id: 'sekai:fake' } }));
+  assert.equal((await closed)[0], 1013);
+  assert.ok(messages.some(v => v.code === 'rate_limited' && v.retryAfter > 0));
+  assert.ok(!messages.some(v => v.ready || v.message || v.joined || v.type === 'session'));
+});
+
+test('guests that ignore message cooldowns are disconnected without more limiter calls', { skip: !!process.env.CHAT_BASE_URL }, async () => {
+  await runtime.dispose(); runtime = createRuntime(state, { inspectDurableObjects: true });
+  base = String(await runtime.ready).replace(/\/$/, '');
+  const guest = await connect('cooldown-test', 'Guest', null, { ip: 'cooldown-ip' });
+  for (let i = 0; i < 2; i++) { guest.send({ message: `allowed-${i}` }); await guest.waitFor(v => v.message === `allowed-${i}`); }
+  guest.send({ message: 'denied' });
+  const rejected = await guest.waitFor(v => v.code === 'rate_limited');
+  assert.equal(rejected.reconnectAfter, undefined, 'a message cooldown allows the guest to keep reading');
+  const storage = await runtime.unsafeGetDurableObjectStorage('nightcord-chat', 'RateLimiter', { name: 'ip:cooldown-ip' });
+  const rows = await storage.exec('SELECT * FROM rate_windows ORDER BY policy');
+  const closed = once(guest.socket, 'close');
+  for (let i = 0; i < 3; i++) guest.send({ message: `ignore-cooldown-${i}` });
+  assert.equal((await closed)[0], 1013);
+  assert.ok(guest.messages.some(v => v.reconnectAfter > 0));
+  assert.deepEqual(await storage.exec('SELECT * FROM rate_windows ORDER BY policy'), rows);
+  assert.ok(!guest.messages.some(v => v.message?.startsWith('ignore-cooldown')));
+});
+
+test('malformed guest frames cannot bypass the per-connection flood limit', { skip: !!process.env.CHAT_BASE_URL }, async () => {
+  const guest = await connect('malformed-flood', 'Guest');
+  const closed = once(guest.socket, 'close');
+  for (let i = 0; i < 25; i++) guest.socket.send('{');
+  assert.equal((await closed)[0], 1013);
+  assert.ok(guest.messages.some(v => v.code === 'rate_limited'));
+  assert.ok(guest.messages.filter(v => v.error === 'Invalid JSON.').length <= 19);
 });

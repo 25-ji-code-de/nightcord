@@ -47,6 +47,7 @@ class ChatSessionProtocol {
     try { if (!token) await this.prepareGuestSession(); }
     catch (error) {
       if (gen === this.connection._gen) {
+        if (error.code === 'rate_limited') this.connection.deferReconnect(error.retryAfter);
         this.connection.onError(error);
         if (this.connection.shouldReconnect) void this.connection.rejoin();
       }
@@ -61,6 +62,9 @@ class ChatSessionProtocol {
   }
 
   message(data, ws) {
+    if (data.code === 'rate_limited' && (!this.connection.ready || data.reconnectAfter)) {
+      this.connection.deferReconnect(data.reconnectAfter ?? data.retryAfter);
+    }
     if (data.type === 'session') {
       this._authRefreshing = false;
       this.authExpiresAt = data.authExpiresAt || 0;
@@ -127,7 +131,9 @@ class ChatSessionProtocol {
           method: 'POST', credentials: 'include', cache: 'no-store', signal: AbortSignal.timeout(12000),
         });
         const data = await response.json();
-        if (!response.ok) throw Object.assign(new Error(data.error || 'Guest identity unavailable'), { code: data.code });
+        if (!response.ok) throw Object.assign(new Error(data.error || 'Guest identity unavailable'), {
+          code: data.code, retryAfter: Number(data.retryAfter ?? response.headers?.get('Retry-After')),
+        });
         if (!/^guest:[0-9a-f-]{36}$/.test(data.id) || !Number.isSafeInteger(data.expiresAt)) throw new Error('Invalid guest session response');
       };
       const request = globalThis.navigator?.locks
